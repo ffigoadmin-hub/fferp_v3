@@ -1,17 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Loader2, Eye, EyeOff, WifiOff, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Loader2, Eye, EyeOff, WifiOff, ArrowRight } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-const STATS = [
-  { value: '500+', label: 'Orders / Day' },
-  { value: '12',   label: 'Hubs'         },
-  { value: '99.9%', label: 'Uptime'      },
-];
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -182,33 +176,6 @@ export function LoginPage() {
             A complete ERP built for Farmers Factory — from farm to delivery, every operation in one unified platform.
           </p>
 
-          {/* Stats row */}
-          <div className="flex items-center gap-8">
-            {STATS.map((s, i) => (
-              <div key={s.label}>
-                <p className="text-[28px] font-black text-white leading-none">{s.value}</p>
-                <p className="text-[11px] mt-1 font-medium" style={{ color: 'rgba(255,255,255,0.35)' }}>{s.label}</p>
-                {i < STATS.length - 1 && (
-                  <div className="absolute" />
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Divider line */}
-          <div className="mt-10 h-px w-full" style={{ background: 'linear-gradient(90deg, rgba(16,185,129,0.4), rgba(255,255,255,0.05), transparent)' }} />
-        </div>
-
-        {/* Bottom */}
-        <div className="relative z-10 flex items-center justify-between">
-          <p className="text-[11px] tracking-widest uppercase" style={{ color: 'rgba(255,255,255,0.2)' }}>
-            © 2025 Farmers Factory
-          </p>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full"
-            style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)' }}>
-            <ShieldCheck className="w-3 h-3 text-emerald-400" />
-            <span className="text-[10px] text-emerald-400 font-semibold">Secured</span>
-          </div>
         </div>
       </div>
 
@@ -221,15 +188,6 @@ export function LoginPage() {
           style={{ backgroundImage: 'radial-gradient(circle at 20% 80%, rgba(16,185,129,0.06) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(59,130,246,0.04) 0%, transparent 50%)' }} />
 
         <div className="relative w-full max-w-[420px]">
-
-          {/* Mobile logo */}
-          <div className="flex lg:hidden items-center gap-3 mb-10 justify-center">
-            <img src="/ff-logo.jpg" alt="Farmers Factory" className="w-10 h-10 rounded-xl object-cover shadow-md" />
-            <div>
-              <p className="text-[15px] font-bold text-gray-900">Farmers Factory</p>
-              <p className="text-[10px] text-gray-400 uppercase tracking-widest">ERP v2.0</p>
-            </div>
-          </div>
 
           {/* Card */}
           <div className="rounded-2xl p-8 shadow-2xl"

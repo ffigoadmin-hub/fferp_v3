@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, ChevronLeft, ChevronRight, Loader2, Download, FileSpreadsheet, X, Clock, AlertTriangle, CheckCircle, User, Filter } from 'lucide-react';
@@ -180,7 +181,7 @@ export function AttendanceCalendarPage() {
       setAttendanceData(attendanceByDate);
     } catch (error) {
       console.error('Error fetching attendance:', error);
-      toast.error('Failed to fetch attendance data');
+      if (!isMissingTable(error)) toast.error('Failed to fetch attendance data');
     } finally {
       setIsLoading(false);
     }

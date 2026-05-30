@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -40,7 +41,7 @@ export default function AdminCronJobsPage() {
             setJobs((data as CronJob[]) || []);
         } catch (error: any) {
             console.error('Error fetching cron jobs:', error);
-            toast.error('Failed to fetch cron jobs: ' + error.message);
+            if (!isMissingTable(error)) toast.error('Failed to fetch cron jobs: ' + error.message);
         } finally {
             setIsLoading(false);
         }

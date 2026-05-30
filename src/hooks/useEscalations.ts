@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -35,7 +36,7 @@ export function useEscalations() {
       setEscalations((data as unknown as Escalation[]) || []);
     } catch (error) {
       console.error('Error fetching escalations:', error);
-      toast.error('Failed to fetch escalations');
+      const _isMissing = (error as any)?.code === 'PGRST205' || (error as any)?.message?.includes('schema cache'); if (!_isMissing) if (!isMissingTable(error)) toast.error('Failed to fetch escalations');
     } finally {
       setIsLoading(false);
     }

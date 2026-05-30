@@ -24,7 +24,7 @@ export function RedirectPage() {
         ceo:                       '/ceo-dashboard',
         accounts:                  '/accounts-execution',
         gmo:                       '/dashboard/gmo',
-        gm:                        '/gm-dashboard',
+        gm:                        '/gm/ff-payments',
         smo:                       '/dashboard/smo',
         boi:                       '/day-start',
         nsm:                       '/nsm-dashboard',
@@ -32,10 +32,9 @@ export function RedirectPage() {
         data_team:                 '/datateam-dashboard',
         data:                      '/datateam-dashboard',
         purchase:                  '/purchase/dashboard',
-        purchase_head:             '/purchase/dashboard',
         vendor:                    '/vendor-sourcing/dashboard',
         vendor_head:               '/vendor-sourcing/dashboard',
-        auditor:                   '/auditor-dashboard',
+        auditor:                   '/auditor/ff-payments',
         rsh:                       '/rsh/rentals',
         bd_data:                   '/projects',
         site_visit_farm_manager:   '/site-visit-fm-dashboard',
@@ -43,16 +42,21 @@ export function RedirectPage() {
         cafe_manager:              '/cafe/manager',
         palm_cafe_manager:         '/cafe/manager',
         director:                  '/director/workflow',
-        // ── Farmers Factory roles (new) ──────────────────────
-        ff_operations_manager:     '/ff-operations',
-        purchase_manager:          '/purchase/produce',
+        // ── Farmers Factory roles ────────────────────────────
+        ff_operations_manager:     '/ff-operations/gm-dashboard',
+        purchase_manager:          '/purchase',
+        purchase_head:             '/purchase',
         warehouse_manager:         '/warehouse',
         qc_manager:                '/warehouse/qc',
+        hub_manager:               '/warehouse',
+        l1_manager:                '/l1/payments',
         field_executive:           '/sales',
+        bde:                       '/sales',
         tele_caller:               '/tele-caller',
         driver:                    '/logistics/driver',
         back_office:               '/reports',
         shift_employee:            '/shift/dashboard',
+        collection_executive:      '/collections/entry',
       };
 
       const normalizedRole = role.toLowerCase();
@@ -84,17 +88,28 @@ export function RedirectPage() {
           destination = '/my-tasks';
         }
       } else {
-        // For non-employees, maybe just check shift if needed, but currently only employee logic specified
-        const { data: shiftData } = await (supabase
-          .from('shift_user_assignments') as any)
-          .select('id')
-          .eq('user_id', userId)
-          .eq('is_active', true)
-          .maybeSingle();
+        // Roles that participate in the shift system — only these get redirected to /shift/dashboard
+        const SHIFT_ELIGIBLE_ROLES = new Set([
+          'hub_manager', 'purchase_manager', 'purchase_head',
+          'field_executive', 'tele_caller', 'bde', 'driver',
+          'back_office', 'shift_employee', 'farmmanager',
+        ]);
 
-        if (shiftData) {
-          destination = '/shift/dashboard';
+        if (SHIFT_ELIGIBLE_ROLES.has(normalizedRole)) {
+          const { data: shiftData } = await (supabase
+            .from('shift_user_assignments') as any)
+            .select('id')
+            .eq('user_id', userId)
+            .eq('is_active', true)
+            .maybeSingle();
+
+          if (shiftData) {
+            destination = '/shift/dashboard';
+          }
         }
+        // Management / admin roles (admin, ceo, gm, l1_manager, auditor, accounts,
+        // ff_operations_manager, warehouse_manager, qc_manager, etc.) are NEVER
+        // redirected via shift check — they always land on their role-based destination.
 
         if (normalizedRole === 'smo' || normalizedRole === 'rsh' || normalizedRole === 'site_visit_farm_manager' || normalizedRole === 'farmmanager') {
           const { data: deptProfile } = await supabase

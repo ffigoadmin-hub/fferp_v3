@@ -54,19 +54,19 @@ export function useConnectionMonitor() {
                       setSupabaseStatus('connected');
                     }
                 } else if (!reconnectTimer && (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED')) {
-                    // Increased debounce: If not subscribed, wait 45 seconds before showing an error state
-                    // This prevents "Reconnecting" noise during minor blips
+                    // Long debounce: only show banner if the server is genuinely unreachable
+                    // Realtime errors from non-existent tables are common in FFERPv2 — don't show banner
                     reconnectTimer = setTimeout(async () => {
                         const isActuallyBroken = !(await checkRealHealth());
                         if (isActuallyBroken && navigator.onLine) {
                             console.warn('[Connection] Supabase real-time entering reconnection state');
                             setSupabaseStatus('reconnecting');
                         } else {
-                            // If REST works, stay in 'connected' state
+                            // REST is reachable — WebSocket issue is non-critical, stay connected
                             setSupabaseStatus('connected');
                         }
                         reconnectTimer = null;
-                    }, 45000);
+                    }, 120000); // 2 minutes — suppresses transient realtime errors
                 }
             });
 

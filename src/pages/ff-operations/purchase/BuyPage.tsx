@@ -8,9 +8,10 @@ import {
   Scale, Package, Building2, CreditCard, User, Trash2,
   ShoppingBag, ChevronDown, Image, FileCheck, Banknote,
 } from 'lucide-react';
-import { getStoredVendors, vendorDisplayName, type StoredVendor } from '@/lib/vendorStore';
+import { useQuery } from '@tanstack/react-query';
+import { fetchStoredVendors, vendorDisplayName, type StoredVendor } from '@/lib/vendorStore';
 import {
-  saveBuyOrder, getBuyOrderByProduct, markBuyOrderBillCreated,
+  saveBuyOrder, fetchBuyOrderByProduct, markBuyOrderBillCreated,
   type BuyVendorEntry, type BuyOrder,
 } from '@/lib/buyStore';
 
@@ -381,16 +382,20 @@ export default function BuyPage() {
   const [vendorSearch, setVendorSearch] = useState('');
   const [billCreated, setBillCreated] = useState(false);
 
-  const allVendors = getStoredVendors();
-  const filteredVendors = allVendors.filter(v =>
+  const { data: allVendors = [] } = useQuery({
+    queryKey: ['vendors-list'],
+    queryFn: fetchStoredVendors,
+  });
+  const filteredVendors = allVendors.filter((v: StoredVendor) =>
     vendorDisplayName(v).toLowerCase().includes(vendorSearch.toLowerCase())
   );
 
   // Load existing buy order if any
   useEffect(() => {
     if (!product) return;
-    const existing = getBuyOrderByProduct(product);
-    if (existing) setBillCreated(existing.billCreated);
+    fetchBuyOrderByProduct(product).then(existing => {
+      if (existing) setBillCreated(existing.billCreated);
+    });
   }, [product]);
 
   // ── Computed ────────────────────────────────────────────────
@@ -451,11 +456,12 @@ export default function BuyPage() {
       })),
       billCreated: true,
     };
-    saveBuyOrder(buyOrder);
+    saveBuyOrder(buyOrder).then(savedId => {
+      if (savedId) markBuyOrderBillCreated(savedId).catch(console.error);
+    });
 
     // Create bills
     createBillsFromBuyOrder(cards, product, today);
-    markBuyOrderBillCreated(product);
     setBillCreated(true);
 
     toast.success(`✅ ${cards.length} bill(s) created in Auto Bill`);

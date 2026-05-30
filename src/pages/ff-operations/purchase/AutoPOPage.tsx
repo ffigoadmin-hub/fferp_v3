@@ -13,12 +13,12 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { getBoughtQty } from '@/lib/buyStore';
+import { fetchBoughtQty } from '@/lib/buyStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
-  getStoredPOs, savePOToStore, deletePOFromStore, getMaxPOSerial,
-  getPendingApprovalPOs,
+  fetchAllPOs, savePOToStore, deletePOFromStore, fetchMaxPOSerial,
+  fetchPendingApprovalPOs,
   type StoredPO, type StoredPOItem,
 } from '@/lib/purchaseStore';
 // vendorStore no longer needed — PO is linked to sales orders, not vendors
@@ -188,7 +188,8 @@ function CreatePOModal({
   onSave: () => void;
 }) {
   const today = format(new Date(), 'yyyy-MM-dd');
-  const nextSerial = getMaxPOSerial() + 1;
+  const [nextSerial, setNextSerial] = useState(0);
+  useEffect(() => { fetchMaxPOSerial().then(s => setNextSerial(s + 1)); }, []);
   const autoPONum = `PO-${String(nextSerial).padStart(5, '0')}`;
 
   const [poDate, setPoDate] = useState(editPO?.date ?? today);
@@ -269,12 +270,13 @@ function CreatePOModal({
       })),
       subTotal, total, notes,
     };
-    savePOToStore(po);
-    toast.success(status === 'draft'
-      ? `PO ${po.poNumber} saved as draft`
-      : `PO ${po.poNumber} submitted for approval ✓`);
-    onSave();
-    onClose();
+    savePOToStore(po).then(() => {
+      toast.success(status === 'draft'
+        ? `PO ${po.poNumber} saved as draft`
+        : `PO ${po.poNumber} submitted for approval ✓`);
+      onSave();
+      onClose();
+    }).catch(() => toast.error('Failed to save PO'));
   };
 
   if (!open) return null;
@@ -879,12 +881,14 @@ export default function AutoPOPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo]     = useState('');
 
-  // ── Bought quantities map (re-read from localStorage on demand) ──
+  // ── Bought quantities map (fetched from Supabase) ──
   const [boughtMap, setBoughtMap] = useState<Record<string, number>>({});
 
-  const refreshBoughtMap = useCallback((agg: AggregatedProduct[]) => {
+  const refreshBoughtMap = useCallback(async (agg: AggregatedProduct[]) => {
     const map: Record<string, number> = {};
-    for (const p of agg) map[p.productName] = getBoughtQty(p.productName);
+    await Promise.all(agg.map(async p => {
+      map[p.productName] = await fetchBoughtQty(p.productName);
+    }));
     setBoughtMap(map);
   }, []);
 
@@ -904,16 +908,16 @@ export default function AutoPOPage() {
     const agg = aggregateProducts(orders);
     setAggregated(agg);
     refreshBoughtMap(agg);
-    const all = getStoredPOs();
-    setPOs(all.filter(p => p.status !== 'pending_approval'));
-    setPendingPOs(getPendingApprovalPOs());
+    fetchAllPOs().then(all => {
+      setPOs(all.filter(p => p.status !== 'pending_approval'));
+    });
+    fetchPendingApprovalPOs().then(setPendingPOs);
   }, [orders, refreshBoughtMap]);
 
   const refresh = useCallback(() => {
     refetchOrders();
-    const all = getStoredPOs();
-    setPOs(all.filter(p => p.status !== 'pending_approval'));
-    setPendingPOs(getPendingApprovalPOs());
+    fetchAllPOs().then(all => setPOs(all.filter(p => p.status !== 'pending_approval')));
+    fetchPendingApprovalPOs().then(setPendingPOs);
     refreshBoughtMap(aggregated);
   }, [refetchOrders, aggregated, refreshBoughtMap]);
 
@@ -980,35 +984,35 @@ export default function AutoPOPage() {
     setCreatePOOpen(true);
   };
 
-  const handleVerify = (po: StoredPO, shift: string, shiftDate: string, notes: string) => {
+  const handleVerify = async (po: StoredPO, shift: string, shiftDate: string, notes: string) => {
     const updated = { ...po, status: 'open' as const, notes: `Shift: ${shift} | Date: ${shiftDate}${notes ? ' | ' + notes : ''}` };
-    savePOToStore(updated);
+    await savePOToStore(updated);
     toast.success(`✓ PO ${po.poNumber} verified — assigned to ${shift} shift`);
     refresh();
   };
 
-  const handleApprove = (po: StoredPO) => {
+  const handleApprove = async (po: StoredPO) => {
     const updated: StoredPO = {
       ...po,
       status: 'open',
       approvedBy: 'FF Operations Manager',
       approvedAt: new Date().toISOString(),
     };
-    savePOToStore(updated);
+    await savePOToStore(updated);
     toast.success(`✅ PO ${po.poNumber} approved successfully`);
     refresh();
   };
 
-  const handleReject = (po: StoredPO, reason: string) => {
+  const handleReject = async (po: StoredPO, reason: string) => {
     const updated: StoredPO = { ...po, status: 'rejected', rejectionReason: reason };
-    savePOToStore(updated);
+    await savePOToStore(updated);
     toast.error(`PO ${po.poNumber} rejected`);
     refresh();
   };
 
-  const handleDelete = (po: StoredPO) => {
+  const handleDelete = async (po: StoredPO) => {
     if (!confirm(`Delete ${po.poNumber}?`)) return;
-    deletePOFromStore(po.poNumber);
+    await deletePOFromStore(po.poNumber);
     toast.success('PO deleted');
     refresh();
   };

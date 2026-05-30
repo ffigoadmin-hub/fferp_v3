@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -77,7 +78,7 @@ export function useTaskAssignments() {
       }
     } catch (error) {
       console.error('Error fetching tasks:', error);
-      toast.error('Failed to fetch tasks');
+      const _isMissing = (error as any)?.code === 'PGRST205' || (error as any)?.message?.includes('schema cache'); if (!_isMissing) if (!isMissingTable(error)) toast.error('Failed to fetch tasks');
     } finally {
       setIsLoading(false);
     }

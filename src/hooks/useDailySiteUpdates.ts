@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -56,7 +57,7 @@ export function useDailySiteUpdates(projectId?: string) {
       setUpdates(data as DailySiteUpdate[] || []);
     } catch (error: any) {
       console.error('Error fetching site updates:', error);
-      toast.error('Failed to load site updates');
+      if (!isMissingTable(error)) toast.error('Failed to load site updates');
     } finally {
       setIsLoading(false);
     }

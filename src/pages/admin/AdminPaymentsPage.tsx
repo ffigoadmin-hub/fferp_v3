@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Banknote, Search, Filter, Trash2, Eye, CheckCircle, XCircle, Loader2, ShieldCheck, ListFilter, RotateCcw, AlertTriangle, Edit, Send, History as HistoryIcon, Building2, Layers, Clock, Zap, Package } from 'lucide-react';
@@ -126,7 +127,7 @@ export function AdminPaymentsPage() {
       setViewingPayment(data);
     } catch (err) {
       console.error('Failed to fetch payment details:', err);
-      toast.error('Failed to load payment details');
+      if (!isMissingTable(error)) toast.error('Failed to load payment details');
     } finally {
       setIsLoadingPayment(false);
     }

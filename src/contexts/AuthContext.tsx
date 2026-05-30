@@ -33,6 +33,7 @@ const mapRole = (dbRole: string): UserRole => {
     'boi':                       'boi',
     'nsm':                       'nsm',
     'datateam':                  'datateam',
+    'data_team':                 'data_team',
     'data':                      'datateam',
     'farmmanager':               'farmmanager',
     'sitevisitfarmmanager':      'site_visit_farm_manager',
@@ -49,13 +50,20 @@ const mapRole = (dbRole: string): UserRole => {
     'purchasemanager':           'purchase_manager',
     'warehousemanager':          'warehouse_manager',
     'qcmanager':                 'qc_manager',
+    'hubmanager':                'hub_manager',
+    'hub_manager':               'hub_manager',
+    'l1manager':                 'l1_manager',
+    'l1_manager':                'l1_manager',
     'fieldexecutive':            'field_executive',
     'telecaller':                'tele_caller',
+    'bde':                       'bde',
     'driver':                    'driver',
     'backoffice':                'back_office',
     'shiftemployee':             'shift_employee',
     'ffoperationsmanager':       'ff_operations_manager',
     'ffopsmanager':              'ff_operations_manager',
+    'collection_executive':      'collection_executive',
+    'collectionexecutive':       'collection_executive',
   };
 
   return roleMap[normalized] || 'employee';

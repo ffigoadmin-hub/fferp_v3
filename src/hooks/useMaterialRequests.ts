@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -182,7 +183,7 @@ export function useMaterialRequests(projectId?: string) {
       setRequests(enrichedData as MaterialRequest[]);
     } catch (error: any) {
       console.error('Error fetching material requests:', error);
-      toast.error('Failed to load material requests');
+      if (!isMissingTable(error)) toast.error('Failed to load material requests');
     } finally {
       setIsLoading(false);
     }
@@ -695,7 +696,7 @@ export function useMyMaterialRequests() {
       setRequests(normalizedData as MaterialRequest[]);
     } catch (error) {
       console.error('Error fetching my material requests:', error);
-      toast.error('Failed to fetch material requests');
+      const _isMissing = (error as any)?.code === 'PGRST205' || (error as any)?.message?.includes('schema cache'); if (!_isMissing) if (!isMissingTable(error)) toast.error('Failed to fetch material requests');
     } finally {
       setIsLoading(false);
     }

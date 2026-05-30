@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { format, subDays } from 'date-fns';
@@ -69,7 +70,7 @@ export function SelfieViewingPage() {
       setSelfies(data || []);
     } catch (err: any) {
       console.error('Error fetching selfies:', err);
-      toast.error('Failed to load selfies');
+      if (!isMissingTable(error)) toast.error('Failed to load selfies');
     } finally {
       setIsLoading(false);
     }

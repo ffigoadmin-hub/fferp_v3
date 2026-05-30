@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -582,7 +583,7 @@ export function AccountsExecutionPage() {
       .lte('paid_at', endDate.toISOString());
 
     if (error) {
-      toast.error('Failed to fetch payments');
+      if (!isMissingTable(error)) toast.error('Failed to fetch payments');
       return;
     }
 
@@ -637,7 +638,7 @@ export function AccountsExecutionPage() {
       .lte('paid_at', endDate.toISOString());
 
     if (error) {
-      toast.error('Failed to fetch petty cash');
+      if (!isMissingTable(error)) toast.error('Failed to fetch petty cash');
       return;
     }
 

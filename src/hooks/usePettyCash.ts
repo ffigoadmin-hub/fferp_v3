@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -84,7 +85,7 @@ export function usePettyCash() {
 
         } catch (error) {
             console.error('Error fetching petty cash entries:', error);
-            toast.error('Failed to fetch expense entries');
+            const _isMissing = (error as any)?.code === 'PGRST205' || (error as any)?.message?.includes('schema cache'); if (!_isMissing) if (!isMissingTable(error)) toast.error('Failed to fetch expense entries');
         } finally {
             setIsLoading(false);
         }

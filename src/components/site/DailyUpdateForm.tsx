@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Camera, Cloud, Users, AlertTriangle, Loader2, Plus, X } from 'lucide-react';
+import { Camera, Cloud, Users, AlertTriangle, Loader2, Plus, X, ImageIcon, Trash2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,6 +60,41 @@ export function DailyUpdateForm({
   const [weather, setWeather] = useState('sunny');
   const [progress, setProgress] = useState([0]);
   const [materials, setMaterials] = useState<{ name: string; quantity: string }[]>([]);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    if (photos.length + files.length > 5) { toast.error('Maximum 5 photos allowed'); return; }
+    setUploadingPhoto(true);
+    try {
+      const uploaded: string[] = [];
+      for (const file of files) {
+        if (file.size > 10 * 1024 * 1024) { toast.error(`${file.name} exceeds 10MB limit`); continue; }
+        const ext = file.name.split('.').pop();
+        const path = `site-updates/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from('project-photos')
+          .upload(path, file, { cacheControl: '3600', upsert: false });
+        if (uploadError) throw uploadError;
+        const { data } = supabase.storage.from('project-photos').getPublicUrl(path);
+        uploaded.push(data.publicUrl);
+      }
+      setPhotos(prev => [...prev, ...uploaded]);
+      toast.success(`${uploaded.length} photo(s) uploaded`);
+    } catch (err: any) {
+      toast.error(err.message || 'Photo upload failed');
+    } finally {
+      setUploadingPhoto(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos(prev => prev.filter((_, i) => i !== index));
+  };
 
   const addMaterial = () => {
     setMaterials([...materials, { name: '', quantity: '' }]);
@@ -82,10 +119,11 @@ export function DailyUpdateForm({
       materials_used: materials.filter(m => m.name.trim()),
       labor_count: laborCount,
       issues_faced: issues || undefined,
+      photos: photos.length > 0 ? photos : undefined,
       weather_conditions: weather,
       progress_percentage: progress[0],
     });
-    
+
     // Reset form
     setSelectedPhase('');
     setWorkDone('');
@@ -94,6 +132,7 @@ export function DailyUpdateForm({
     setWeather('sunny');
     setProgress([0]);
     setMaterials([]);
+    setPhotos([]);
     onOpenChange(false);
   };
 
@@ -244,12 +283,56 @@ export function DailyUpdateForm({
             />
           </div>
 
-          {/* Photo Upload Placeholder */}
-          <div className="p-4 border-2 border-dashed border-border/50 rounded-lg text-center">
-            <Camera className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              Photo upload coming soon
-            </p>
+          {/* Photo Upload */}
+          <div className="space-y-3">
+            <Label className="flex items-center gap-2">
+              <Camera className="w-4 h-4 text-blue-500" />
+              Site Photos (Optional, max 5)
+            </Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={handlePhotoUpload}
+            />
+            {photos.length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {photos.map((url, i) => (
+                  <div key={i} className="relative group aspect-square rounded-lg overflow-hidden border border-border/50">
+                    <img src={url} alt={`Photo ${i + 1}`} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(i)}
+                      className="absolute top-1 right-1 bg-black/60 hover:bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {photos.length < 5 && (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingPhoto}
+                className="w-full p-4 border-2 border-dashed border-border/50 hover:border-blue-400 rounded-lg text-center transition-colors disabled:opacity-50"
+              >
+                {uploadingPhoto ? (
+                  <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-sm">Uploading...</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center gap-2 text-muted-foreground hover:text-blue-500 transition-colors">
+                    <ImageIcon className="w-5 h-5" />
+                    <span className="text-sm">Click to add photos ({photos.length}/5)</span>
+                  </div>
+                )}
+              </button>
+            )}
           </div>
         </div>
 

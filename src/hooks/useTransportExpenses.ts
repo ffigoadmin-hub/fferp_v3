@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -55,7 +56,7 @@ export function useTransportExpenses(filters?: {
             setExpenses(enriched);
         } catch (error) {
             console.error('Error fetching transport expenses:', error);
-            toast.error('Failed to load transport expenses');
+            if (!isMissingTable(error)) toast.error('Failed to load transport expenses');
         } finally {
             setIsLoading(false);
         }

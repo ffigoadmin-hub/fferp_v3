@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect } from 'react';
 import { format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
 import { AlertTriangle, CheckCircle, FileText, Info, User, Calendar as CalendarIcon, Shield, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -105,7 +106,7 @@ export default function LOPReversalPage({
       }
     } catch (error) {
       console.error('Error fetching LOP entries:', error);
-      toast.error('Failed to fetch LOP entries');
+      if (!isMissingTable(error)) toast.error('Failed to fetch LOP entries');
     } finally {
       setIsLoading(false);
     }

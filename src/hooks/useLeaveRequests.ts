@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -63,7 +64,12 @@ export function useLeaveRequests() {
         .eq('is_active', true)
         .order('name') as any;
 
-      if (error) throw error;
+      if (error) {
+        const missing = (error as any)?.code === 'PGRST205' || (error as any)?.message?.includes('schema cache') || (error as any)?.message?.includes('does not exist');
+        if (!missing) console.error('Error fetching leave types:', error);
+        setLeaveTypes([]);
+        return;
+      }
       setLeaveTypes((data as LeaveType[]) || []);
     } catch (error) {
       console.error('Error fetching leave types:', error);
@@ -91,7 +97,14 @@ export function useLeaveRequests() {
         `)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        // leave_requests is an IGO-Chain table — silently return empty in FFERPv2
+        const missing = (error as any)?.code === 'PGRST205' || (error as any)?.message?.includes('schema cache') || (error as any)?.message?.includes('does not exist');
+        if (!missing) if (!isMissingTable(error)) toast.error('Failed to fetch leave requests');
+        setRequests([]);
+        setIsLoading(false);
+        return;
+      }
 
       const formatted = (data || []).map((req: any) => ({
         ...req,
@@ -107,7 +120,7 @@ export function useLeaveRequests() {
       setRequests(formatted);
     } catch (error) {
       console.error('Error fetching leave requests:', error);
-      toast.error('Failed to fetch leave requests');
+      if (!isMissingTable(error)) toast.error('Failed to fetch leave requests');
     } finally {
       setIsLoading(false);
     }

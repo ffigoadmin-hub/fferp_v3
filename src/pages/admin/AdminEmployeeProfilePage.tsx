@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { User, Mail, Building, Hash, BadgeCheck, MapPin, Lock, Eye, EyeOff, Star, Award, FileText, History, Camera, Upload, Save, Loader2, Trash2 } from 'lucide-react';
@@ -82,7 +83,7 @@ export function AdminEmployeeProfilePage() {
       } catch (error) {
         console.error('Error loading employee list:', error);
         setFetchError('Unable to load employee list. Please refresh or try again later.');
-        toast.error('Failed to load employee list');
+        if (!isMissingTable(error)) toast.error('Failed to load employee list');
       } finally {
         setIsLoading(false);
       }
@@ -163,7 +164,7 @@ export function AdminEmployeeProfilePage() {
       }
 
       setFetchError(errorMessage);
-      toast.error('Failed to load employee details');
+      if (!isMissingTable(error)) toast.error('Failed to load employee details');
     } finally {
       setIsLoading(false);
     }

@@ -10,11 +10,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  getOpenPOs, markPOBilled,
+  fetchOpenPOs, markPOBilled,
   type StoredPO,
 } from '@/lib/purchaseStore';
-import { getVendorNames } from '@/lib/vendorStore';
+import { fetchVendorNames } from '@/lib/vendorStore';
 
 // ─── Types ────────────────────────────────────────────────
 type BillStatus = 'draft' | 'pending_approval' | 'approved' | 'paid' | 'overdue' | 'rejected';
@@ -184,8 +185,10 @@ function AutoGenerateModal({ onClose, onGenerate }: {
   onClose: () => void;
   onGenerate: (po: StoredPO) => void;
 }) {
-  // Read open POs from the shared store (includes both demo + user-created)
-  const [openPOs] = useState<StoredPO[]>(() => getOpenPOs());
+  const { data: openPOs = [] } = useQuery<StoredPO[]>({
+    queryKey: ['open-pos-bills'],
+    queryFn: fetchOpenPOs,
+  });
   const [selectedPO, setSelectedPO] = useState<StoredPO | null>(null);
   const [search, setSearch] = useState('');
 
@@ -959,9 +962,11 @@ function BillForm({ onClose, onSave, editBill }: {
 }) {
   const today = new Date().toISOString().split('T')[0];
 
-  // Vendor names from store
-  const [VENDORS, setVENDORS] = useState<string[]>(() => getVendorNames());
-  useEffect(() => { setVENDORS(getVendorNames()); }, []);
+  // Vendor names from Supabase
+  const { data: VENDORS = [] } = useQuery<string[]>({
+    queryKey: ['vendor-names'],
+    queryFn: fetchVendorNames,
+  });
 
   // Generate bill number once on mount
   const [billNo] = useState(() => editBill?.billNumber ?? genBillNumber());
@@ -1565,8 +1570,8 @@ export default function PurchaseBillsPage() {
       subTotal, discount: 0, tax: taxAmt, total,
     };
 
-    // Mark the source PO as billed in the shared store (lifecycle update)
-    markPOBilled(po.poNumber);
+    // Mark the source PO as billed in Supabase
+    markPOBilled(po.poNumber).catch(console.error);
 
     setBills(p => [newBill, ...p]);
     setViewBill(newBill);

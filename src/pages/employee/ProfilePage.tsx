@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 // @ts-nocheck
 import { useCallback, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
@@ -192,7 +193,7 @@ export function ProfilePage() {
       }
 
       setFetchError(errorMessage);
-      toast.error('Failed to load profile data');
+      if (!isMissingTable(error)) toast.error('Failed to load profile data');
     } finally {
       setIsLoading(false);
     }

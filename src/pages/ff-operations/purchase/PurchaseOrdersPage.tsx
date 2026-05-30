@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Plus, X, Search, ChevronDown, Settings, Upload, Tag,
   Calendar, MoreVertical, Edit2, Trash2, Eye, Copy,
@@ -10,10 +12,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import {
-  getStoredPOs, savePOToStore, deletePOFromStore, getMaxPOSerial,
+  fetchAllPOs, savePOToStore, deletePOFromStore, fetchMaxPOSerial,
   type StoredPO,
 } from '@/lib/purchaseStore';
-import { getVendorNames } from '@/lib/vendorStore';
+import { fetchVendorNames } from '@/lib/vendorStore';
 
 // ─── Types ────────────────────────────────────────────────
 interface LineItem {
@@ -677,14 +679,15 @@ function NewPOForm({ onClose, onSave, editData }: {
 }) {
   const today = new Date().toISOString().split('T')[0];
   const fileRef = useRef<HTMLInputElement>(null);
-  const [VENDORS, setVENDORS] = useState<string[]>(() => getVendorNames());
-  useEffect(() => { setVENDORS(getVendorNames()); }, []);
+  const { data: VENDORS = [] } = useQuery<string[]>({ queryKey: ['vendor-names'], queryFn: fetchVendorNames });
+  const [nextSerial, setNextSerial] = useState(0);
+  useEffect(() => { fetchMaxPOSerial().then(s => setNextSerial(s + 1)); }, []);
 
   const [form, setForm] = useState({
     vendorName:         editData?.vendorName ?? '',
     deliveryAddressType: 'organization' as 'organization' | 'customer',
     customerForDelivery: '',
-    poNumber:           editData?.poNumber   ?? `PO-${String(getMaxPOSerial() + 1).padStart(5, '0')}`,
+    poNumber:           editData?.poNumber   ?? `PO-${String(nextSerial).padStart(5, '0')}`,
     reference:          '',
     date:               editData?.date       ?? today,
     deliveryDate:       editData?.deliveryDate ?? '',
@@ -770,7 +773,7 @@ function NewPOForm({ onClose, onSave, editData }: {
       total,
       notes: form.notes,
     };
-    savePOToStore(storedPO);
+    savePOToStore(storedPO).catch(console.error);
 
     onSave(
       {
@@ -1221,28 +1224,59 @@ function RowMenu({ onEdit, onDuplicate, onDelete }: {
   );
 }
 
-// ─── Main Page ─────────────────────────────────────────────
-// Initialize from shared store (so POs created this session survive navigation)
-function storedPOsToLocal(): PurchaseOrder[] {
-  return getStoredPOs().map((s, i) => ({
-    id:           i + 1,
-    poNumber:     s.poNumber,
-    vendorName:   s.vendorName,
-    date:         s.date,
-    deliveryDate: s.deliveryDate,
-    status:       s.status,
-    total:        s.total,
-    currency:     'INR',
-  }));
-}
-
 export default function PurchaseOrdersPage() {
-  const [orders, setOrders] = useState<PurchaseOrder[]>(storedPOsToLocal);
+  const qc = useQueryClient();
+  const { data: storedPOs = [] } = useQuery({ queryKey: ['all-pos'], queryFn: fetchAllPOs });
+  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+
+  // Sync Supabase POs into local display list
+  useEffect(() => {
+    setOrders(storedPOs.map((s, i) => ({
+      id:           i + 1,
+      poNumber:     s.poNumber,
+      vendorName:   s.vendorName,
+      date:         s.date,
+      deliveryDate: s.deliveryDate,
+      status:       s.status,
+      total:        s.total,
+      currency:     'INR',
+    })));
+  }, [storedPOs]);
   const [showForm, setShowForm] = useState(false);
   const [editOrder, setEditOrder] = useState<PurchaseOrder | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | PurchaseOrder['status']>('all');
   const [search, setSearch] = useState('');
   const [showLifeCycle, setShowLifeCycle] = useState(true);
+
+  // ── Merge Supabase POs with localStorage POs ──────────────────────────────
+  useQuery({
+    queryKey: ['purchase-orders-db'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('purchase_orders')
+        .select('id, po_number, vendor_name, created_at, delivery_date, status, total_amount')
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (error) return [];
+      const dbPOs: PurchaseOrder[] = (data ?? []).map((row: any, i: number) => ({
+        id:           Date.now() + i,
+        poNumber:     row.po_number,
+        vendorName:   row.vendor_name || '—',
+        date:         row.created_at?.slice(0, 10) ?? '',
+        deliveryDate: row.delivery_date ?? '',
+        status:       (row.status === 'approved' ? 'open' : row.status) as PurchaseOrder['status'],
+        total:        Number(row.total_amount || 0),
+        currency:     'INR',
+      }));
+      // Merge: DB POs take precedence over localStorage (dedup by poNumber)
+      setOrders(prev => {
+        const localOnly = prev.filter(p => !dbPOs.some(d => d.poNumber === p.poNumber));
+        return [...dbPOs, ...localOnly];
+      });
+      return dbPOs;
+    },
+    refetchInterval: 30_000,
+  });
 
   const filtered = orders.filter(o => {
     const matchStatus = filterStatus === 'all' || o.status === filterStatus;
@@ -1260,23 +1294,22 @@ export default function PurchaseOrdersPage() {
     }
   };
 
-  const handleDuplicate = (o: PurchaseOrder) => {
-    const newNum = `PO-${String(getMaxPOSerial() + 1).padStart(5, '0')}`;
-    const dup: PurchaseOrder = { ...o, id: Date.now(), poNumber: newNum, status: 'draft' };
-    // Save duplicate to store (no items – just header)
-    savePOToStore({
-      id: String(dup.id), poNumber: newNum, vendorName: o.vendorName,
+  const handleDuplicate = async (o: PurchaseOrder) => {
+    const serial = await fetchMaxPOSerial();
+    const newNum = `PO-${String(serial + 1).padStart(5, '0')}`;
+    await savePOToStore({
+      id: '', poNumber: newNum, vendorName: o.vendorName,
       date: o.date, deliveryDate: o.deliveryDate, paymentTerms: 'Net 30',
       status: 'draft', items: [], subTotal: 0, total: 0, notes: '',
     });
-    setOrders(p => [dup, ...p]);
+    qc.invalidateQueries({ queryKey: ['all-pos'] });
     toast.success('Purchase order duplicated');
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = async (id: number) => {
     const po = orders.find(o => o.id === id);
-    if (po) deletePOFromStore(po.poNumber);
-    setOrders(p => p.filter(o => o.id !== id));
+    if (po) await deletePOFromStore(po.poNumber);
+    qc.invalidateQueries({ queryKey: ['all-pos'] });
     toast.success('Purchase order deleted');
   };
 

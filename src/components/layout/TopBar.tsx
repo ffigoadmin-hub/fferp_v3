@@ -83,10 +83,9 @@ export function TopBar() {
         <MobileNav />
 
         <Link to="/redirect" className="flex items-center gap-2.5 select-none group">
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: '#EFF6FF', border: '1px solid #BFDBFE' }}>
-            <Leaf className="h-4 w-4" style={{ color: '#2563EB' }} />
-          </div>
+          <img src="/ff-logo.jpg" alt="Farmers Factory"
+            className="w-8 h-8 rounded-xl object-cover shrink-0"
+            style={{ boxShadow: '0 2px 8px rgba(16,185,129,0.25)' }} />
           <div className="hidden sm:block">
             <p className="text-[13px] font-bold leading-tight tracking-tight" style={{ color: '#111827' }}>
               Farmers Factory
@@ -154,14 +153,19 @@ export function TopBar() {
         <div className="hidden lg:block w-px h-5 mx-1" style={{ background: '#E5E7EB' }} />
 
         {/* User chip */}
-        <div className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-xl cursor-default select-none"
+        <div className="flex items-center gap-1.5 pl-1.5 pr-2 py-1.5 rounded-xl cursor-default select-none"
           style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
           <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 font-bold text-[11px]"
             style={{ background: bgColor, color: fgColor }}>
             {initials}
           </div>
+          {/* On mobile: only role badge. On md+: full name + ID + badge */}
+          <span className="md:hidden inline-flex items-center px-1.5 py-px rounded text-[9px] font-bold uppercase tracking-wide"
+            style={{ background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE' }}>
+            {badge.label}
+          </span>
           <div className="hidden md:block">
-            <p className="text-[12px] font-semibold leading-tight" style={{ color: '#111827' }}>
+            <p className="text-[12px] font-semibold leading-tight max-w-[120px] truncate" style={{ color: '#111827' }}>
               {user.name}
             </p>
             <div className="flex items-center gap-1 mt-0.5">

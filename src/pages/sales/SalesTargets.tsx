@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { Target, TrendingUp, Check, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -10,7 +11,12 @@ const EMPTY_FORM = {
   target_date: format(new Date(), 'yyyy-MM-dd'), target_type: 'daily', notes: '',
 };
 
+// Only these roles can set / delete targets
+const TARGET_MANAGERS = ['ff_operations_manager', 'admin', 'ceo', 'gm'];
+
 export default function SalesTargets() {
+  const { user } = useAuth();
+  const canManage = TARGET_MANAGERS.includes((user?.role || '').toLowerCase());
   const qc = useQueryClient();
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [showForm, setShowForm] = useState(false);
@@ -117,12 +123,21 @@ export default function SalesTargets() {
         <div className="flex items-center gap-2">
           <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
             className="rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-          <button onClick={() => { setShowForm(true); setForm(EMPTY_FORM); }}
-            className="flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">
-            <Plus className="h-4 w-4" /> Set Target
-          </button>
+          {canManage && (
+            <button onClick={() => { setShowForm(true); setForm(EMPTY_FORM); }}
+              className="flex items-center gap-2 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700">
+              <Plus className="h-4 w-4" /> Set Target
+            </button>
+          )}
         </div>
       </div>
+
+      {!canManage && (
+        <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-blue-700">
+          <Target className="h-4 w-4 shrink-0 text-blue-500" />
+          Targets are set by your FF Operations Manager. This page shows your current progress.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -283,10 +298,12 @@ export default function SalesTargets() {
                       <p className="text-gray-400">orders</p>
                     </div>
                   )}
-                  <button onClick={() => deleteTarget.mutate(t.id)} disabled={deleteTarget.isPending}
-                    className="text-gray-300 hover:text-red-500 transition-colors p-1">
-                    <X className="h-4 w-4" />
-                  </button>
+                  {canManage && (
+                    <button onClick={() => deleteTarget.mutate(t.id)} disabled={deleteTarget.isPending}
+                      className="text-gray-300 hover:text-red-500 transition-colors p-1">
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}

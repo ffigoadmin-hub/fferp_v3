@@ -305,6 +305,15 @@ export function useRealtimeEscalations(options?: UseRealtimeEscalationsOptions) 
         critQuery.order('created_at', { ascending: false }).limit(limit),
       ]);
 
+      // Gracefully handle missing IGO-Chain tables (PGRST205 = table not in schema cache)
+      // In FFERPv2 these tables don't exist — return empty data instead of crashing.
+      const escTableMissing = escRes.error?.code === 'PGRST205' || escRes.error?.message?.includes('schema cache');
+      const critTableMissing = critRes.error?.code === 'PGRST205' || critRes.error?.message?.includes('schema cache');
+      if (escTableMissing || critTableMissing) {
+        setUnifiedTickets([]);
+        setIsLoading(false);
+        return;
+      }
       if (escRes.error) throw escRes.error;
       if (critRes.error) throw critRes.error;
 
@@ -396,15 +405,13 @@ export function useRealtimeEscalations(options?: UseRealtimeEscalationsOptions) 
       setLastUpdated(new Date());
     } catch (error: any) {
       console.error('Error fetching escalations:', error);
+      // Don't show toast for missing tables (FFERPv2 doesn't have IGO-Chain tables)
+      const isMissingTable = error?.code === 'PGRST205' || error?.message?.includes('schema cache');
       const isNetworkError = error.message?.includes('fetch') || error.message?.includes('NetworkError');
-      const msg = isNetworkError 
-        ? 'Connection error. Retrying in background...' 
-        : (error.message || 'Check console for sync details');
-      
-      // Only show error toast if it's not a standard background network blip to avoid noise
-      if (!isNetworkError) {
+      if (!isMissingTable && !isNetworkError) {
+        const msg = error.message || 'Check console for sync details';
         toast.error('Sync Error: ' + msg);
-      } else {
+      } else if (isNetworkError) {
         console.warn('[Sync] Background fetch failed (Network)');
       }
     } finally {

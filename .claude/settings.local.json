@@ -103,7 +103,25 @@
       "Bash(selfie_records)",
       "Bash(salary\" | head -20)",
       "Bash(npx esbuild *)",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(npx kill-port *)",
+      "Bash(git commit -m 'fix: deduplicate hubs table and add UNIQUE constraint on name *)",
+      "Bash(git commit -m 'feat: add CSV import to Bulk Order page *)",
+      "Bash(git commit -m 'feat: add QR code display in dev server terminal *)",
+      "Bash(git commit -m 'fix: resolve ambiguous id column in shift users migration *)",
+      "Bash(git commit *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\Buddy\\\\OneDrive\\\\Desktop\\\\fferpv2 app\" -Recurse -Filter \"*.sql\")",
+      "Bash(Sort-Object FullName)",
+      "Bash(mkdir -p \"C:\\\\Users\\\\Buddy\\\\.claude\\\\projects\\\\D--fferpv2-app\\\\memory\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173)",
+      "Bash(findstr :5173)",
+      "Bash(taskkill /PID 18060 /F)",
+      "PowerShell(Stop-Process -Id 18060 -Force)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8080)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\" http://localhost:8080)",
+      "PowerShell(Get-ChildItem -Path \"D:\\\\fferpv2 app\" -Force | Select-Object Name, @{Name=\"Type\"; Expression={if\\($_.PSIsContainer\\){\"DIR\"}else{\"FILE\"}}} | Format-Table -AutoSize)"
     ]
   }
 }

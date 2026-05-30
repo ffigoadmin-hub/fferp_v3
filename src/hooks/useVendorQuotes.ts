@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -71,7 +72,7 @@ export function useVendorQuotes(materialRequestId?: string, projectId?: string) 
       setQuotes(parsedQuotes as VendorQuote[]);
     } catch (error: any) {
       console.error('Error fetching vendor quotes:', error);
-      toast.error('Failed to load vendor quotes');
+      if (!isMissingTable(error)) toast.error('Failed to load vendor quotes');
     } finally {
       setIsLoading(false);
     }

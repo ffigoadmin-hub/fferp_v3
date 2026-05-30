@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -102,7 +103,7 @@ export function useLOPEntries(statusFilter?: LOPStatus | LOPStatus[]) {
       setTotalCount(totalCount);
     } catch (error) {
       console.error('Error fetching LOP entries:', error);
-      toast.error('Failed to fetch LOP entries');
+      const _isMissing = (error as any)?.code === 'PGRST205' || (error as any)?.message?.includes('schema cache'); if (!_isMissing) if (!isMissingTable(error)) toast.error('Failed to fetch LOP entries');
     } finally {
       setIsLoading(false);
     }

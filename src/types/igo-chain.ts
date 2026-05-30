@@ -13,6 +13,7 @@ export type UserRole =
   | 'boi'
   | 'nsm'
   | 'datateam'
+  | 'data_team'
   | 'farmmanager'
   | 'purchase_head'
   | 'vendor_head'
@@ -33,7 +34,11 @@ export type UserRole =
   | 'driver'
   | 'back_office'
   | 'shift_employee'
-  | 'ff_operations_manager';
+  | 'ff_operations_manager'
+  | 'hub_manager'
+  | 'l1_manager'
+  | 'bde'
+  | 'collection_executive';
 
 // ── Role display labels ────────────────────────────────────────
 export const ROLE_LABELS: Record<UserRole, string> = {
@@ -49,6 +54,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   boi:                    'BOI',
   nsm:                    'NSM',
   datateam:               'Data Team',
+  data_team:              'Data Team',
   farmmanager:            'Farm Manager',
   purchase_head:          'Purchase Head',
   vendor_head:            'Vendor Head',
@@ -70,12 +76,16 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   back_office:               'Back Office',
   shift_employee:            'Shift Employee',
   ff_operations_manager:     'FF Operations Manager',
+  hub_manager:               'Hub Manager',
+  l1_manager:                'L1 Manager',
+  bde:                       'BDE',
+  collection_executive:      'Collection Executive',
 };
 
 // ── Role groupings ─────────────────────────────────────────────
 export const MANAGEMENT_ROLES: UserRole[] = ['ceo', 'director', 'Director', 'gm', 'gmo', 'smo', 'boi', 'nsm', 'admin'];
 export const OPERATIONS_ROLES: UserRole[] = ['purchase_manager', 'purchase_head', 'warehouse_manager', 'qc_manager', 'field_executive', 'tele_caller', 'driver', 'back_office', 'ff_operations_manager'];
-export const HUB_SCOPED_ROLES: UserRole[] = ['warehouse_manager', 'qc_manager', 'driver', 'field_executive'];
+export const HUB_SCOPED_ROLES: UserRole[] = ['warehouse_manager', 'qc_manager', 'hub_manager', 'driver', 'field_executive'];
 
 
 export type LocationZone = 'back_office' | 'head_office' | 'site' | 'other';

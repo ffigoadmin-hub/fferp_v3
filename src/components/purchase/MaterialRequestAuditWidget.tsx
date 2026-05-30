@@ -34,7 +34,7 @@ export function MaterialRequestAuditWidget({
   title,
   subtitle
 }: MaterialRequestAuditWidgetProps) {
-  const { requests: allRequests, isLoading, approveRequest, isSaving, refetch } = useMaterialRequests();
+  const { requests: allRequests, isLoading, approveRequest, rejectRequest, isSaving, refetch } = useMaterialRequests();
   const { quotes } = useVendorQuotes();
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -42,6 +42,8 @@ export function MaterialRequestAuditWidget({
   const [note, setNote] = useState('');
   const [activeTab, setActiveTab] = useState<'audit' | 'sourcing'>('audit');
   const [projectBoqMap, setProjectBoqMap] = useState<Record<string, any[]>>({});
+  const [rejectDialogId, setRejectDialogId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   const auditRequests = allRequests.filter(r => r.approval_status === targetStatus);
   const readyForAudit = auditRequests.filter(r => r.selected_quote_id);
@@ -92,6 +94,19 @@ export function MaterialRequestAuditWidget({
       refetch();
     } catch (error) {
       console.error('Approval failed:', error);
+    }
+  };
+
+  const handleReject = async (id: string) => {
+    if (!rejectReason.trim()) { toast.error('Please provide a rejection reason'); return; }
+    try {
+      await rejectRequest(id, rejectReason.trim());
+      setRejectDialogId(null);
+      setRejectReason('');
+      setExpandedId(null);
+      refetch();
+    } catch (error) {
+      console.error('Rejection failed:', error);
     }
   };
 
@@ -423,7 +438,7 @@ export function MaterialRequestAuditWidget({
                                   </div>
                                   <div className="grid grid-cols-2 gap-2">
                                     <Button variant="destructive" className="h-9 text-xs gap-1.5"
-                                      onClick={() => toast.info('Rejection flow coming soon')}>
+                                      onClick={() => { setRejectDialogId(request.id); setRejectReason(''); }}>
                                       <XCircle className="w-3.5 h-3.5" /> Reject
                                     </Button>
                                     <Button className="h-9 text-xs gap-1.5"
@@ -568,6 +583,34 @@ export function MaterialRequestAuditWidget({
           setCompareOpen(false);
         }}
       />
+
+      {/* ── Rejection Dialog ── */}
+      {rejectDialogId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setRejectDialogId(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-black text-gray-900 mb-1">Reject Material Request</h3>
+            <p className="text-xs text-gray-500 mb-4">This action will notify the requester. Please provide a clear reason.</p>
+            <textarea
+              className="w-full border border-gray-200 rounded-xl p-3 text-sm resize-none min-h-[100px] focus:outline-none focus:ring-2 focus:ring-red-300"
+              placeholder="Enter rejection reason (required)..."
+              value={rejectReason}
+              onChange={e => setRejectReason(e.target.value)}
+              autoFocus
+            />
+            <div className="flex gap-3 mt-4">
+              <button
+                className="flex-1 h-10 rounded-xl border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+                onClick={() => setRejectDialogId(null)}
+              >Cancel</button>
+              <button
+                className="flex-1 h-10 rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-semibold disabled:opacity-50"
+                disabled={!rejectReason.trim() || isSaving}
+                onClick={() => handleReject(rejectDialogId)}
+              >{isSaving ? 'Rejecting...' : 'Confirm Reject'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

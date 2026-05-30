@@ -96,6 +96,8 @@ const navigationConfig: NavGroup[] = [
       'accounts', 'farmmanager', 'bd_data', 'rsh', 'RSH', 'site_visit_farm_manager',
       'cafe_manager', 'palm_cafe_manager', 'ff_operations_manager',
       'bde', 'field_executive', 'back_office', 'tele_caller', 'shift_employee', 'driver',
+      'purchase_manager', 'hub_manager', 'warehouse_manager', 'qc_manager',
+      'collection_executive',
     ],
     defaultOpen: true,
     items: [
@@ -673,7 +675,6 @@ const navigationConfig: NavGroup[] = [
       { icon: ClipboardList,   label: 'All Orders',        path: '/sales/orders' },
       { icon: Users,           label: 'Customers',         path: '/sales/customers' },
       { icon: CreditCard,      label: 'Collections',       path: '/sales/collections' },
-      { icon: BarChart3,       label: 'Subscriptions',     path: '/sales/subscriptions' },
       { icon: Activity,        label: 'Sales Targets',     path: '/sales/targets' },
     ],
   },
@@ -698,6 +699,192 @@ const navigationConfig: NavGroup[] = [
     items: [
       { icon: LayoutDashboard, label: 'Trips Dashboard',  path: '/logistics' },
       { icon: Truck,           label: 'Driver View',      path: '/driver' },
+    ],
+  },
+
+  // ══ FARMERS FACTORY NEW ROLES ══════════════════════════════════════════════
+
+  // ── GM — FF Payments only ─────────────────────────────────────────────────
+  {
+    title: 'FF Payment Approvals',
+    icon: Banknote,
+    roles: ['gm'],
+    defaultOpen: true,
+    items: [
+      { icon: Banknote,     label: 'Vendor Payments',    path: '/gm/ff-payments' },
+      { icon: Truck,        label: 'Transport Payments', path: '/gm/ff-transport-payments' },
+      { icon: FileBarChart, label: 'FF Payments Report', path: '/reports/ff-payments' },
+    ],
+  },
+
+  // ── L1 Manager ────────────────────────────────────────────────────────────
+  {
+    title: 'L1 Payment Approvals',
+    icon: CheckSquare,
+    roles: ['l1_manager'],
+    defaultOpen: true,
+    items: [
+      { icon: Banknote,     label: 'Vendor Payments',    path: '/l1/payments' },
+      { icon: Truck,        label: 'Transport Payments', path: '/l1/transport-payments' },
+      { icon: FileBarChart, label: 'FF Payments Report', path: '/reports/ff-payments' },
+    ],
+  },
+
+  // ── Auditor ───────────────────────────────────────────────────────────────
+  {
+    title: 'FF Payment Audit',
+    icon: ShieldCheck,
+    roles: ['auditor'],
+    defaultOpen: true,
+    items: [
+      { icon: Banknote,     label: 'Vendor Payments',    path: '/auditor/ff-payments' },
+      { icon: Truck,        label: 'Transport Payments', path: '/auditor/ff-transport-payments' },
+      { icon: FileBarChart, label: 'FF Payments Report', path: '/reports/ff-payments' },
+    ],
+  },
+
+  // ── Hub Manager ───────────────────────────────────────────────────────────
+  {
+    title: 'Shift',
+    icon: Clock,
+    roles: ['hub_manager'],
+    defaultOpen: false,
+    items: [
+      { icon: LayoutDashboard, label: 'Shift Dashboard', path: '/shift/dashboard' },
+    ],
+  },
+  {
+    title: 'My Hub',
+    icon: Wallet,
+    roles: ['hub_manager'],
+    defaultOpen: true,
+    items: [
+      { icon: LayoutDashboard, label: 'Warehouse Dashboard', path: '/warehouse' },
+      { icon: ClipboardCheck,  label: 'QC Inspection',       path: '/warehouse/qc' },
+      { icon: FileText,        label: 'QC Rejections',       path: '/warehouse/qc-rejections' },
+      { icon: FileText,        label: 'Deduction Memos',     path: '/warehouse/deductions' },
+      { icon: RotateCcw,       label: 'Returns',             path: '/warehouse/returns' },
+    ],
+  },
+  {
+    title: 'Payments',
+    icon: Banknote,
+    roles: ['hub_manager'],
+    defaultOpen: false,
+    items: [
+      { icon: Plus,        label: 'New Vendor Payment',    path: '/ff/vendor-payment/new' },
+      { icon: Truck,       label: 'New Transport Payment', path: '/ff/transport-payment/new' },
+      { icon: History,     label: 'My Submitted Payments', path: '/my-submitted-payments' },
+    ],
+  },
+
+  // ── Purchase Manager / Head ───────────────────────────────────────────────
+  {
+    title: 'Shift',
+    icon: Clock,
+    roles: ['purchase_manager', 'purchase_head'],
+    defaultOpen: false,
+    items: [
+      { icon: LayoutDashboard, label: 'Shift Dashboard', path: '/shift/dashboard' },
+    ],
+  },
+  {
+    title: 'Purchase',
+    icon: Package,
+    roles: ['purchase_manager', 'purchase_head'],
+    defaultOpen: true,
+    items: [
+      { icon: LayoutDashboard, label: 'Purchase Dashboard',  path: '/purchase' },
+      { icon: ClipboardList,   label: 'My Purchase Orders',  path: '/purchase/orders' },
+      { icon: Plus,            label: 'New PO',              path: '/purchase/new' },
+      { icon: Zap,             label: 'Auto PO',             path: '/purchase/auto-po' },
+      { icon: Zap,             label: 'EOD PO Engine',       path: '/ff-operations/eod-po-engine' },
+      { icon: Database,        label: 'Vendors',             path: '/purchase/vendors' },
+    ],
+  },
+  {
+    title: 'Payments',
+    icon: Banknote,
+    roles: ['purchase_manager', 'purchase_head'],
+    defaultOpen: false,
+    items: [
+      { icon: Plus,    label: 'New FF Vendor Payment', path: '/ff/vendor-payment/new' },
+      { icon: History, label: 'My Submitted Payments', path: '/my-submitted-payments' },
+    ],
+  },
+
+  // ── Warehouse Manager ─────────────────────────────────────────────────────
+  {
+    title: 'Warehouse',
+    icon: Wallet,
+    roles: ['warehouse_manager'],
+    defaultOpen: true,
+    items: [
+      { icon: LayoutDashboard, label: 'Warehouse Dashboard', path: '/warehouse' },
+      { icon: ClipboardCheck,  label: 'QC Inspection',       path: '/warehouse/qc' },
+      { icon: FileText,        label: 'QC Rejections',       path: '/warehouse/qc-rejections' },
+      { icon: FileText,        label: 'Deduction Memos',     path: '/warehouse/deductions' },
+      { icon: Package,         label: 'Inventory',           path: '/warehouse/inventory' },
+    ],
+  },
+
+  // ── QC Manager ────────────────────────────────────────────────────────────
+  {
+    title: 'Quality Control',
+    icon: ShieldCheck,
+    roles: ['qc_manager'],
+    defaultOpen: true,
+    items: [
+      { icon: ClipboardCheck, label: 'QC Inspection',   path: '/warehouse/qc' },
+      { icon: FileText,       label: 'QC Rejections',   path: '/warehouse/qc-rejections' },
+      { icon: FileText,       label: 'Deduction Memos', path: '/warehouse/deductions' },
+    ],
+  },
+
+  // ── Collection Executive ─────────────────────────────────────────────────
+  {
+    title: 'Shift',
+    icon: Clock,
+    roles: ['collection_executive'],
+    defaultOpen: false,
+    items: [
+      { icon: LayoutDashboard, label: 'Shift Dashboard', path: '/shift/dashboard' },
+    ],
+  },
+  {
+    title: 'Collections',
+    icon: Wallet,
+    roles: ['collection_executive'],
+    defaultOpen: true,
+    items: [
+      { icon: Plus,          label: 'New Collection',       path: '/collections/entry' },
+      { icon: ClipboardList, label: 'My Collections Today', path: '/collections/dashboard' },
+    ],
+  },
+
+  // ── FF Operations Manager ─────────────────────────────────────────────────
+  {
+    title: 'Operations Command',
+    icon: LayoutDashboard,
+    roles: ['ff_operations_manager'],
+    defaultOpen: true,
+    items: [
+      { icon: BarChart3,    label: 'GM Dashboard',       path: '/ff-operations/gm-dashboard' },
+      { icon: Wallet,       label: 'Cash Collections',   path: '/collections/dashboard' },
+      { icon: FileBarChart, label: 'FF Payments Report', path: '/reports/ff-payments' },
+    ],
+  },
+
+  // ── Accounts ──────────────────────────────────────────────────────────────
+  {
+    title: 'FF Payments',
+    icon: Banknote,
+    roles: ['accounts'],
+    defaultOpen: true,
+    items: [
+      { icon: Banknote,     label: 'FF Vendor Payments',    path: '/accounts/ff-payments' },
+      { icon: Truck,        label: 'FF Transport Payments', path: '/accounts/ff-transport-payments' },
+      { icon: FileBarChart, label: 'FF Payments Report',    path: '/reports/ff-payments' },
     ],
   },
 ];
@@ -770,9 +957,8 @@ export function MobileSidebar({ onClose }: MobileSidebarProps) {
       {/* Header */}
       <div className="px-4 py-3 border-b border-[#1e3a5f] flex items-center justify-between">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-green-600 flex items-center justify-center shrink-0">
-            <span className="text-white text-[13px] font-bold">FF</span>
-          </div>
+          <img src="/ff-logo.jpg" alt="Farmers Factory"
+            className="w-8 h-8 rounded-lg object-cover shrink-0" />
           <div>
             <p className="text-[13px] font-bold text-white leading-tight">Farmers Factory</p>
             <p className="text-[10px] text-[#4a6fa5] leading-none font-medium tracking-wider uppercase">ERP v2.0</p>

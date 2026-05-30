@@ -65,6 +65,125 @@ function getInitials(name?: string) {
     return name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase();
 }
 
+// ─── Time Management Tab ──────────────────────────────────────────────────────
+function TimeManagementTab({ dayStarts, leaveRequests, lopEntries, hourlyReports }: {
+    dayStarts: any[]; leaveRequests: any[]; lopEntries: any[]; hourlyReports: any[];
+}) {
+    const presentDays = dayStarts.length;
+    const lateDays    = hourlyReports.filter(r => r.is_late).length;
+    const leavesTaken = leaveRequests.filter(l => l.status === 'approved').length;
+    const lopCount    = lopEntries.length;
+
+    const LEAVE_STATUS: Record<string, { label: string; color: string }> = {
+        pending:  { label: 'Pending',  color: '#F59E0B' },
+        approved: { label: 'Approved', color: '#10B981' },
+        rejected: { label: 'Rejected', color: '#EF4444' },
+    };
+
+    return (
+        <div className="space-y-6">
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                    { label: 'Days Present (30d)', value: presentDays, icon: '✅', color: '#10B981' },
+                    { label: 'Late Reports (30d)',  value: lateDays,    icon: '⏰', color: '#F59E0B' },
+                    { label: 'Leaves Approved',     value: leavesTaken, icon: '🗓️',  color: '#3B82F6' },
+                    { label: 'LOP Entries',         value: lopCount,    icon: '⚠️',  color: '#EF4444' },
+                ].map(card => (
+                    <div key={card.label} className="rounded-2xl p-4" style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
+                        <p className="text-xl mb-1">{card.icon}</p>
+                        <p className="text-2xl font-black" style={{ color: card.color }}>{card.value}</p>
+                        <p className="text-[11px] mt-0.5" style={{ color: '#9CA3AF' }}>{card.label}</p>
+                    </div>
+                ))}
+            </div>
+
+            {/* Attendance (Day Starts) */}
+            <div className="rounded-2xl p-5" style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
+                <p className="text-sm font-black mb-3" style={{ color: '#374151' }}>
+                    📅 Day Starts — Last 30 Days ({dayStarts.length} days)
+                </p>
+                {dayStarts.length === 0 ? (
+                    <p className="text-xs text-center py-6" style={{ color: '#9CA3AF' }}>No day starts recorded in last 30 days</p>
+                ) : (
+                    <div className="grid grid-cols-7 gap-1.5">
+                        {Array.from({ length: 30 }, (_, i) => {
+                            const d = new Date(Date.now() - (29 - i) * 86400000).toISOString().split('T')[0];
+                            const hasStart = dayStarts.some(s => s.date === d);
+                            return (
+                                <div key={d} title={d}
+                                    className="h-7 rounded-md flex items-center justify-center text-[10px] font-bold"
+                                    style={{
+                                        background: hasStart ? '#D1FAE5' : '#F3F4F6',
+                                        color: hasStart ? '#065F46' : '#D1D5DB',
+                                        border: `1px solid ${hasStart ? '#6EE7B7' : '#E5E7EB'}`,
+                                    }}>
+                                    {new Date(d).getDate()}
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
+            {/* Leave Requests */}
+            <div className="rounded-2xl p-5" style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
+                <p className="text-sm font-black mb-3" style={{ color: '#374151' }}>🏖️ Leave Requests</p>
+                {leaveRequests.length === 0 ? (
+                    <p className="text-xs text-center py-6" style={{ color: '#9CA3AF' }}>No leave requests found</p>
+                ) : (
+                    <div className="space-y-2">
+                        {leaveRequests.map((l, i) => {
+                            const cfg = LEAVE_STATUS[l.status] || { label: l.status, color: '#6B7280' };
+                            return (
+                                <div key={i} className="flex items-center justify-between px-4 py-3 rounded-xl"
+                                    style={{ background: '#FFFFFF', border: '1px solid #E5E7EB' }}>
+                                    <div>
+                                        <p className="text-xs font-bold" style={{ color: '#111827' }}>
+                                            {l.leave_type}
+                                        </p>
+                                        <p className="text-[11px] mt-0.5" style={{ color: '#6B7280' }}>
+                                            {l.from_date} → {l.to_date}
+                                        </p>
+                                        {l.reason && (
+                                            <p className="text-[10px] mt-0.5 italic truncate max-w-[220px]" style={{ color: '#9CA3AF' }}>
+                                                {l.reason}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                                        style={{ background: `${cfg.color}20`, color: cfg.color, border: `1px solid ${cfg.color}40` }}>
+                                        {cfg.label}
+                                    </span>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
+            {/* LOP Entries */}
+            {lopEntries.length > 0 && (
+                <div className="rounded-2xl p-5" style={{ background: '#FFF7ED', border: '1px solid #FED7AA' }}>
+                    <p className="text-sm font-black mb-3" style={{ color: '#9A3412' }}>⚠️ Loss of Pay Entries ({lopEntries.length})</p>
+                    <div className="space-y-2">
+                        {lopEntries.map((l, i) => (
+                            <div key={i} className="flex items-center justify-between px-4 py-3 rounded-xl"
+                                style={{ background: '#FFFFFF', border: '1px solid #FED7AA' }}>
+                                <div>
+                                    <p className="text-xs font-bold" style={{ color: '#111827' }}>{l.date}</p>
+                                    <p className="text-[11px] mt-0.5" style={{ color: '#6B7280' }}>{l.lop_type || 'Absence'}</p>
+                                </div>
+                                <p className="text-[11px]" style={{ color: '#9CA3AF' }}>{l.reason || '—'}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function HREmployeePayrollProfile() {
     const { profileId } = useParams<{ profileId: string }>();
@@ -76,6 +195,9 @@ export default function HREmployeePayrollProfile() {
     const [lastLogin, setLastLogin] = useState<string | undefined>();
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('Payroll');
+    const [timeData, setTimeData] = useState<{
+        dayStarts: any[]; leaveRequests: any[]; lopEntries: any[]; hourlyReports: any[];
+    }>({ dayStarts: [], leaveRequests: [], lopEntries: [], hourlyReports: [] });
 
     useEffect(() => {
         if (profileId) { fetchData(); }
@@ -138,6 +260,21 @@ export default function HREmployeePayrollProfile() {
                 setPayslips(records);
                 if (records.length > 0) setSelectedPayslip(records[0]);
             }
+
+            // ── Time Management data ──────────────────────────────────
+            const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const [dsRes, lrRes, lopRes, hrRes] = await Promise.allSettled([
+                supabase.from('day_starts').select('date, submitted_at, location').eq('user_id', profileId!).gte('date', thirtyDaysAgo).order('date', { ascending: false }),
+                supabase.from('leave_requests').select('leave_type, from_date, to_date, status, reason, created_at').eq('user_id', profileId!).order('created_at', { ascending: false }).limit(20),
+                (supabase as any).from('lop_entries').select('date, reason, lop_type, created_at').eq('user_id', profileId!).order('date', { ascending: false }).limit(30),
+                supabase.from('hourly_reports').select('date, slot, is_late').eq('user_id', profileId!).gte('date', thirtyDaysAgo).order('date', { ascending: false }),
+            ]);
+            setTimeData({
+                dayStarts:     dsRes.status  === 'fulfilled' ? (dsRes.value.data  || []) : [],
+                leaveRequests: lrRes.status  === 'fulfilled' ? (lrRes.value.data  || []) : [],
+                lopEntries:    lopRes.status === 'fulfilled' ? (lopRes.value.data || []) : [],
+                hourlyReports: hrRes.status  === 'fulfilled' ? (hrRes.value.data  || []) : [],
+            });
         } catch (e) {
             toast.error('Failed to load employee data');
         } finally {
@@ -537,11 +674,12 @@ export default function HREmployeePayrollProfile() {
                     {activeTab === 'Personal Info' && <PersonalInfoTab />}
                     {activeTab === 'Payroll' && <PayrollTab />}
                     {activeTab === 'Time Management' && (
-                        <div className="rounded-2xl py-16 flex flex-col items-center"
-                            style={{ background: '#F9FAFB', border: '1px dashed #D1D5DB' }}>
-                            <Clock className="w-10 h-10 mb-3" style={{ color: '#D1D5DB' }} />
-                            <p className="text-sm font-semibold" style={{ color: '#9CA3AF' }}>Time Management coming soon</p>
-                        </div>
+                        <TimeManagementTab
+                            dayStarts={timeData.dayStarts}
+                            leaveRequests={timeData.leaveRequests}
+                            lopEntries={timeData.lopEntries}
+                            hourlyReports={timeData.hourlyReports}
+                        />
                     )}
                 </>
             )}

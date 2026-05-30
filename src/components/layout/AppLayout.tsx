@@ -84,9 +84,10 @@ export function AppLayout({ children }: AppLayoutProps) {
           ref={mainRef}
           className={cn(
             "flex-1 min-w-0 h-full overflow-y-auto overflow-x-hidden transition-all duration-200",
-            "p-4 md:p-5",
+            "p-3 sm:p-4 md:p-5",
             showChatOverlay ? "mr-80" : ""
           )}
+          style={{ WebkitOverflowScrolling: 'touch' }}
         >
           {children}
         </main>

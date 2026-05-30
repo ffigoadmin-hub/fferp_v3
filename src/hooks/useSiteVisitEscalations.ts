@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { SiteVisitEscalation, SiteVisitEscalationStatus, CreateSiteVisitEscalationInput, SiteVisitEscalationLayer } from '@/types/site-visit-escalations';
@@ -43,7 +44,7 @@ export function useSiteVisitEscalations() {
         } catch (err: any) {
             console.error('Error fetching site visit escalations:', err);
             setError(err.message);
-            toast.error('Failed to load escalations');
+            if (!isMissingTable(error)) toast.error('Failed to load escalations');
         } finally {
             setLoading(false);
         }

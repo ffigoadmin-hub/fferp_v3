@@ -259,70 +259,50 @@ export default function SalesDashboard() {
     },
   });
 
-  /* Split by shift */
-  const shift1Orders = useMemo(() => (todayOrders as any[]).filter(o => o.shift === 1), [todayOrders]);
-  const shift2Orders = useMemo(() => (todayOrders as any[]).filter(o => o.shift === 2), [todayOrders]);
-  const noShiftOrders = useMemo(() => (todayOrders as any[]).filter(o => !o.shift), [todayOrders]);
-
   /* Stats */
   const totalValue   = (todayOrders as any[]).reduce((s, o) => s + (Number(o.net_amount) || 0), 0);
   const deliveredCnt = (todayOrders as any[]).filter(o => o.status === 'delivered').length;
   const pendingCnt   = (todayOrders as any[]).filter(o => ['confirmed','pending'].includes(o.status)).length;
 
-  /* Generate POs for a shift */
-  const handleGeneratePO = async (shiftNum: number) => {
+  /* Generate PO for a specific hub (all of today's orders for that hub) */
+  const handleGenerateHubPO = async (hubId: string) => {
     setGeneratingPO(true);
     try {
-      const shiftOrders = shiftNum === 1 ? shift1Orders : shift2Orders;
-      const hubGroups: Record<string, any[]> = {};
-      for (const o of shiftOrders) {
-        const hubKey = o.hub_id ?? 'no-hub';
-        if (!hubGroups[hubKey]) hubGroups[hubKey] = [];
-        hubGroups[hubKey].push(o);
+      const hub = (hubs as any[]).find(h => h.id === hubId);
+      if (!hub) { toast.error('Hub not found'); return; }
+
+      const hubOrders = (todayOrders as any[]).filter(o => o.hub_id === hubId);
+      if (hubOrders.length === 0) { toast.error('No orders for this hub today'); setGeneratingPO(false); return; }
+
+      const hubCode  = (hub.name ?? hub.city ?? 'HUB').substring(0, 3).toUpperCase();
+      const poNumber = `PO-${hubCode}-${format(new Date(), 'ddMMyy-HHmm')}`;
+      const totalAmt = hubOrders.reduce((s: number, o: any) => s + (Number(o.net_amount) || 0), 0);
+
+      const { data: newPO, error } = await supabase
+        .from('purchase_orders')
+        .insert({
+          po_number:    poNumber,
+          status:       'pending_approval',
+          hub_id:       hubId,
+          hub_name:     hub.name,
+          total_amount: totalAmt,
+          notes:        `Auto-generated — ${hub.name} — ${hubOrders.length} orders — ${today}`,
+        })
+        .select().single();
+
+      if (error) throw error;
+
+      // Link sales orders to PO
+      if (newPO) {
+        await supabase.from('po_sales_order_links').insert(
+          hubOrders.map((o: any) => ({ po_id: newPO.id, sales_order_id: o.id }))
+        );
       }
 
-      let createdCount = 0;
-      for (const [hubId, hubOrders] of Object.entries(hubGroups)) {
-        if (hubId === 'no-hub') continue;
-        const hub = (hubs as any[]).find(h => h.id === hubId);
-        if (!hub) continue;
-
-        const hubCode = hub.location?.substring(0, 2).toUpperCase() ?? 'XX';
-        const poNumber = `PO-${shiftNum === 1 ? 'DAY' : 'NGT'}-${hubCode}-${format(new Date(), 'ddMM')}`;
-
-        const totalAmt = hubOrders.reduce((s: number, o: any) => s + (Number(o.net_amount) || 0), 0);
-
-        const { data: newPO, error } = await supabase
-          .from('purchase_orders')
-          .insert({
-            po_number:       poNumber,
-            status:          shiftNum === 1 ? 'pending_approval' : 'approved',
-            approval_status: shiftNum === 1 ? 'pending' : 'direct',
-            routed_to:       shiftNum === 1 ? 'operations_manager' : 'purchase_executive',
-            shift:           shiftNum,
-            hub_id:          hubId,
-            hub_name:        hub.name,
-            total_amount:    totalAmt,
-            notes:           `Auto-generated from Shift ${shiftNum} — ${hub.name} — ${hubOrders.length} orders`,
-          })
-          .select().single();
-
-        if (error) { console.error('PO create error:', error); continue; }
-
-        // Link sales orders to PO
-        if (newPO) {
-          await supabase.from('po_sales_order_links').insert(
-            hubOrders.map((o: any) => ({ po_id: newPO.id, sales_order_id: o.id }))
-          );
-        }
-
-        createdCount++;
-      }
-
-      toast.success(`✅ ${createdCount} Purchase Orders generated for Shift ${shiftNum}${shiftNum === 1 ? ' — sent to Operations Manager for approval' : ' — sent directly to Purchase Executive'}`);
+      toast.success(`✅ PO ${poNumber} created for ${hub.name} — ${hubOrders.length} orders`);
       setTimeout(() => navigate('/purchase/auto-po'), 1500);
     } catch (err: any) {
-      toast.error(err.message ?? 'Failed to generate POs');
+      toast.error(err.message ?? 'Failed to generate PO');
     } finally {
       setGeneratingPO(false);
     }
@@ -394,28 +374,85 @@ export default function SalesDashboard() {
         ))}
       </div>
 
-      {/* Two-Shift Panels */}
+      {/* PO Quick Actions */}
+      <div className="flex flex-wrap items-center gap-3 bg-slate-50 rounded-2xl border border-slate-100 px-5 py-3">
+        <span className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Purchase Orders</span>
+        <button
+          onClick={() => navigate('/purchase/auto-po')}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-colors shadow-sm"
+        >
+          <Package className="h-3.5 w-3.5" /> Auto PO
+        </button>
+        <button
+          onClick={() => navigate('/ff-operations/eod-po-engine')}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-amber-50 hover:border-amber-200 hover:text-amber-700 transition-colors shadow-sm"
+        >
+          <Zap className="h-3.5 w-3.5 text-amber-500" /> EOD PO Engine
+        </button>
+        <button
+          onClick={() => navigate('/purchase/orders')}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-purple-50 hover:border-purple-200 hover:text-purple-700 transition-colors shadow-sm"
+        >
+          <Eye className="h-3.5 w-3.5" /> View All POs
+        </button>
+      </div>
+
+      {/* Overall Orders by Hub */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-bold text-slate-800 flex items-center gap-2">
-            <Clock className="h-4 w-4 text-slate-500" /> Today's Orders by Shift
+            <Building2 className="h-4 w-4 text-slate-500" /> Today's Orders by Hub
           </h2>
-          <span className="text-[11px] text-slate-400">Hub POs auto-generated at shift cutoff</span>
+          <span className="text-[11px] text-slate-400">{(todayOrders as any[]).length} total orders · ₹{totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
         </div>
-        <div className="space-y-4">
-          <ShiftPanel shift={1} orders={shift1Orders} hubs={hubs as any[]} onGeneratePO={handleGeneratePO} generatingPO={generatingPO} />
-          <ShiftPanel shift={2} orders={shift2Orders} hubs={hubs as any[]} onGeneratePO={handleGeneratePO} generatingPO={generatingPO} />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {(hubs as any[]).map(hub => {
+            const hubOrders = (todayOrders as any[]).filter(o => o.hub_id === hub.id);
+            const hubValue  = hubOrders.reduce((s: number, o: any) => s + (Number(o.net_amount) || 0), 0);
+            const delivered = hubOrders.filter((o: any) => o.status === 'delivered').length;
+            const pending   = hubOrders.filter((o: any) => ['confirmed','pending'].includes(o.status)).length;
+            return (
+              <div key={hub.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-blue-500" />
+                    <span className="font-bold text-slate-800 text-sm">{hub.name ?? hub.city}</span>
+                  </div>
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-bold rounded-full">{hubOrders.length} orders</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-slate-50 rounded-lg p-2">
+                    <p className="text-[18px] font-bold text-slate-800">{hubOrders.length}</p>
+                    <p className="text-[10px] text-slate-400">Total</p>
+                  </div>
+                  <div className="bg-green-50 rounded-lg p-2">
+                    <p className="text-[18px] font-bold text-green-700">{delivered}</p>
+                    <p className="text-[10px] text-green-500">Delivered</p>
+                  </div>
+                  <div className="bg-amber-50 rounded-lg p-2">
+                    <p className="text-[18px] font-bold text-amber-700">{pending}</p>
+                    <p className="text-[10px] text-amber-500">Pending</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between pt-1 border-t border-gray-50">
+                  <span className="text-[11px] text-slate-400">Total Value</span>
+                  <span className="text-sm font-bold text-slate-800">₹{hubValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                </div>
+                {/* Generate PO button for this hub */}
+                <button
+                  disabled={generatingPO || hubOrders.length === 0}
+                  onClick={() => handleGenerateHubPO(hub.id)}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-xl border border-dashed border-blue-200 text-blue-600 hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {generatingPO ? <><RefreshCw className="h-3 w-3 animate-spin" /> Generating...</> : <><ShoppingCart className="h-3 w-3" /> Generate PO</>}
+                </button>
+              </div>
+            );
+          })}
+          {(hubs as any[]).length === 0 && (
+            <div className="md:col-span-3 py-8 text-center text-slate-400 text-sm">No hubs configured yet</div>
+          )}
         </div>
-
-        {/* No-hub warning */}
-        {noShiftOrders.length > 0 && (
-          <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-amber-500 flex-shrink-0" />
-            <p className="text-xs text-amber-700">
-              <span className="font-bold">{noShiftOrders.length} orders</span> were placed outside shift hours or before the hub feature was added. They won't be included in shift POs.
-            </p>
-          </div>
-        )}
       </div>
 
       {/* Bottom grid: Recent orders + Quick links */}
@@ -502,12 +539,16 @@ export default function SalesDashboard() {
             </p>
             <div className="mt-4 space-y-1.5">
               <div className="flex justify-between text-[11px]">
-                <span className="text-slate-400">Shift 1 orders</span>
-                <span className="text-blue-300 font-bold">{shift1Orders.length}</span>
+                <span className="text-slate-400">Total orders</span>
+                <span className="text-blue-300 font-bold">{(todayOrders as any[]).length}</span>
               </div>
               <div className="flex justify-between text-[11px]">
-                <span className="text-slate-400">Shift 2 orders</span>
-                <span className="text-orange-300 font-bold">{shift2Orders.length}</span>
+                <span className="text-slate-400">Delivered</span>
+                <span className="text-green-300 font-bold">{deliveredCnt}</span>
+              </div>
+              <div className="flex justify-between text-[11px]">
+                <span className="text-slate-400">Pending</span>
+                <span className="text-amber-300 font-bold">{pendingCnt}</span>
               </div>
             </div>
             <button

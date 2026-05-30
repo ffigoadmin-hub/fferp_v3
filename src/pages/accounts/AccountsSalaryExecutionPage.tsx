@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -74,7 +75,7 @@ export default function AccountsSalaryExecutionPage() {
       if (showDetails) setViewDetailsOpen(true);
     } catch {
       setRows([]);
-      toast.error('Failed to fetch batch details');
+      if (!isMissingTable(error)) toast.error('Failed to fetch batch details');
     } finally {
       setLoadingRows(false);
     }

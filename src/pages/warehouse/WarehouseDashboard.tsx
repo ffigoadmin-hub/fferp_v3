@@ -21,7 +21,7 @@ export default function WarehouseDashboard() {
         .from('purchase_order_items')
         .select(`
           id, product_id, received_qty, received_at,
-          product:products(name, unit_of_measure),
+          product:products(name, unit),
           po:purchase_orders(po_number, order_date, vendor:vendors(name))
         `)
         .eq('purchase_orders.order_date', today)
@@ -49,7 +49,7 @@ export default function WarehouseDashboard() {
     queryFn: async () => {
       const query = supabase
         .from('inventory')
-        .select('*, product:products(name, unit_of_measure, sku_code)')
+        .select('*, product:products(name, unit, sku_code)')
         .order('current_stock', { ascending: false })
         .limit(20);
 
@@ -187,7 +187,7 @@ export default function WarehouseDashboard() {
                           <div className="text-[10px] text-slate-400 uppercase tracking-tighter">{item.po?.vendor?.name}</div>
                         </td>
                         <td className="text-right font-bold text-slate-800">
-                          {item.received_qty} <span className="text-[10px] text-slate-400 font-normal ml-0.5">{item.product?.unit_of_measure}</span>
+                          {item.received_qty} <span className="text-[10px] text-slate-400 font-normal ml-0.5">{item.product?.unit}</span>
                         </td>
                         <td>
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700">
@@ -224,7 +224,7 @@ export default function WarehouseDashboard() {
                       </div>
                       <div className="text-right">
                         <p className={cn('text-xs font-black', isLow ? 'text-red-600' : 'text-slate-800')}>
-                          {item.current_stock} <span className="text-[9px] font-normal text-slate-400">{item.product?.unit_of_measure}</span>
+                          {item.current_stock} <span className="text-[9px] font-normal text-slate-400">{item.product?.unit}</span>
                         </p>
                       </div>
                     </div>

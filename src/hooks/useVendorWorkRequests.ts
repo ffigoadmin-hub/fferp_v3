@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -80,7 +81,7 @@ export function useVendorWorkRequests(projectId?: string) {
       setRequests(data as unknown as VendorWorkRequest[] || []);
     } catch (error: any) {
       console.error('Error fetching vendor work requests:', error);
-      toast.error('Failed to load work requests');
+      if (!isMissingTable(error)) toast.error('Failed to load work requests');
     } finally {
       setIsLoading(false);
     }
@@ -298,7 +299,7 @@ export function useMyVendorWorkRequests() {
       setRequests((data || []) as unknown as VendorWorkRequest[]);
     } catch (error) {
       console.error('Error fetching my vendor work requests:', error);
-      toast.error('Failed to fetch work requests');
+      const _isMissing = (error as any)?.code === 'PGRST205' || (error as any)?.message?.includes('schema cache'); if (!_isMissing) if (!isMissingTable(error)) toast.error('Failed to fetch work requests');
     } finally {
       setIsLoading(false);
     }

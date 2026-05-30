@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -98,7 +99,7 @@ export default function AdminLockoutManagementPage() {
             setUsers(consolidated);
         } catch (error: any) {
             console.error('Error fetching locked users:', error);
-            toast.error('Failed to fetch user status');
+            if (!isMissingTable(error)) toast.error('Failed to fetch user status');
         } finally {
             setIsLoading(false);
         }

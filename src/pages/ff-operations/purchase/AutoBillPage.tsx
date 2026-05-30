@@ -11,8 +11,9 @@ import {
   DollarSign, Calendar, Package, ChevronDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { getOpenPOs, markPOBilled, type StoredPO } from '@/lib/purchaseStore';
-import { getStoredVendors, vendorDisplayName } from '@/lib/vendorStore';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchOpenPOs, markPOBilled, type StoredPO } from '@/lib/purchaseStore';
+import { fetchStoredVendors, vendorDisplayName } from '@/lib/vendorStore';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -229,16 +230,17 @@ function BillForm({
   const today = format(new Date(), 'yyyy-MM-dd');
   const dueDef = format(new Date(Date.now() + 30 * 86400000), 'yyyy-MM-dd');
 
-  // Build vendor options from vendor store
-  const VENDOR_OPTIONS: VendorInfo[] = getStoredVendors().map(v => ({
+  // Build vendor options from Supabase
+  const { data: _vendors = [] } = useQuery({ queryKey: ['vendors-list'], queryFn: fetchStoredVendors });
+  const VENDOR_OPTIONS: VendorInfo[] = _vendors.map((v: any) => ({
     name: vendorDisplayName(v),
-    phone: v.mobile || v.workPhone || '',
+    phone: v.mobile || v.phone || v.workPhone || '',
     email: v.email || '',
     address: [v.billing?.street1, v.billing?.city, v.billing?.state, v.billing?.pinCode].filter(Boolean).join(', '),
     gstin: v.gstin || '',
     pan: v.pan || '',
   }));
-  // Fallback if store is empty
+  // Fallback if no vendors yet
   if (VENDOR_OPTIONS.length === 0) {
     VENDOR_OPTIONS.push({ name: 'Ravi Farms', phone: '+91 98765 43210', email: 'ravi@ravifarms.com', address: 'Chennai', gstin: '33AABCR1234F1Z5', pan: 'AABCR1234F' });
   }
@@ -264,7 +266,7 @@ function BillForm({
     return [{ id: 1, product: '', qty: 0, unit: 'kg', rate: 0, discount: 0, tax: 5, amount: 0 }];
   });
 
-  const openPOs = getOpenPOs();
+  const { data: openPOs = [] } = useQuery<StoredPO[]>({ queryKey: ['open-pos'], queryFn: fetchOpenPOs });
 
   const selectVendor = (idx: number) => {
     setSelectedVendorIdx(idx);
@@ -698,7 +700,7 @@ function generateBillPDF(bill: Bill) {
 // ─── Auto Bill from PO Modal ──────────────────────────────────────────────────
 
 function AutoBillFromPOModal({ onClose, onCreated }: { onClose: () => void; onCreated: (bill: Bill) => void }) {
-  const openPOs = getOpenPOs();
+  const { data: openPOs = [] } = useQuery<StoredPO[]>({ queryKey: ['open-pos'], queryFn: fetchOpenPOs });
   const [selectedPO, setSelectedPO] = useState<StoredPO | null>(null);
 
   const handleSelect = (po: StoredPO) => {
@@ -720,7 +722,7 @@ function AutoBillFromPOModal({ onClose, onCreated }: { onClose: () => void; onCr
             <BillForm
               fromPO={selectedPO}
               onSave={(bill) => {
-                markPOBilled(selectedPO.poNumber);
+                markPOBilled(selectedPO.poNumber).catch(console.error);
                 onCreated(bill);
                 onClose();
               }}

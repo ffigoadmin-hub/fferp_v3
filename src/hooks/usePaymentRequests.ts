@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -421,7 +422,7 @@ export function usePaymentRequests(filterStatus?: string[] | { skipFetch?: boole
       setRequests(enriched as PaymentRequestData[]);
     } catch (error) {
       console.error('Error fetching payment requests:', error);
-      toast.error('Failed to load payments');
+      if (!isMissingTable(error)) toast.error('Failed to load payments');
     } finally {
       setIsLoading(false);
     }

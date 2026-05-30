@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -69,7 +70,7 @@ export function useVendorRatings(vendorId?: string) {
       setRatings((data || []) as unknown as VendorRating[]);
     } catch (error) {
       console.error('Error fetching vendor ratings:', error);
-      toast.error('Failed to load vendor ratings');
+      if (!isMissingTable(error)) toast.error('Failed to load vendor ratings');
     } finally {
       setIsLoading(false);
     }

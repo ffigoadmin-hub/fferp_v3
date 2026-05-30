@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import {
   ArrowLeft, Download, FileText, Search, RefreshCw,
@@ -8,8 +9,8 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
-import { getStoredPOs, type StoredPO } from '@/lib/purchaseStore';
-import { getStoredVendors, vendorDisplayName } from '@/lib/vendorStore';
+import { fetchAllPOs, type StoredPO } from '@/lib/purchaseStore';
+import { fetchStoredVendors, vendorDisplayName } from '@/lib/vendorStore';
 
 // ─── Status config ────────────────────────────────────────────────────────────
 const STATUS_CFG: Record<string, { cls: string; label: string }> = {
@@ -28,25 +29,35 @@ function fmt(n: number) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function PurchaseReportPage() {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo]     = useState('');
   const [search, setSearch]     = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [expandedPO, setExpandedPO]     = useState<string | null>(null);
   const [downloading, setDownloading]   = useState(false);
-  const [allPOs, setAllPOs]     = useState<StoredPO[]>(() => getStoredPOs());
+
+  const { data: allPOs = [] } = useQuery<StoredPO[]>({
+    queryKey: ['purchase-report-pos'],
+    queryFn: fetchAllPOs,
+  });
+
+  const { data: vendorList = [] } = useQuery({
+    queryKey: ['vendors-list'],
+    queryFn: fetchStoredVendors,
+  });
 
   const refresh = () => {
-    setAllPOs(getStoredPOs());
+    qc.invalidateQueries({ queryKey: ['purchase-report-pos'] });
     toast.success('Refreshed');
   };
 
   // Build vendor lookup for bank details
   const vendorMap = useMemo(() => {
     const map: Record<string, any> = {};
-    getStoredVendors().forEach(v => { map[vendorDisplayName(v)] = v; });
+    vendorList.forEach((v: any) => { map[vendorDisplayName(v)] = v; });
     return map;
-  }, []);
+  }, [vendorList]);
 
   // ── Filter ──────────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {

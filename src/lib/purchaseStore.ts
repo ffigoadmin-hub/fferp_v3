@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────
-//  Shared Purchase-Order store (localStorage-backed singleton)
-//  Both PurchaseOrdersPage and PurchaseBillsPage read/write here
-//  so that a PO raised with real items flows into Auto-Generate Bill.
+//  Shared Purchase-Order store — Supabase only (no localStorage)
 // ─────────────────────────────────────────────────────────────
+
+import { supabase } from '@/integrations/supabase/client';
 
 export interface StoredPOItem {
   id: number;
@@ -16,10 +16,10 @@ export interface StoredPOItem {
 }
 
 export interface StoredPO {
-  id: string;           // unique string id
-  poNumber: string;     // 'PO-00001', 'PO-00003', …
+  id: string;
+  poNumber: string;
   vendorName: string;
-  date: string;         // ISO 'YYYY-MM-DD'
+  date: string;
   deliveryDate: string;
   paymentTerms: string;
   status: 'draft' | 'pending_approval' | 'open' | 'rejected' | 'billed' | 'cancelled';
@@ -30,183 +30,198 @@ export interface StoredPO {
   subTotal: number;
   total: number;
   notes: string;
+  hub_id?: string;
+  hub_name?: string;
+  vendor_id?: string;
 }
 
-const STORAGE_KEY = 'ff_erp_purchase_orders_v1';
-
-// ── Demo seed (loaded once if localStorage is empty) ──────────
-const DEMO_SEED: StoredPO[] = [
-  {
-    id: 'demo-1', poNumber: 'PO-00001', vendorName: 'Ravi Farms',
-    date: '2026-05-13', deliveryDate: '2026-05-15', paymentTerms: 'Net 15',
-    status: 'open',
-    items: [
-      { id: 1, itemName: 'Onion',  account: 'Cost of Goods Sold', quantity: 50, rate: 25, tax: 'GST 5%', discount: 0, customerDetails: '' },
-      { id: 2, itemName: 'Tomato', account: 'Cost of Goods Sold', quantity: 30, rate: 40, tax: 'GST 5%', discount: 0, customerDetails: '' },
-    ],
-    subTotal: 2450, total: 2572.5, notes: 'Deliver before 7 AM to Palikarani Hub.',
-  },
-  {
-    id: 'demo-2', poNumber: 'PO-00002', vendorName: 'AK Traders',
-    date: '2026-05-14', deliveryDate: '2026-05-16', paymentTerms: 'Due on Receipt',
-    status: 'open',
-    items: [
-      { id: 1, itemName: 'Potato', account: 'Cost of Goods Sold', quantity: 40, rate: 30, tax: 'GST 5%', discount: 0, customerDetails: '' },
-      { id: 2, itemName: 'Carrot', account: 'Cost of Goods Sold', quantity: 20, rate: 35, tax: 'GST 5%', discount: 0, customerDetails: '' },
-    ],
-    subTotal: 1900, total: 1995, notes: 'Koyambedu pickup, morning shift.',
-  },
-  {
-    id: 'demo-3', poNumber: 'PO-00003', vendorName: 'Fresh Vendors Co.',
-    date: '2026-05-14', deliveryDate: '2026-05-16', paymentTerms: 'Net 30',
-    status: 'open',
-    items: [
-      { id: 1, itemName: 'Tomato', account: 'Cost of Goods Sold', quantity: 25, rate: 42, tax: 'GST 5%', discount: 0, customerDetails: '' },
-      { id: 2, itemName: 'Coriander', account: 'Cost of Goods Sold', quantity: 10, rate: 60, tax: 'GST 5%', discount: 0, customerDetails: '' },
-    ],
-    subTotal: 1650, total: 1732.5, notes: '',
-  },
-  {
-    id: 'demo-4', poNumber: 'PO-00004', vendorName: 'Green Valley Agro',
-    date: '2026-05-15', deliveryDate: '2026-05-17', paymentTerms: 'Net 15',
-    status: 'open',
-    items: [
-      { id: 1, itemName: 'Carrot',   account: 'Cost of Goods Sold', quantity: 30, rate: 35, tax: 'GST 5%', discount: 0, customerDetails: '' },
-      { id: 2, itemName: 'Beetroot', account: 'Cost of Goods Sold', quantity: 15, rate: 28, tax: 'GST 5%', discount: 0, customerDetails: '' },
-      { id: 3, itemName: 'Beans',    account: 'Cost of Goods Sold', quantity: 20, rate: 55, tax: 'GST 5%', discount: 0, customerDetails: '' },
-    ],
-    subTotal: 2570, total: 2698.5, notes: 'Root vegetables for Vanagaram Hub.',
-  },
-  {
-    id: 'demo-5', poNumber: 'PO-00005', vendorName: 'Tamil Nadu Produce',
-    date: '2026-05-15', deliveryDate: '2026-05-18', paymentTerms: 'Net 30',
-    status: 'open',
-    items: [
-      { id: 1, itemName: 'Cabbage',    account: 'Cost of Goods Sold', quantity: 35, rate: 20, tax: 'GST 5%', discount: 0, customerDetails: '' },
-      { id: 2, itemName: 'Drumstick', account: 'Cost of Goods Sold', quantity: 12, rate: 45, tax: 'GST 5%', discount: 0, customerDetails: '' },
-    ],
-    subTotal: 1240, total: 1302, notes: 'Seasonal produce — confirm availability before loading.',
-  },
-  {
-    id: 'demo-6', poNumber: 'PO-00006', vendorName: 'Sri Murugan Traders',
-    date: '2026-05-16', deliveryDate: '2026-05-18', paymentTerms: 'Due on Receipt',
-    status: 'draft',
-    items: [
-      { id: 1, itemName: 'Beetroot',    account: 'Cost of Goods Sold', quantity: 20, rate: 28, tax: 'GST 5%', discount: 0, customerDetails: '' },
-      { id: 2, itemName: 'Raw Banana',  account: 'Cost of Goods Sold', quantity: 15, rate: 32, tax: 'GST 5%', discount: 0, customerDetails: '' },
-    ],
-    subTotal: 1040, total: 1092, notes: 'Draft — pending rate confirmation.',
-  },
-];
-
-// ── Internal helpers ─────────────────────────────────────────
-function load(): StoredPO[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      // First visit – seed with demo data
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(DEMO_SEED));
-      return [...DEMO_SEED];
-    }
-    return JSON.parse(raw) as StoredPO[];
-  } catch {
-    return [...DEMO_SEED];
-  }
+// ── DB row → StoredPO ─────────────────────────────────────────
+function rowToPO(row: any): StoredPO {
+  return {
+    id:           row.id,
+    poNumber:     row.po_number,
+    vendorName:   row.vendor_name ?? '',
+    date:         row.created_at?.split('T')[0] ?? '',
+    deliveryDate: row.delivery_date ?? '',
+    paymentTerms: row.payment_terms ?? 'Due on Receipt',
+    status:       row.status === 'approved' ? 'open' : (row.status ?? 'draft'),
+    rejectionReason: row.rejection_reason ?? undefined,
+    approvedBy:   row.approved_by ?? undefined,
+    approvedAt:   row.approved_at ?? undefined,
+    items:        Array.isArray(row.items) ? row.items : [],
+    subTotal:     Number(row.sub_total ?? 0),
+    total:        Number(row.total_amount ?? 0),
+    notes:        row.notes ?? '',
+    hub_id:       row.hub_id ?? undefined,
+    hub_name:     row.hub_name ?? undefined,
+    vendor_id:    row.vendor_id ?? undefined,
+  };
 }
 
-function persist(list: StoredPO[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+// ── StoredPO → DB payload ─────────────────────────────────────
+function poToPayload(po: StoredPO): Record<string, any> {
+  const payload: Record<string, any> = {
+    po_number:     po.poNumber,
+    status:        po.status === 'open' ? 'approved' : po.status,
+    sub_total:     po.subTotal,
+    total_amount:  po.total,
+    notes:         po.notes || null,
+    items:         po.items,
+    vendor_name:   po.vendorName || null,
+    delivery_date: po.deliveryDate || null,
+    payment_terms: po.paymentTerms || null,
+  };
+  if (po.hub_id)    payload.hub_id    = po.hub_id;
+  if (po.hub_name)  payload.hub_name  = po.hub_name;
+  if (po.vendor_id) payload.vendor_id = po.vendor_id;
+  return payload;
 }
 
-// ── Public API ───────────────────────────────────────────────
+// ── Async read helpers (used by pages via useQuery) ───────────
 
-/** All POs (any status) */
-export function getStoredPOs(): StoredPO[] {
-  return load();
+export async function fetchAllPOs(): Promise<StoredPO[]> {
+  const { data, error } = await supabase
+    .from('purchase_orders')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) { console.error('[purchaseStore] fetchAllPOs:', error.message); return []; }
+  return (data ?? []).map(rowToPO);
 }
 
-/** Only open POs – used by Auto-Generate Bill modal */
-export function getOpenPOs(): StoredPO[] {
-  return load().filter(p => p.status === 'open');
+export async function fetchOpenPOs(): Promise<StoredPO[]> {
+  const { data, error } = await supabase
+    .from('purchase_orders')
+    .select('*')
+    .eq('status', 'approved')
+    .order('created_at', { ascending: false });
+  if (error) { console.error('[purchaseStore] fetchOpenPOs:', error.message); return []; }
+  return (data ?? []).map(rowToPO);
 }
 
-/** POs awaiting manager approval */
-export function getPendingApprovalPOs(): StoredPO[] {
-  return load().filter(p => p.status === 'pending_approval');
+export async function fetchPendingApprovalPOs(): Promise<StoredPO[]> {
+  const { data, error } = await supabase
+    .from('purchase_orders')
+    .select('*')
+    .eq('status', 'pending_approval')
+    .order('created_at', { ascending: false });
+  if (error) { console.error('[purchaseStore] fetchPendingApprovalPOs:', error.message); return []; }
+  return (data ?? []).map(rowToPO);
 }
 
-/** Insert or update a PO (matched by poNumber) */
-export function savePOToStore(po: StoredPO): void {
-  const list = load();
-  const idx  = list.findIndex(p => p.poNumber === po.poNumber);
-  if (idx >= 0) list[idx] = po;
-  else list.unshift(po);
-  persist(list);
-}
-
-/** Mark a PO as billed after a bill is auto-generated from it */
-export function markPOBilled(poNumber: string): void {
-  const list = load();
-  const idx  = list.findIndex(p => p.poNumber === poNumber);
-  if (idx >= 0) { list[idx].status = 'billed'; persist(list); }
-}
-
-/** Remove a PO entirely */
-export function deletePOFromStore(poNumber: string): void {
-  persist(load().filter(p => p.poNumber !== poNumber));
-}
-
-/** Highest PO serial number present in the store */
-export function getMaxPOSerial(): number {
-  return load().reduce((max, p) => {
-    const n = parseInt(p.poNumber.replace('PO-', ''), 10) || 0;
+export async function fetchMaxPOSerial(): Promise<number> {
+  const { data } = await supabase
+    .from('purchase_orders')
+    .select('po_number')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (!data) return 0;
+  return data.reduce((max: number, row: any) => {
+    const n = parseInt((row.po_number ?? '').replace('PO-', ''), 10) || 0;
     return Math.max(max, n);
   }, 0);
 }
 
-/**
- * Auto-create one PO per aggregated item from sales orders.
- * Called from Sales Dashboard "Auto Create PO" button.
- */
-export function createPOsFromSalesOrders(
-  items: Array<{ productName: string; totalQty: number; unit: string; avgPrice: number; totalValue: number }>
-): StoredPO[] {
-  let serial = getMaxPOSerial();
-  const today = new Date().toISOString().split('T')[0];
+// ── Sync write helpers ────────────────────────────────────────
+
+export async function savePOToStore(po: StoredPO): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('purchase_orders')
+    .upsert(poToPayload(po), { onConflict: 'po_number' })
+    .select('id')
+    .single();
+  if (error) { console.error('[purchaseStore] savePOToStore:', error.message); return null; }
+  return data?.id ?? null;
+}
+
+export async function markPOBilled(poNumber: string): Promise<void> {
+  const { error } = await supabase
+    .from('purchase_orders')
+    .update({ status: 'billed' })
+    .eq('po_number', poNumber);
+  if (error) console.error('[purchaseStore] markPOBilled:', error.message);
+}
+
+export async function deletePOFromStore(poNumber: string): Promise<void> {
+  const { error } = await supabase
+    .from('purchase_orders')
+    .update({ status: 'cancelled' })
+    .eq('po_number', poNumber);
+  if (error) console.error('[purchaseStore] deletePOFromStore:', error.message);
+}
+
+// ── Auto-generate POs from sales order aggregates ────────────
+
+export async function createPOsFromSalesOrders(
+  items: Array<{ productName: string; totalQty: number; unit: string; avgPrice: number; totalValue: number }>,
+  hubId?: string,
+  hubName?: string,
+): Promise<StoredPO[]> {
+  const serial = await fetchMaxPOSerial();
+  const today  = new Date().toISOString().split('T')[0];
   const created: StoredPO[] = [];
 
-  for (const item of items) {
-    serial += 1;
-    const poNumber = `PO-${String(serial).padStart(5, '0')}`;
+  for (let i = 0; i < items.length; i++) {
+    const item    = items[i];
+    const poNumber = `PO-${String(serial + i + 1).padStart(5, '0')}`;
     const subTotal = Math.round(item.totalQty * item.avgPrice);
-    const total    = Math.round(subTotal * 1.05); // 5% GST
+    const total    = Math.round(subTotal * 1.05);
 
     const po: StoredPO = {
-      id: `auto-${Date.now()}-${serial}`,
+      id:           '',   // filled after DB insert
       poNumber,
-      vendorName: '',          // to be assigned by manager
-      date: today,
+      vendorName:   '',
+      date:         today,
       deliveryDate: '',
       paymentTerms: 'Due on Receipt',
-      status: 'pending_approval',
+      status:       'pending_approval',
       items: [{
         id: 1,
-        itemName: item.productName,
-        account: 'Cost of Goods Sold',
-        quantity: item.totalQty,
-        rate: item.avgPrice,
-        tax: 'GST 5%',
-        discount: 0,
+        itemName:        item.productName,
+        account:         'Cost of Goods Sold',
+        quantity:        item.totalQty,
+        rate:            item.avgPrice,
+        tax:             'GST 5%',
+        discount:        0,
         customerDetails: '',
       }],
       subTotal,
       total,
-      notes: `Auto-generated from sales orders | Avg rate ₹${item.avgPrice}/${item.unit}`,
+      notes:    `Auto-generated from sales orders | Avg rate ₹${item.avgPrice}/${item.unit}`,
+      hub_id:   hubId,
+      hub_name: hubName,
     };
 
-    savePOToStore(po);
+    const dbId = await savePOToStore(po);
+    if (dbId) po.id = dbId;
     created.push(po);
   }
 
   return created;
+}
+
+// ── Legacy sync shims (for pages that haven't been updated yet) ─
+// These keep the old synchronous call shape working by logging a warning.
+/** @deprecated use fetchAllPOs() inside useQuery instead */
+export function getStoredPOs(): StoredPO[] {
+  console.warn('[purchaseStore] getStoredPOs() is deprecated — use fetchAllPOs() in useQuery');
+  return [];
+}
+/** @deprecated use fetchOpenPOs() inside useQuery instead */
+export function getOpenPOs(): StoredPO[] {
+  console.warn('[purchaseStore] getOpenPOs() is deprecated — use fetchOpenPOs() in useQuery');
+  return [];
+}
+/** @deprecated use fetchPendingApprovalPOs() inside useQuery instead */
+export function getPendingApprovalPOs(): StoredPO[] {
+  console.warn('[purchaseStore] getPendingApprovalPOs() is deprecated — use fetchPendingApprovalPOs() in useQuery');
+  return [];
+}
+/** @deprecated use fetchMaxPOSerial() instead */
+export function getMaxPOSerial(): number {
+  console.warn('[purchaseStore] getMaxPOSerial() is deprecated — use fetchMaxPOSerial()');
+  return 0;
+}
+/** @deprecated use savePOToStore() (now async) */
+export function syncPOToSupabase(po: StoredPO): Promise<string | null> {
+  return savePOToStore(po);
 }

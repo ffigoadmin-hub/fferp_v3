@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -50,11 +51,16 @@ export function useWeekOffAssignments(employeeId?: string) {
 
             const { data, error } = await query;
 
-            if (error) throw error;
+            // week_off_assignments is an IGO-Chain table — not present in FFERPv2
+            if (error) {
+                const missing = (error as any)?.code === 'PGRST205' || (error as any)?.message?.includes('schema cache') || (error as any)?.message?.includes('does not exist');
+                if (!missing) if (!isMissingTable(error)) toast.error('Failed to fetch week off assignments');
+                setWeekOffs([]);
+                return;
+            }
             setWeekOffs((data || []) as unknown as WeekOffWithEmployee[]);
         } catch (error) {
             console.error('Error fetching week offs:', error);
-            toast.error('Failed to fetch week off assignments');
         } finally {
             setIsLoading(false);
         }
@@ -175,27 +181,8 @@ export function useWeekOffAssignments(employeeId?: string) {
     // Fetch on mount
     useEffect(() => {
         fetchWeekOffs();
-
-        // Set up real-time subscription for week off assignments
-        const channel = supabase
-            .channel('week_off_assignments_realtime')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'week_off_assignments'
-                },
-                (payload) => {
-                    console.log('Week off assignment changed:', payload);
-                    fetchWeekOffs(); // Refresh data on any change
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
+        // Skip realtime subscription — week_off_assignments doesn't exist in FFERPv2
+        // (subscribing to a non-existent table causes "Reconnecting to server..." banner)
     }, [employeeId]);
 
     return {

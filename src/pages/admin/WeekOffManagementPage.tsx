@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, Plus, X, Loader2, Users, RefreshCw, Check, Sun } from 'lucide-react';
@@ -71,7 +72,7 @@ function BulkAssignModal({ open, onClose, fetchParentData }: { open: boolean, on
                     if (error) throw error;
                     setEmployees(data || []);
                 } catch (e) {
-                    toast.error('Failed to load employees');
+                    if (!isMissingTable(error)) toast.error('Failed to load employees');
                 } finally {
                     setIsLoadingEmployees(false);
                 }

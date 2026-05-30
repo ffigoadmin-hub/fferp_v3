@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -69,7 +70,7 @@ export function useBOQTemplates() {
       setTemplates(templatesWithItems);
     } catch (error) {
       console.error('Error fetching templates:', error);
-      toast.error('Failed to load templates');
+      if (!isMissingTable(error)) toast.error('Failed to load templates');
     } finally {
       setIsLoading(false);
     }

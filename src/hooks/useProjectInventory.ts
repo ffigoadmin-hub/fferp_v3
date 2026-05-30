@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -55,7 +56,7 @@ export function useProjectInventory(projectId?: string) {
       setItems(data as InventoryItem[] || []);
     } catch (error: any) {
       console.error('Error fetching inventory:', error);
-      toast.error('Failed to load inventory');
+      if (!isMissingTable(error)) toast.error('Failed to load inventory');
     } finally {
       setIsLoading(false);
     }

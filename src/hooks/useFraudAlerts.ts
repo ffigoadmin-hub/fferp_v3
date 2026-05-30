@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -69,7 +70,7 @@ export function useFraudAlerts(statusFilter: string[] = ['pending']) {
             }
         } catch (err) {
             console.error('Error fetching fraud alerts:', err);
-            toast.error('Failed to load fraud alerts');
+            if (!isMissingTable(error)) toast.error('Failed to load fraud alerts');
         } finally {
             setIsLoading(false);
         }

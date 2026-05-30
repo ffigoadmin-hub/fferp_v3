@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -73,7 +74,7 @@ export default function AuditorSalaryApprovalPage() {
       const list = await fetchBatchEmployees(batch.id);
       setDetailEmployees(list);
     } catch (e) {
-      toast.error('Failed to load employees');
+      if (!isMissingTable(error)) toast.error('Failed to load employees');
       setDetailEmployees([]);
     } finally {
       setLoadingDetailEmployees(false);

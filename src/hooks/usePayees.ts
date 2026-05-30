@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,7 +32,7 @@ export function usePayees() {
             setPayees(data || []);
         } catch (error) {
             console.error('Error fetching payees:', error);
-            toast.error('Failed to load bank credentials');
+            if (!isMissingTable(error)) toast.error('Failed to load bank credentials');
         } finally {
             setIsLoading(false);
         }

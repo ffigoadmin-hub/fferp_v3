@@ -1,3 +1,4 @@
+import { isMissingTable } from '@/lib/supabase-error-guard';
 // @ts-nocheck
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -86,7 +87,7 @@ export default function AccountsSalaryBatchPage() {
       const list = await fetchBatchEmployees(batch.id);
       setEmployees(list);
     } catch (e) {
-      toast.error('Failed to load employees');
+      if (!isMissingTable(error)) toast.error('Failed to load employees');
       setEmployees([]);
     } finally {
       setLoadingEmployees(false);

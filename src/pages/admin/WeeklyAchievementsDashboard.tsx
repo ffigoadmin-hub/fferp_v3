@@ -29,6 +29,9 @@ function useMonitorData() {
                 .eq('is_active', true)
                 .order('tagged_at', { ascending: false });
             if (error) {
+                // core_heads is an IGO-Chain table — silently return empty in FFERPv2
+                const isMissing = error?.code === 'PGRST205' || error?.message?.includes('schema cache');
+                if (isMissing) return [] as any[];
                 console.error('[Dashboard] error loading core_heads:', error);
                 throw error;
             }
@@ -46,6 +49,8 @@ function useMonitorData() {
                 .select('*, daily_tasks(*)')
                 .order('week_start_date', { ascending: false });
             if (error) {
+                const isMissing = error?.code === 'PGRST205' || (error as any)?.message?.includes('schema cache');
+                if (isMissing) return [] as any[];
                 console.error('[Dashboard] error loading weekly_targets:', error);
                 throw error;
             }
@@ -63,6 +68,8 @@ function useMonitorData() {
                 .select('*, task_achievements(*)')
                 .order('week_start_date', { ascending: false });
             if (error) {
+                const isMissing = error?.code === 'PGRST205' || (error as any)?.message?.includes('schema cache');
+                if (isMissing) return [] as any[];
                 console.error('[Dashboard] error loading weekly_achievements:', error);
                 throw error;
             }
@@ -191,18 +198,21 @@ export function WeeklyAchievementsDashboard() {
         </div>
     );
 
-    if (error) return (
-        <div className="bg-red-50 text-red-600 p-6 rounded-lg flex flex-col items-center justify-center border border-red-200">
-            <AlertCircle className="w-10 h-10 mb-2" />
-            <h3 className="font-bold text-lg">Failed to load dashboard data</h3>
-            <p className="opacity-90 mt-1 max-w-lg text-center break-all">
-                {error instanceof Error ? error.message : JSON.stringify(error)}
-            </p>
-            <p className="text-sm mt-4 font-mono select-all bg-red-100 px-3 py-1 rounded">
-                Please screenshot this error box
-            </p>
-        </div>
-    );
+    if (error) {
+        const isMissing = (error as any)?.code === 'PGRST205' || (error as any)?.message?.includes('schema cache');
+        return (
+            <div className={`p-6 rounded-lg flex flex-col items-center justify-center border ${isMissing ? 'bg-blue-50 border-blue-200 text-blue-700' : 'bg-red-50 border-red-200 text-red-600'}`}>
+                <AlertCircle className="w-10 h-10 mb-2" />
+                <h3 className="font-bold text-lg">{isMissing ? 'Feature Not Available' : 'Failed to load dashboard data'}</h3>
+                <p className="opacity-90 mt-1 max-w-lg text-center">
+                    {isMissing
+                        ? 'Weekly Performance Hub uses IGO Chain tables not present in the Farmers Factory ERP database.'
+                        : (error instanceof Error ? error.message : JSON.stringify(error))
+                    }
+                </p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
