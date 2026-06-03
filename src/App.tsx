@@ -379,7 +379,7 @@ const OPS_ROLES = [
   'field_executive', 'tele_caller', 'bde',
   'ff_operations_manager',
   // FF New Roles
-  'hub_manager', 'l1_manager',
+  'hub_manager', 'l1_manager', 'shift_employee',
 ];
 
 const ProtectedRoute = ({
@@ -837,7 +837,7 @@ const AppRoutes = () => {
       {/* FF Operations Home */}
       <Route path="/ff-operations" element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><FFOperationsHomePage /></ProtectedRoute>} />
       <Route path="/ff-operations/items" element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><ItemsPage /></ProtectedRoute>} />
-      <Route path="/ff-operations/labels" element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager', 'gm']}><BoxLabelGenerator /></ProtectedRoute>} />
+      <Route path="/ff-operations/labels" element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager', 'gm', 'shift_employee']}><BoxLabelGenerator /></ProtectedRoute>} />
       <Route path="/ff-operations/inventory" element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'ff_operations_manager', 'gm', 'hub_manager']}><SmartInventoryPage /></ProtectedRoute>} />
       <Route path="/ff-operations/gm-dashboard" element={<ProtectedRoute allowedRoles={['admin', 'ff_operations_manager', 'gm', 'ceo', 'l1_manager']}><GMOperationsDashboard /></ProtectedRoute>} />
       <Route path="/ff-operations/eod-po-engine" element={<ProtectedRoute allowedRoles={['admin', 'ff_operations_manager', 'gm', 'purchase_manager', 'purchase_head', 'field_executive', 'bde', 'tele_caller', 'back_office', 'hub_manager']}><EODPOEngine /></ProtectedRoute>} />
@@ -951,8 +951,4 @@ const App = () => {
           </BrowserRouter>
         </TooltipProvider>
       </ErrorBoundary>
-    </QueryClientProvider>
-  );
-};
-
-export default App;
+    </QueryClientPro

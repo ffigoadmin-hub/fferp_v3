@@ -8,7 +8,8 @@
  * manager scans the label with the FF Scanner App.
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { jsPDF } from 'jspdf';
 import QRCode from 'qrcode';
@@ -83,8 +84,15 @@ function generateBarcodeDataURL(text: string): string {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function POBatchLabels({ hubs }: { hubs: any[] }) {
-  const [selectedHubId, setSelectedHubId] = useState('');
-  const [targetDate, setTargetDate] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
+  const { user } = useAuth();
+  const userHubId = (user as any)?.hub_id ?? null;
+  const [selectedHubId, setSelectedHubId] = useState(userHubId ?? '');
+  const [targetDate, setTargetDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+
+  // Auto-select hub for purchase exec role (shift_employee)
+  useEffect(() => {
+    if (userHubId && !selectedHubId) setSelectedHubId(userHubId);
+  }, [userHubId]);
   const [boxCounts, setBoxCounts] = useState<Record<string, number>>({});
   const [generating, setGenerating] = useState(false);
   const [done, setDone] = useState(false);
@@ -529,14 +537,4 @@ export default function POBatchLabels({ hubs }: { hubs: any[] }) {
             <Info className="w-3.5 h-3.5 text-blue-500 shrink-0 mt-0.5" />
             <div>
               <p className="text-[11px] font-semibold text-blue-700 mb-1">Hub-scoped labels</p>
-              <p className="text-[11px] text-blue-600 leading-relaxed">
-                Shows only <strong>{hubName || 'this hub'}</strong>'s orders for the selected date.
-                Labels are not saved to DB — boxes are created automatically when scanned on arrival.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+              <p className="text-[11px] text-blue-600 leading-relax

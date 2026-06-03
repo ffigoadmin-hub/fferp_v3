@@ -190,7 +190,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: p.email,
           role: mapRole(p.role),
           department: p.department,
-        };
+          ...(p.hub_id ? { hub_id: p.hub_id } : {}),
+        } as any;
         return mappedUser;
       }
 
@@ -351,7 +352,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}
+    throw new Error('useAuth mus
