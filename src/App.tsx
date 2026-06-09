@@ -952,9 +952,3 @@ const App = () => {
 };
 
 export default App;
-vider>
-);
-}
-
-export default App;
-p;
