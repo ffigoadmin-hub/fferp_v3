@@ -1,0 +1,460 @@
+/* 
+  IGO ERP - Dynamic Enterprise Themes 
+  Extends Tailwind CSS variables defined in index.css
+*/
+
+/* =========================================
+   ❤️ EMOTIONAL / CULTURE THEMES
+   ========================================= */
+
+/* Valentine Corporate - Professional Rose & Pink */
+html.theme-valentine {
+    /* DARK ROMANCE - PREMIUM AESTHETIC */
+    /* Deep Wine & Black Void Background */
+    --background: 345 50% 5%;
+    /* Very dark burgundy/black */
+    --foreground: 345 20% 96%;
+    /* Soft Rose White */
+
+    /* Glass Cards with Ruby Tint */
+    --card: 345 40% 8%;
+    --card-foreground: 345 20% 96%;
+
+    --popover: 345 40% 10%;
+    --popover-foreground: 345 20% 96%;
+
+    /* Neon Ruby & Rose Gold */
+    --primary: 342 100% 52%;
+    /* #ff0a54 - Vibrant Ruby */
+    --primary-foreground: 345 50% 5%;
+
+    --secondary: 342 30% 15%;
+    /* Deep Rose Slate */
+    --secondary-foreground: 345 20% 96%;
+
+    --muted: 345 30% 12%;
+    --muted-foreground: 345 20% 70%;
+
+    --accent: 342 100% 52%;
+    --accent-foreground: 345 50% 5%;
+
+    --destructive: 0 100% 50%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 342 40% 20%;
+    --input: 345 30% 10%;
+    --ring: 342 100% 52%;
+
+    --radius: 1rem;
+    /* Softer, rounder corners for love theme */
+
+    /* Special Status Colors for Valentine */
+    --status-live: 142 70% 45%;
+    --status-late: 35 90% 50%;
+    /* Gold for late/warning */
+    --status-missed: 342 100% 52%;
+    /* Ruby for missed */
+
+    /* Authority Gradients - Deep Passion Variants */
+    --authority-ceo: 342 100% 52%;
+    --authority-admin: 300 80% 50%;
+
+    /* Sidebar specific */
+    --sidebar-background: 345 50% 4%;
+    --sidebar-foreground: 345 20% 90%;
+    --sidebar-primary: 342 100% 52%;
+    --sidebar-primary-foreground: 345 50% 5%;
+    --sidebar-accent: 342 30% 15%;
+    --sidebar-accent-foreground: 345 20% 96%;
+    --sidebar-border: 342 40% 15%;
+    --sidebar-ring: 342 100% 52%;
+}
+
+/* Specific Valentine Overrides for Ultra Premium Feel - OPTIMIZED FOR PERFORMANCE */
+html.theme-valentine .authority-card {
+    background: linear-gradient(135deg, rgba(40, 5, 20, 0.95) 0%, rgba(20, 0, 10, 0.98) 100%) !important;
+    border: 1px solid rgba(255, 10, 84, 0.3) !important;
+    /* Removed heavy box-shadow */
+}
+
+html.theme-valentine .glass-card {
+    background: rgba(40, 5, 20, 0.9) !important;
+    /* Removed backdrop-filter blur which is very expensive */
+    border: 1px solid rgba(255, 10, 84, 0.2) !important;
+}
+
+html.theme-valentine .primary-glow-text {
+    /* Reduced text shadow complexity */
+    text-shadow: 0 0 5px rgba(255, 10, 84, 0.6);
+    letter-spacing: 0.05em;
+}
+
+/* Petal Polish - Simplified */
+html.theme-valentine .valentine-petal {
+    background: #ff0a54;
+    /* Removed radial gradient and box-shadow */
+    opacity: 0.6;
+}
+
+/* Gratitude Day - Warm Peach/Orange */
+/* Gratitude Day - Warm Peach/Orange/Gold */
+html.theme-gratitude {
+    --background: 25 30% 6%;
+    --foreground: 25 20% 96%;
+
+    --card: 25 30% 8%;
+    --card-foreground: 25 20% 96%;
+
+    --popover: 25 30% 10%;
+    --popover-foreground: 25 20% 96%;
+
+    --primary: 25 90% 60%;
+    /* Warm Orange */
+    --primary-foreground: 25 10% 10%;
+
+    --secondary: 25 20% 15%;
+    --secondary-foreground: 25 20% 96%;
+
+    --muted: 25 20% 15%;
+    --muted-foreground: 25 10% 65%;
+
+    --accent: 25 90% 60%;
+    --accent-foreground: 25 10% 10%;
+
+    --destructive: 0 85% 60%;
+    --destructive-foreground: 25 20% 96%;
+
+    --border: 25 30% 18%;
+    --input: 25 30% 12%;
+    --ring: 25 90% 60%;
+
+    /* Sidebar overrides */
+    --sidebar-background: 25 30% 5%;
+    --sidebar-foreground: 25 20% 96%;
+    --sidebar-primary: 25 90% 60%;
+    --sidebar-primary-foreground: 25 10% 10%;
+    --sidebar-accent: 25 20% 12%;
+    --sidebar-accent-foreground: 25 20% 96%;
+    --sidebar-border: 25 30% 12%;
+    --sidebar-ring: 25 90% 60%;
+}
+
+/* Women Leadership - Purple/Violet (Corporate) */
+html.theme-women-leadership {
+    --primary: 270 80% 60%;
+    --ring: 270 80% 60%;
+    --background: 270 30% 6%;
+    --sidebar-background: 270 30% 7%;
+}
+
+/* Farmers Appreciation - Earthy Green/Brown */
+html.theme-farmers {
+    --primary: 120 40% 45%;
+    --background: 40 20% 6%;
+    --sidebar-background: 40 20% 7%;
+}
+
+/* Founders Day - Classic Navy/Platinum */
+html.theme-founders {
+    --primary: 210 50% 60%;
+    /* Platinum Blue */
+    --background: 220 40% 8%;
+    --sidebar-background: 220 40% 9%;
+}
+
+/* =========================================
+   🇮🇳 NATIONAL / PATRIOTIC THEMES
+   ========================================= */
+
+/* Republic Pride - Saffron, White, Green hints (Dark Mode) */
+html.theme-republic {
+    --primary: 25 100% 50%;
+    /* Saffron */
+    --ring: 145 70% 45%;
+    /* Green Ring */
+    --background: 220 30% 8%;
+    /* Deep Navy Blue base */
+    --sidebar-background: 220 30% 9%;
+    --sidebar-primary: 25 100% 50%;
+}
+
+html.theme-independence {
+    --primary: 145 70% 45%;
+    /* Green Focus */
+    --ring: 25 100% 50%;
+    /* Saffron Ring */
+    --background: 210 30% 8%;
+}
+
+html.theme-constitution {
+    --primary: 200 90% 50%;
+    /* Azure Blue */
+    --background: 200 30% 8%;
+}
+
+html.theme-unity {
+    --primary: 300 60% 50%;
+    /* Magenta/Purple Mix */
+    --background: 280 20% 8%;
+}
+
+html.theme-make-in-india {
+    --primary: 15 80% 55%;
+    /* Lion Brown/Orange */
+    --background: 15 20% 6%;
+}
+
+/* =========================================
+   🎉 FESTIVAL THEMES
+   ========================================= */
+
+/* Diwali Gold - Luxury Gold & Deep Dark */
+html.theme-diwali {
+    --primary: 45 100% 50%;
+    /* Gold */
+    --primary-foreground: 45 10% 10%;
+    --ring: 45 100% 50%;
+    --background: 45 10% 4%;
+    --card: 45 10% 6%;
+    --sidebar-background: 45 10% 5%;
+}
+
+/* Holi Spectrum - Vibrant & Playful */
+html.theme-holi {
+    --primary: 320 90% 60%;
+    /* Magenta */
+    --secondary: 190 90% 50%;
+    /* Cyan */
+    --accent: 50 100% 60%;
+    /* Yellow */
+    --background: 280 20% 8%;
+}
+
+html.theme-pongal {
+    --primary: 80 70% 40%;
+    /* Sugarcane Green */
+    --background: 60 20% 6%;
+}
+
+html.theme-navratri {
+    --primary: 350 90% 60%;
+    /* Royal Red */
+    --background: 260 30% 8%;
+    /* Deep Purple Base */
+}
+
+html.theme-christmas {
+    --primary: 350 80% 50%;
+    /* Santa Red */
+    --ring: 140 70% 40%;
+    /* Holly Green */
+    --background: 350 20% 6%;
+}
+
+html.theme-new-year {
+    --primary: 220 10% 90%;
+    /* Platinum/White */
+    --background: 220 10% 8%;
+    /* Black/Grey */
+}
+
+/* =========================================
+   💼 BUSINESS MODES
+   ========================================= */
+
+/* Audit Shield - Secure Blue/Grey */
+html.theme-audit {
+    --primary: 210 90% 50%;
+    --background: 210 20% 10%;
+    /* Very formal dark blue */
+    --card: 210 20% 12%;
+}
+
+/* Crisis Control - Alert Red/Grey */
+html.theme-crisis {
+    --primary: 0 80% 60%;
+    --background: 0 10% 5%;
+    --card: 0 10% 8%;
+}
+
+/* Growth Acceleration - Emerald Green */
+html.theme-growth {
+    --primary: 150 90% 45%;
+    --background: 150 20% 5%;
+}
+
+html.theme-investor {
+    --primary: 210 30% 90%;
+    /* Minimalist White/Blue */
+    --background: 210 10% 10%;
+}
+
+html.theme-performance {
+    --primary: 250 80% 65%;
+    /* Electric Violet */
+    --background: 250 30% 8%;
+}
+
+/* =========================================
+   🕉 DEVOTIONAL / SPIRITUAL
+   ========================================= */
+
+/* Temple Saffron - Warm & Serene */
+html.theme-temple {
+    --primary: 30 100% 55%;
+    --background: 30 20% 5%;
+    --card: 30 20% 7%;
+}
+
+html.theme-divine {
+    --primary: 50 90% 60%;
+    /* Bright Gold */
+    --background: 50 10% 5%;
+}
+
+/* Meditation Calm - Cool Teal/Blue */
+html.theme-meditation {
+    --primary: 180 50% 60%;
+    --background: 180 20% 8%;
+    --card: 180 20% 10%;
+}
+
+/* =========================================
+   🌤 SEASONAL
+   ========================================= */
+
+html.theme-monsoon {
+    --primary: 200 60% 50%;
+    /* Rain Blue */
+    --background: 200 20% 8%;
+}
+
+html.theme-summer {
+    --primary: 40 90% 60%;
+    /* Sun Yellow */
+    --background: 30 20% 6%;
+}
+
+html.theme-winter {
+    --primary: 210 20% 80%;
+    /* Icy Blue/White */
+    --background: 210 20% 8%;
+}
+
+/* =========================================
+   ✨ ANIMATIONS (Valentine & Effects)
+   ========================================= */
+
+@keyframes float-petals {
+    0% {
+        transform: translateY(-10vh) translateX(0) rotate(0deg);
+        opacity: 0;
+    }
+
+    10% {
+        opacity: 1;
+    }
+
+    90% {
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateY(110vh) translateX(100px) rotate(360deg);
+        opacity: 0;
+    }
+}
+
+@keyframes heartbeat {
+    0% {
+        transform: scale(1);
+    }
+
+    25% {
+        transform: scale(1.1);
+    }
+
+    40% {
+        transform: scale(1);
+    }
+
+    60% {
+        transform: scale(1.1);
+    }
+
+    100% {
+        transform: scale(1);
+    }
+}
+
+.animate-heartbeat {
+    animation: heartbeat 1.5s infinite;
+}
+
+.valentine-petals-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+}
+
+.valentine-petal {
+    position: absolute;
+    top: -10%;
+    width: 20px;
+    height: 20px;
+    background: radial-gradient(circle, #ff0a54 0%, #ff477e 100%);
+    border-radius: 10px 0 10px 0;
+    /* Leaf/Petal shape */
+    opacity: 0.8;
+    filter: blur(1px);
+    animation: float-petals 10s linear infinite;
+}
+
+/* Polished Valentine Theme overrides */
+.theme-valentine .login-card-glass {
+    background: rgba(40, 10, 20, 0.7) !important;
+    backdrop-filter: blur(16px) !important;
+    border: 1px solid rgba(255, 100, 150, 0.3) !important;
+    box-shadow: 0 0 30px rgba(255, 0, 80, 0.2) !important;
+}
+
+.theme-valentine .primary-glow-text {
+    text-shadow: 0 0 10px rgba(255, 10, 84, 0.8);
+}
+
+/* Valentine Interaction Effects */
+html.theme-valentine button.bg-primary:hover,
+html.theme-valentine [role="button"].bg-primary:hover {
+    /* Removed heartbeat animation causing repaints */
+    transform: scale(1.02);
+    box-shadow: 0 0 10px rgba(255, 10, 84, 0.4);
+}
+
+html.theme-valentine .card:hover {
+    border-color: rgba(255, 10, 84, 0.4);
+    transform: translateY(-2px);
+    transition: all 0.3s ease;
+}
+
+/* Valentine Button Shapes - Pill/Rounded */
+html.theme-valentine button,
+html.theme-valentine .btn,
+html.theme-valentine [role="button"],
+html.theme-valentine input,
+html.theme-valentine select,
+html.theme-valentine textarea {
+    border-radius: 9999px !important;
+    /* Pill shape */
+}
+
+html.theme-valentine .card,
+html.theme-valentine .dialog-content,
+html.theme-valentine .popover-content {
+    border-radius: 24px !important;
+    /* Softer card corners */
+}

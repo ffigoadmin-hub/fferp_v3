@@ -1,0 +1,1094 @@
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import LOPExportWidget from '@/components/admin/LOPExportWidget';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { useLOPEntries } from '@/hooks/useLOPEntries';
+import { format } from 'date-fns';
+import { Trash2, Loader2, AlertTriangle, Search, CheckCircle, XCircle, Clock, FileText, Check, Plus, User, Calendar, Info, Filter, X, Lock } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
+
+interface Employee {
+  id: string;
+  name: string;
+  email: string;
+  department?: string;
+}
+
+export default function AdminLOPListPage() {
+  const { user } = useAuth();
+  const { entries, isLoading, deleteEntry, deleteEntries, addEntry, isSaving, getLOPValue, refetch, totalCount } = useLOPEntries();
+  const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedReason, setSelectedReason] = useState<string>('all');
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [registerDialogOpen, setRegisterDialogOpen] = useState(false);
+  const [unlockDialogOpen, setUnlockDialogOpen] = useState(false);
+  const [selectedEntry, setSelectedEntry] = useState<string | null>(null);
+  const [selectedEntries, setSelectedEntries] = useState<string[]>([]);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
+  const [isUnlocking, setIsUnlocking] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [hasInitializedMonth, setHasInitializedMonth] = useState(false);
+
+  // Register LOP form state
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [selectedEmployee, setSelectedEmployee] = useState('');
+  const [selectedLopType, setSelectedLopType] = useState<'0.1_day' | '0.25_day' | '1_day'>('0.25_day');
+  const [lopDate, setLopDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [lopReason, setLopReason] = useState('');
+  const [evidenceUrl, setEvidenceUrl] = useState('');
+
+  // Fetch employees for dropdown
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, name, email, department')
+        .eq('is_active', true)
+        .order('name');
+
+      if (!error && data) {
+        setEmployees(data);
+      }
+    };
+    fetchEmployees();
+  }, []);
+
+  // Auto-switch to latest month with data if current month is empty
+  useEffect(() => {
+    if (!isLoading && entries.length > 0 && !hasInitializedMonth) {
+      const latestEntryDate = entries[0].lop_date; // entries are sorted desc
+      const latestMonth = latestEntryDate.substring(0, 7); // "YYYY-MM"
+      const currentMonth = format(new Date(), 'yyyy-MM');
+
+      // If the latest entry is from a past month (meaning current month is empty), switch to it
+      if (latestMonth < currentMonth) {
+        setSelectedMonth(latestMonth);
+      }
+      setHasInitializedMonth(true);
+    } else if (!isLoading && entries.length === 0) {
+      setHasInitializedMonth(true);
+    }
+  }, [entries, isLoading, hasInitializedMonth]);
+
+
+  const getLOPTypeLabel = (type: string) => {
+    switch (type) {
+      case '1_day': return '1 Day';
+      case '0.5_day': return '0.5 Day';
+      case '0.25_day': return '0.25 Day';
+      case '0.1_day': return '0.1 Day';
+      default: return type;
+    }
+  };
+
+  // Helper to check if LOP is auto-generated
+  const isAutoGenerated = (source?: string) => {
+    return source === 'auto' || source === 'SYSTEM_TIME_TRAP' || source?.startsWith('SYSTEM');
+  };
+
+  // Parse auto LOP reason to show detailed breakdown
+  const renderAutoReasonDetails = (reason: string, autoReason?: string | null, source?: string) => {
+    if (!isAutoGenerated(source)) {
+      return <p className="text-sm">{reason}</p>;
+    }
+
+    const combinedReason = autoReason || reason;
+    const details: { type: string; time?: string; delay?: string }[] = [];
+
+    // Parse different auto LOP patterns
+    if (combinedReason.toLowerCase().includes('morning') && combinedReason.toLowerCase().includes('miss')) {
+      details.push({ type: 'Morning Selfie Missed' });
+    }
+    if (combinedReason.toLowerCase().includes('lunch') && combinedReason.toLowerCase().includes('miss')) {
+      details.push({ type: 'Lunch Selfie Missed' });
+    }
+    if (combinedReason.toLowerCase().includes('evening') && combinedReason.toLowerCase().includes('miss')) {
+      details.push({ type: 'Evening Selfie Missed' });
+    }
+
+    // Late Selfie Detection (Lunch/Evening)
+    if (combinedReason.toLowerCase().includes('late lunch selfie')) {
+      const delayMatch = combinedReason.match(/\+(\d+)m/);
+      details.push({
+        type: 'Late Lunch Selfie',
+        delay: delayMatch ? `+${delayMatch[1]} min` : undefined
+      });
+    }
+    if (combinedReason.toLowerCase().includes('late evening selfie')) {
+      const delayMatch = combinedReason.match(/\+(\d+)m/);
+      details.push({
+        type: 'Late Evening Selfie',
+        delay: delayMatch ? `+${delayMatch[1]} min` : undefined
+      });
+    }
+
+    // Late login detection
+    const lateLoginMatch = combinedReason.match(/late\s+login[:\s]*(\d{1,2}:\d{2}\s*(AM|PM)?)?/i);
+    const loginTimeMatch = combinedReason.match(/login[:\s]+at\s*(\d{1,2}:\d{2}\s*(AM|PM)?)/i) ||
+      combinedReason.match(/logged\s+in[:\s]+(\d{1,2}:\d{2}\s*(AM|PM)?)/i);
+    const delayMatch = combinedReason.match(/\+(\d+)\s*min/i) || combinedReason.match(/(\d+)\s*min(?:ute)?s?\s+late/i);
+
+    if (lateLoginMatch || combinedReason.toLowerCase().includes('late login')) {
+      details.push({
+        type: 'Late Login (10:15 AM - 11:00 AM)',
+        time: loginTimeMatch?.[1],
+        delay: delayMatch?.[1] ? `+${delayMatch[1]} min late` : undefined
+      });
+    }
+
+    // Late report detection
+    if (combinedReason.toLowerCase().includes('late report') || combinedReason.toLowerCase().includes('missed report')) {
+      const slotMatch = combinedReason.match(/slot[:\s]*(\d{1,2}[:-]\d{2})/i);
+      const reportDelayMatch = combinedReason.match(/\+(\d+)\s*min/i);
+      details.push({
+        type: 'Late Report',
+        time: slotMatch?.[1],
+        delay: reportDelayMatch?.[1] ? `+${reportDelayMatch[1]} min` : undefined
+      });
+    }
+
+    // Absent detection
+    if (combinedReason.toLowerCase().includes('absent') || combinedReason.toLowerCase().includes('no attendance')) {
+      details.push({ type: 'Absent - Full Day' });
+    }
+
+    // Multiple late detection
+    const multiLateMatch = combinedReason.match(/(\d+)\s*(x|times)?\s*late/i);
+    if (multiLateMatch || combinedReason.includes('multiple late')) {
+      details.push({ type: `${multiLateMatch?.[1] || '2+'}x Late Reports` });
+    }
+
+    if (details.length === 0) {
+      // Fallback to original reason
+      return (
+        <div className="space-y-1">
+          <p className="text-sm">{reason}</p>
+          {autoReason && autoReason !== reason && (
+            <p className="text-xs text-muted-foreground">{autoReason}</p>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-1">
+        {details.map((detail, idx) => (
+          <div key={idx} className="flex items-center gap-2 text-xs">
+            <Badge variant="outline" className="text-[10px] h-5 bg-amber-500/10 text-amber-700 border-amber-500/30">
+              {detail.type}
+            </Badge>
+            {detail.time && (
+              <span className="text-muted-foreground">at {detail.time}</span>
+            )}
+            {detail.delay && (
+              <span className="text-destructive font-medium">{detail.delay}</span>
+            )}
+          </div>
+        ))}
+        {autoReason && (
+          <p className="text-[10px] text-muted-foreground mt-1 italic">{autoReason}</p>
+        )}
+      </div>
+    );
+  };
+
+  const getStatusBadge = (status: string, source?: string) => {
+    if (isAutoGenerated(source) && status !== 'approved' && status !== 'rejected') {
+      return (
+        <Badge variant="outline" className="gap-1 bg-amber-500/10 text-amber-600 border-amber-500/30">
+          <Clock className="w-3 h-3" /> Pending Approval
+        </Badge>
+      );
+    }
+
+    switch (status) {
+      case 'approved':
+        return <Badge className="gap-1 bg-status-live"><CheckCircle className="w-3 h-3" /> Active</Badge>;
+      case 'rejected':
+        return <Badge variant="destructive" className="gap-1"><XCircle className="w-3 h-3" /> Rejected</Badge>;
+      case 'pending_boi':
+      case 'pending_admin':
+      case 'pending_ceo':
+        return <Badge variant="outline" className="gap-1"><Clock className="w-3 h-3" /> Pending</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const handleRegisterLOP = async () => {
+    if (!selectedEmployee || !lopReason.trim()) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    const result = await addEntry({
+      employee_id: selectedEmployee,
+      lop_type: selectedLopType,
+      reason: lopReason.trim(),
+      evidence_url: evidenceUrl || 'manual-entry',
+      lop_date: lopDate,
+      status: 'approved',
+      source: 'manual'
+    });
+
+    if (result.success) {
+      setRegisterDialogOpen(false);
+      resetRegisterForm();
+    }
+  };
+
+  const resetRegisterForm = () => {
+    setSelectedEmployee('');
+    setSelectedLopType('0.25_day');
+    setLopDate(format(new Date(), 'yyyy-MM-dd'));
+    setLopReason('');
+    setEvidenceUrl('');
+  };
+
+  const handleDelete = async () => {
+    if (!selectedEntry) return;
+
+    setIsDeleting(true);
+    try {
+      const result = await deleteEntry(selectedEntry);
+      if (result.success) {
+        toast.success('LOP entry deleted successfully');
+      }
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+      setSelectedEntry(null);
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!selectedEntry) return;
+
+    setIsApproving(true);
+    try {
+      const { error } = await (supabase
+        .from('lop_entries') as any)
+        .update({ status: 'pending_ceo' })
+        .eq('id', selectedEntry);
+
+      if (error) throw error;
+
+      toast.success('LOP forwarded to CEO for approval');
+      refetch();
+    } catch (error) {
+      console.error('Error forwarding LOP:', error);
+      toast.error('Failed to forward LOP entry');
+    } finally {
+      setIsApproving(false);
+      setApproveDialogOpen(false);
+      setSelectedEntry(null);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!selectedEntry || !rejectionReason.trim()) return;
+
+    setIsRejecting(true);
+    try {
+      const { error } = await (supabase
+        .from('lop_entries') as any)
+        .update({
+          status: 'rejected',
+          rejection_reason: rejectionReason.trim()
+        })
+        .eq('id', selectedEntry);
+
+      if (error) throw error;
+
+      toast.success('LOP entry rejected');
+      refetch();
+    } catch (error) {
+      console.error('Error rejecting LOP:', error);
+      toast.error('Failed to reject LOP entry');
+    } finally {
+      setIsRejecting(false);
+      setRejectDialogOpen(false);
+      setSelectedEntry(null);
+      setRejectionReason('');
+    }
+  };
+
+  const openDeleteDialog = (id: string) => {
+    setSelectedEntry(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const openApproveDialog = (id: string) => {
+    setSelectedEntry(id);
+    setApproveDialogOpen(true);
+  };
+
+  const openRejectDialog = (id: string) => {
+    setSelectedEntry(id);
+    setRejectDialogOpen(true);
+  };
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      // Only select entries that can be deleted (not approved/rejected if strict, but let's allow selection)
+      // Usually admin can delete any entry.
+      // Filter out auto-generated if needed, but Admin might want to delete those too.
+      // Let's select all visible entries.
+      setSelectedEntries(filteredEntries.map(e => e.id));
+    } else {
+      setSelectedEntries([]);
+    }
+  };
+
+  const toggleSelectEntry = (id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedEntries(prev => [...prev, id]);
+    } else {
+      setSelectedEntries(prev => prev.filter(e => e !== id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedEntries.length === 0) return;
+
+    setIsDeleting(true);
+    try {
+      console.log('Attempting to delete entries:', selectedEntries);
+      const result = await deleteEntries(selectedEntries);
+      console.log('Delete result:', result);
+
+      if (result.success) {
+        setSelectedEntries([]);
+        setBulkDeleteDialogOpen(false);
+      } else {
+        // Explicitly show error if deleteEntries didn't already
+        if (result.error) {
+          toast.error(`Failed to delete: ${result.error.message || 'Unknown error'}`);
+        }
+      }
+    } catch (error) {
+      console.error('Exception in bulk delete:', error);
+      toast.error('An unexpected error occurred during deletion');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+
+  // Get unique reason categories for dropdown
+  const getReasonCategory = (source?: string, reason?: string) => {
+    if (source === 'SYSTEM_TIME_TRAP' || reason?.toLowerCase().includes('late login')) return 'Late Login (10:15 AM - 11:00 AM)';
+    if (reason?.toLowerCase().includes('late lunch selfie')) return 'Late Lunch Selfie';
+    if (source === 'SYSTEM_SELFIE_LUNCH' || reason?.toLowerCase().includes('lunch selfie')) return 'Lunch Selfie Missed';
+    if (reason?.toLowerCase().includes('late evening selfie')) return 'Late Evening Selfie';
+    if (source === 'SYSTEM_SELFIE_EVENING' || reason?.toLowerCase().includes('evening selfie')) return 'Evening Selfie Missed';
+    if (source === 'SYSTEM_REPORTS' || reason?.toLowerCase().includes('report')) return 'Report Violation';
+    if (reason?.toLowerCase().includes('absent') || reason?.toLowerCase().includes('no attendance')) return 'Absent';
+    if (source === 'manual' || !source) return 'Manual Entry';
+    return 'Other';
+  };
+
+  const reasonCategories = [
+    { value: 'all', label: 'All Reasons' },
+    { value: 'Late Login (10:15 AM - 11:00 AM)', label: 'Late Login (10:15 AM - 11:00 AM)' },
+    { value: 'Late Lunch Selfie', label: 'Late Lunch Selfie' },
+    { value: 'Lunch Selfie Missed', label: 'Lunch Selfie Missed' },
+    { value: 'Late Evening Selfie', label: 'Late Evening Selfie' },
+    { value: 'Evening Selfie Missed', label: 'Evening Selfie Missed' },
+    { value: 'Report Violation', label: 'Report Violation' },
+    { value: 'Absent', label: 'Absent' },
+    { value: 'Manual Entry', label: 'Manual Entry' },
+    { value: 'Other', label: 'Other' },
+  ];
+
+  const departments = Array.from(new Set(entries.map(e => e.employee_department).filter(Boolean))) as string[];
+
+  // Filter entries
+  const filteredEntries = entries.filter(entry => {
+    const matchesMonth = entry.lop_date.startsWith(selectedMonth);
+    const matchesSearch = searchTerm === '' ||
+      entry.employee_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      entry.reason?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    // Reason/source category filter
+    const entryCategory = getReasonCategory(entry.source, entry.reason);
+    const matchesReason = selectedReason === 'all' || entryCategory === selectedReason;
+
+    // Department filter
+    const matchesDepartment = selectedDepartment === 'all' || entry.employee_department === selectedDepartment;
+
+    // Date range filter
+    const entryDate = new Date(entry.lop_date);
+    const matchesStartDate = !startDate || entryDate >= new Date(startDate);
+    const matchesEndDate = !endDate || entryDate <= new Date(endDate);
+
+    return matchesMonth && matchesSearch && matchesReason && matchesDepartment && matchesStartDate && matchesEndDate;
+  });
+
+  // Calculate stats
+  const totalDays = filteredEntries
+    .filter(e => e.status === 'approved')
+    .reduce((sum, e) => sum + getLOPValue(e.lop_type), 0);
+  const autoGenerated = filteredEntries.filter(e => isAutoGenerated(e.source)).length;
+  const manualEntries = filteredEntries.filter(e => e.source === 'manual' || !e.source).length;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold flex items-center gap-3">
+            <FileText className="w-8 h-8 text-primary" />
+            LOP List
+            <Badge variant="outline" className="ml-2 bg-status-live/10 text-status-live border-status-live/20 animate-pulse flex items-center gap-1.5 py-1 px-3">
+              <span className="w-2 h-2 rounded-full bg-status-live shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+              LIVE
+            </Badge>
+          </h1>
+          <p className="text-muted-foreground">View all organization LOP records</p>
+        </div>
+        {user?.role !== 'auditor' && user?.role !== 'ceo' && (
+          <div className="flex gap-2">
+            {selectedEntries.length > 0 && (
+              <Button
+                variant="destructive"
+                onClick={() => setBulkDeleteDialogOpen(true)}
+                className="gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete Selected ({selectedEntries.length})
+              </Button>
+            )}
+            <Button onClick={() => setRegisterDialogOpen(true)} className="gap-2">
+              <Plus className="w-4 h-4" />
+              Register LOP
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="border-primary/20 shadow-sm overflow-hidden group hover:border-primary/40 transition-all duration-300">
+          <CardHeader className="pb-2 bg-primary/5">
+            <CardTitle className="text-sm font-medium text-primary flex items-center justify-between">
+              Total Entries
+              <Info className="w-3 h-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4 relative overflow-hidden">
+            <div className="flex flex-col">
+              <p className="text-3xl font-bold tracking-tight">{totalCount || filteredEntries.length}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-[10px] uppercase font-bold text-muted-foreground/60">Matching filters:</span>
+                <span className="text-xs font-semibold text-primary">{filteredEntries.length}</span>
+              </div>
+            </div>
+            
+            {/* Background design element */}
+            <div className="absolute -right-4 -bottom-4 opacity-[0.03] rotate-12">
+              <FileText className="w-24 h-24" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total LOP Days</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-status-missed">{totalDays.toFixed(2)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Auto-Generated</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-muted-foreground">{autoGenerated}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Manual Entries</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold">{manualEntries}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+
+      {/* Export Widget */}
+      <LOPExportWidget />
+
+      {/* Filters */}
+      <Card className="p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Filter className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Filters</span>
+          {(selectedReason !== 'all' || selectedDepartment !== 'all' || startDate || endDate || searchTerm) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSelectedReason('all');
+                setSelectedDepartment('all');
+                setStartDate('');
+                setEndDate('');
+                setSearchTerm('');
+              }}
+              className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-3 h-3 mr-1" />
+              Clear all
+            </Button>
+          )}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* Month Filter */}
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Month</Label>
+            <Input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="w-full"
+            />
+          </div>
+
+          {/* Reason/Source Filter */}
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Reason Type</Label>
+            <Select value={selectedReason} onValueChange={setSelectedReason}>
+              <SelectTrigger>
+                <SelectValue placeholder="All Reasons" />
+              </SelectTrigger>
+              <SelectContent>
+                {reasonCategories.map(cat => (
+                  <SelectItem key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Start Date Filter */}
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">From Date</Label>
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full"
+            />
+          </div>
+
+          {/* End Date Filter */}
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">To Date</Label>
+            <Input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="w-full"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Department</Label>
+            <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+              <SelectTrigger>
+                <SelectValue placeholder="All Departments" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Departments</SelectItem>
+                {departments.map(dept => (
+                  <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Search</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Employee or reason..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* LOP Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>LOP Entries - {format(new Date(selectedMonth + '-01'), 'MMMM yyyy')}</CardTitle>
+          <CardDescription>
+            {user?.role === 'auditor'
+              ? 'View-only access to all LOP entries for compliance monitoring.'
+              : user?.role === 'ceo'
+                ? 'View and approve/reject LOP entries for all employees.'
+                : 'All LOP entries for the selected month. You can manage entries as needed.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ScrollArea className="h-[500px]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  {user?.role !== 'auditor' && user?.role !== 'ceo' && (
+                    <TableHead className="w-[50px]">
+                      <Checkbox
+                        checked={filteredEntries.length > 0 && selectedEntries.length === filteredEntries.length}
+                        onCheckedChange={(checked) => toggleSelectAll(!!checked)}
+                        aria-label="Select all"
+                      />
+                    </TableHead>
+                  )}
+                  <TableHead>Date & Time</TableHead>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Days</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="min-w-[250px]">Reason</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredEntries.map(entry => (
+                  <TableRow key={entry.id}>
+                    {user?.role !== 'auditor' && user?.role !== 'ceo' && (
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedEntries.includes(entry.id)}
+                          onCheckedChange={(checked) => toggleSelectEntry(entry.id, !!checked)}
+                          aria-label={`Select row ${entry.id}`}
+                        />
+                      </TableCell>
+                    )}
+                    <TableCell className="font-mono text-sm">
+                      <div className="flex flex-col">
+                        <span className="font-medium text-foreground">{format(new Date(entry.lop_date), 'dd MMM yyyy')}</span>
+                        <span className="text-[10px] text-muted-foreground opacity-70">
+                          {entry.created_at ? format(new Date(entry.created_at), 'hh:mm a') : '-'}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{entry.employee_name}</p>
+                        <p className="text-xs text-muted-foreground">{entry.employee_email}</p>
+                        {entry.employee_department && (
+                          <Badge variant="secondary" className="mt-1 text-[10px] h-4 px-1 font-normal opacity-70">
+                            {entry.employee_department}
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={
+                        entry.lop_type === '1_day' ? 'bg-destructive/10 text-destructive border-destructive/30' :
+                          entry.lop_type === '0.5_day' ? 'bg-amber-500/10 text-amber-700 border-amber-500/30' :
+                            'bg-yellow-500/10 text-yellow-700 border-yellow-500/30'
+                      }>
+                        {getLOPTypeLabel(entry.lop_type)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-mono font-semibold">
+                      {getLOPValue(entry.lop_type)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1 items-start">
+                        <Badge variant={isAutoGenerated(entry.source) ? 'secondary' : 'outline'}>
+                          {isAutoGenerated(entry.source) ? 'Auto' : 'Manual'}
+                        </Badge>
+                        {!isAutoGenerated(entry.source) && (
+                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                            by {(entry as any).created_by_name || 'Unknown'}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {getStatusBadge(entry.status, entry.source)}
+                    </TableCell>
+                    <TableCell className="max-w-[250px]">
+                      {renderAutoReasonDetails(entry.reason, (entry as any).auto_reason, entry.source)}
+                      {entry.rejection_reason && (
+                        <p className="text-xs text-destructive mt-1">
+                          Rejected: {entry.rejection_reason}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {user?.role !== 'auditor' ? (
+                        <div className="flex items-center justify-end gap-1">
+                          {entry.status === 'pending_admin' && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openApproveDialog(entry.id)}
+                                className="text-status-live hover:text-status-live hover:bg-status-live/10"
+                                title="Forward to CEO"
+                              >
+                                <Check className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => openRejectDialog(entry.id)}
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                title="Reject LOP"
+                              >
+                                <XCircle className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
+                          {user?.role !== 'ceo' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openDeleteDialog(entry.id)}
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              title="Delete LOP"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">View Only</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {filteredEntries.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-12">
+                      <AlertTriangle className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-50" />
+                      <p className="text-muted-foreground">No LOP entries found</p>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </CardContent>
+      </Card >
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete {selectedEntries.length} LOP entries
+              and remove them from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleBulkDelete();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                'Delete Entries'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Register LOP Dialog */}
+      < Dialog open={registerDialogOpen} onOpenChange={(open) => {
+        setRegisterDialogOpen(open);
+        if (!open) resetRegisterForm();
+      }
+      }>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="w-5 h-5 text-primary" />
+              Register LOP Entry
+            </DialogTitle>
+            <DialogDescription>
+              Manually register an LOP entry for an employee
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Employee Selection */}
+            <div className="space-y-2">
+              <Label>Employee *</Label>
+              <Select value={selectedEmployee} onValueChange={setSelectedEmployee}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select employee" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[200px]">
+                  {employees.map(emp => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      <div className="flex items-center gap-2">
+                        <User className="w-3 h-3" />
+                        <span>{emp.name}</span>
+                        {emp.department && (
+                          <span className="text-muted-foreground text-xs">({emp.department})</span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* LOP Type Selection */}
+            <div className="space-y-2">
+              <Label>LOP Days *</Label>
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  type="button"
+                  variant={selectedLopType === '0.1_day' ? 'default' : 'outline'}
+                  onClick={() => setSelectedLopType('0.1_day')}
+                  className="w-full"
+                >
+                  0.1 Day
+                </Button>
+                <Button
+                  type="button"
+                  variant={selectedLopType === '0.25_day' ? 'default' : 'outline'}
+                  onClick={() => setSelectedLopType('0.25_day')}
+                  className="w-full"
+                >
+                  0.25 Day
+                </Button>
+                <Button
+                  type="button"
+                  variant={selectedLopType === '1_day' ? 'default' : 'outline'}
+                  onClick={() => setSelectedLopType('1_day')}
+                  className="w-full"
+                >
+                  1 Day
+                </Button>
+              </div>
+            </div>
+
+            {/* Date */}
+            <div className="space-y-2">
+              <Label>LOP Date *</Label>
+              <Input
+                type="date"
+                value={lopDate}
+                onChange={(e) => setLopDate(e.target.value)}
+              />
+            </div>
+
+            {/* Reason */}
+            {/* Bulk Delete Confirmation Dialog */}
+            <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action cannot be undone. This will permanently delete {selectedEntries.length} LOP entries
+                    and remove them from our servers.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleBulkDelete();
+                    }}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Deleting...
+                      </>
+                    ) : (
+                      'Delete Entries'
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            <div className="space-y-2">
+              <Label>Reason *</Label>
+              <Textarea
+                placeholder="Enter reason for LOP (e.g., Late login at 10:15 AM, +15 min late)"
+                value={lopReason}
+                onChange={(e) => setLopReason(e.target.value)}
+                rows={3}
+              />
+            </div>
+
+            {/* Evidence URL (optional) */}
+            <div className="space-y-2">
+              <Label>Evidence URL (optional)</Label>
+              <Input
+                placeholder="Link to proof/evidence"
+                value={evidenceUrl}
+                onChange={(e) => setEvidenceUrl(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRegisterDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRegisterLOP}
+              disabled={isSaving || !selectedEmployee || !lopReason.trim()}
+            >
+              {isSaving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+              Register LOP
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog >
+
+
+      {/* Delete Confirmation Dialog */}
+      < Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen} >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+              Delete LOP Entry
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-muted-foreground">
+            Are you sure you want to delete this LOP entry? This action cannot be undone and will affect payroll calculations.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Trash2 className="w-4 h-4 mr-2" />}
+              Delete Entry
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog >
+
+      {/* Approve Confirmation Dialog */}
+      < Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen} >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-status-live">
+              <CheckCircle className="w-5 h-5" />
+              Forward LOP to CEO
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-muted-foreground">
+            Are you sure you want to forward this LOP entry to CEO for final approval?
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApproveDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleApprove}
+              disabled={isApproving}
+              className="bg-status-live hover:bg-status-live/90"
+            >
+              {isApproving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+              Forward to CEO
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog >
+
+      {/* Reject Confirmation Dialog */}
+      < Dialog open={rejectDialogOpen} onOpenChange={(open) => {
+        setRejectDialogOpen(open);
+        if (!open) setRejectionReason('');
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <XCircle className="w-5 h-5" />
+              Reject Auto LOP Entry
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-muted-foreground mb-4">
+            Provide a reason for rejecting this auto-generated LOP entry.
+          </p>
+          <Input
+            placeholder="Rejection reason (required)"
+            value={rejectionReason}
+            onChange={(e) => setRejectionReason(e.target.value)}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleReject}
+              disabled={isRejecting || !rejectionReason.trim()}
+            >
+              {isRejecting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <XCircle className="w-4 h-4 mr-2" />}
+              Reject Entry
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog >
+    </div >
+  );
+}

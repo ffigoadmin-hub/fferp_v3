@@ -1,0 +1,1863 @@
+# Purchase Module - Complete Technical Documentation
+
+> **System**: IGOChain Enterprise Resource Planning (ERP)  
+> **Module**: Purchase & Procurement Management  
+> **Last Updated**: February 6, 2026  
+> **Scope**: Full-stack documentation covering database, API, UI, and workflows
+
+---
+
+## 📋 Table of Contents
+
+1. [Executive Summary](#executive-summary)
+2. [System Architecture](#system-architecture)
+3. [Database Schema](#database-schema)
+4. [Data Flow & API Architecture](#data-flow--api-architecture)
+5. [User Workflows](#user-workflows)
+6. [UI Components](#ui-components)
+7. [Code Architecture](#code-architecture)
+8. [Operational Guide](#operational-guide)
+9. [Security & Access Control](#security--access-control)
+10. [Performance & Monitoring](#performance--monitoring)
+
+---
+
+## 📊 Executive Summary
+
+### System Overview
+
+The IGOChain Purchase Module manages end-to-end procurement operations across two parallel workflows:
+
+1. **Integrated Material Procurement** (Primary) - BOQ-driven workflow with multi-vendor quote comparison
+2. **Standalone Purchase Orders** (Secondary) - Direct PO issuance with external vendor portal access
+
+### Key Metrics & Capabilities
+
+| Metric | Value |
+|--------|-------|
+| **Database Tables** | 5 core tables + 2 logging tables |
+| **User Roles** | 7 (Employee, Purchase, BOI, Admin, CEO, GM, Accounts) |
+| **Approval Levels** | 3-tier (BOI → Admin → CEO) |
+| **Quote Comparison** | Minimum 3 quotes recommended |
+| **Real-time Updates** | Supabase Realtime subscriptions |
+
+### Business Impact
+
+- **Transparency**: Complete audit trail from request to delivery
+- **Cost Optimization**: Multi-quote comparison ensures best pricing
+- **Efficiency**: Automated approval chains reduce processing time
+- **Compliance**: Document integrity and BOI verification mandatory
+
+---
+
+## 🏗️ System Architecture
+
+### Architectural Overview
+
+```mermaid
+graph TB
+    subgraph "Frontend Layer"
+        A[Purchase Dashboard]
+        B[BOI Orders Page]
+        C[Vendor Portal]
+        D[Admin Procurement]
+    end
+    
+    subgraph "Application Layer"
+        E[usePurchaseOrders Hook]
+        F[useMaterialRequests Hook]
+        G[useVendorQuotes Hook]
+        H[usePurchaseProgress Hook]
+    end
+    
+    subgraph "Data Layer - Supabase"
+        I[(purchase_orders)]
+        J[(material_requests)]
+        K[(vendor_quotes)]
+        L[(purchase_progress_logs)]
+        M[(procurement_timeline)]
+    end
+    
+    A --> E
+    A --> F
+    A --> G
+    B --> F
+    C --> E
+    D --> F
+    
+    E --> I
+    F --> J
+    G --> K
+    H --> L
+    H --> M
+    
+    style A fill:#4f46e5
+    style B fill:#4f46e5
+    style C fill:#059669
+    style D fill:#4f46e5
+```
+
+### Technology Stack
+
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| **Frontend** | React + TypeScript | UI/UX components |
+| **State Management** | React Hooks + Context | Client-side state |
+| **Backend** | Supabase (PostgreSQL) | Database + Auth + Storage |
+| **Real-time** | Supabase Realtime | Live updates & notifications |
+| **File Storage** | Supabase Storage | Document uploads (invoices, POs) |
+
+---
+
+## 🗄️ Database Schema
+
+### 1. `purchase_orders` Table
+
+**Purpose**: Standalone purchase order management with vendor portal integration
+
+#### Schema Definition
+
+```sql
+CREATE TABLE public.purchase_orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    po_number INTEGER NOT NULL,  -- Auto-incremented via sequence
+    requester_id UUID NOT NULL REFERENCES profiles(id),
+    project_id UUID NOT NULL REFERENCES projects(id),
+    
+    -- Vendor Information
+    vendor_name TEXT NOT NULL,
+    vendor_bank_details TEXT NOT NULL,
+    vendor_upi TEXT,
+    
+    -- Order Details
+    item_description TEXT NOT NULL,
+    quantity INTEGER NOT NULL DEFAULT 1,
+    unit_price NUMERIC NOT NULL,
+    total_amount NUMERIC NOT NULL,
+    
+    -- Documents
+    cost_comparison_url TEXT NOT NULL,
+    po_document_url TEXT NOT NULL,
+    
+    -- Approval Workflow
+    status TEXT NOT NULL DEFAULT 'pending',
+    admin_approved_by UUID REFERENCES profiles(id),
+    admin_approved_at TIMESTAMPTZ,
+    admin_rejection_reason TEXT,
+    ceo_approved_by UUID REFERENCES profiles(id),
+    ceo_approved_at TIMESTAMPTZ,
+    ceo_hold_reason TEXT,
+    
+    -- Vendor Portal Fields (Extended)
+    vendor_access_token TEXT,
+    delivery_status TEXT,
+    lr_number TEXT,
+    transporter_name TEXT,
+    dispatch_date DATE,
+    vendor_invoice_url TEXT,
+    
+    -- System Fields
+    linked_payment_id UUID,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+#### Status Values
+
+| Status | Description | Next Action |
+|--------|-------------|-------------|
+| `pending` | Newly submitted | Admin review |
+| `admin_approved` | Admin verified | CEO approval |
+| `ceo_approved` | Final approval | Payment creation |
+| `rejected` | Admin rejected | Requester resubmit |
+| `ceo_hold` | CEO on hold | Awaiting clarification |
+
+#### Indexes
+
+```sql
+CREATE INDEX idx_purchase_orders_project ON purchase_orders(project_id);
+CREATE INDEX idx_purchase_orders_status ON purchase_orders(status);
+CREATE INDEX idx_purchase_orders_po_number ON purchase_orders(po_number);
+```
+
+---
+
+### 2. `material_requests` Table
+
+**Purpose**: BOQ-driven material procurement with integrated quote comparison
+
+#### Schema Definition
+
+```sql
+CREATE TABLE material_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    phase_id UUID REFERENCES project_phases(id) ON DELETE SET NULL,
+    requested_by UUID NOT NULL REFERENCES profiles(id),
+    
+    -- Request Details
+    boq_items JSONB DEFAULT '[]'::jsonb,
+    urgency TEXT DEFAULT 'normal' 
+        CHECK (urgency IN ('low', 'normal', 'high', 'critical')),
+    notes TEXT,
+    
+    -- Workflow Status
+    status TEXT DEFAULT 'pending' 
+        CHECK (status IN ('pending', 'sourcing', 'quoted', 'approved', 
+                         'ordered', 'delivered', 'cancelled')),
+    
+    -- Delivery Tracking (Granular)
+    order_status TEXT 
+        CHECK (order_status IN ('ordered', 'loading', 'shipped', 
+                                'unloading', 'delivered')),
+    
+    -- Assignment & Approval
+    assigned_to_purchase UUID REFERENCES profiles(id),
+    selected_quote_id UUID REFERENCES vendor_quotes(id),
+    approval_status TEXT 
+        CHECK (approval_status IN ('pending', 'pending_boi', 
+                                   'boi_approved', 'pending_admin',
+                                   'admin_approved', 'pending_ceo',
+                                   'ceo_approved', 'rejected')),
+    
+    -- Approval Chain
+    boi_approved_by UUID REFERENCES profiles(id),
+    boi_approved_at TIMESTAMPTZ,
+    admin_approved_by UUID REFERENCES profiles(id),
+    admin_approved_at TIMESTAMPTZ,
+    ceo_approved_by UUID REFERENCES profiles(id),
+    ceo_approved_at TIMESTAMPTZ,
+    rejection_reason TEXT,
+    
+    -- System Fields
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+#### BOQ Items JSON Structure
+
+```typescript
+interface BOQItem {
+  boq_id: string;           // Reference to project_boq.id
+  material_name: string;
+  quantity: number;
+  unit: string;
+  estimated_rate?: number;
+  total_estimated?: number;
+  urgent?: boolean;
+}
+```
+
+#### Workflow State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: Engineer creates request
+    pending --> sourcing: Purchase assigns
+    sourcing --> quoted: Quotes added (min 3)
+    quoted --> approved: Quote selected
+    approved --> ordered: Order placed
+    ordered --> delivered: Delivery complete
+    
+    pending --> cancelled
+    sourcing --> cancelled
+    quoted --> cancelled
+    
+    note right of quoted: Multi-vendor comparison
+    note right of approved: 3-tier approval (BOI→Admin→CEO)
+```
+
+---
+
+### 3. `vendor_quotes` Table
+
+**Purpose**: Multi-vendor price comparison for material requests
+
+#### Schema Definition
+
+```sql
+CREATE TABLE vendor_quotes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    material_request_id UUID REFERENCES material_requests(id) ON DELETE CASCADE,
+    boq_item_id UUID REFERENCES project_boq(id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    
+    -- Vendor Details
+    vendor_name TEXT NOT NULL,
+    vendor_contact TEXT,
+    vendor_email TEXT,
+    vendor_bank_name TEXT,
+    vendor_account_number TEXT,
+    vendor_ifsc TEXT,
+    vendor_gst TEXT,
+    
+    -- Quote Details
+    quoted_unit_price NUMERIC NOT NULL,
+    quoted_total NUMERIC NOT NULL,
+    quoted_items JSONB DEFAULT '[]'::jsonb,  -- Array of QuotedItem
+    
+    -- Quote Metadata
+    quote_document_url TEXT,
+    quote_drive_link TEXT,
+    validity_date DATE,
+    delivery_days INTEGER,
+    is_selected BOOLEAN DEFAULT FALSE,
+    notes TEXT,
+    
+    -- System Fields
+    created_by UUID REFERENCES profiles(id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+#### Quoted Items JSON Structure
+
+```typescript
+interface QuotedItem {
+  material_name: string;
+  quantity: number;
+  unit: string;
+  unit_price: number;
+  total: number;
+}
+```
+
+---
+
+### 4. `purchase_progress_logs` Table
+
+**Purpose**: Granular tracking of procurement updates
+
+#### Schema Definition
+
+```sql
+CREATE TABLE purchase_progress_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    material_request_id UUID NOT NULL REFERENCES material_requests(id),
+    update_text TEXT NOT NULL,
+    status_update TEXT,  -- Optional status change
+    updated_by UUID REFERENCES profiles(id),
+    updated_by_name TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+#### Common Update Examples
+
+- "Contacted Vendor ABC, waiting for quote"
+- "Quote received from XYZ - ₹45,000 for 500 units"
+- "Material loaded at warehouse - LR #12345"
+- "Dispatched via ABC Logistics - ETA 2 days"
+
+---
+
+### 5. `procurement_timeline` Table
+
+**Purpose**: Audit trail for all procurement actions
+
+#### Schema Definition
+
+```sql
+CREATE TABLE procurement_timeline (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    material_request_id UUID REFERENCES material_requests(id),
+    action TEXT NOT NULL,  -- 'created', 'quote_added', 'approved', etc.
+    performed_by UUID REFERENCES profiles(id),
+    performed_by_name TEXT,
+    details JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+---
+
+## 🔄 Data Flow & API Architecture
+
+### Core Data Hooks
+
+#### 1. [usePurchaseOrders](file:///c:/Users/hp/Desktop/igochain-main/src/hooks/usePurchaseOrders.ts#53-292) Hook
+
+**File**: [src/hooks/usePurchaseOrders.ts](file:///c:/Users/hp/Desktop/igochain-main/src/hooks/usePurchaseOrders.ts)
+
+**Purpose**: Manage standalone purchase orders
+
+##### API Methods
+
+```typescript
+interface UsePurchaseOrdersReturn {
+  // State
+  purchaseOrders: PurchaseOrder[];
+  isLoading: boolean;
+  isSaving: boolean;
+  
+  // Methods
+  createPurchaseOrder: (data: CreatePurchaseOrderData) => Promise<{success: boolean}>;
+  approvePurchaseOrder: (id: string, role: 'admin' | 'ceo') => Promise<void>;
+  rejectPurchaseOrder: (id: string, reason: string) => Promise<void>;
+  holdPurchaseOrder: (id: string, reason: string) => Promise<void>;
+  resubmitPurchaseOrder: (id: string, data: Partial<CreatePurchaseOrderData>) => Promise<{success: boolean}>;
+  refetch: () => Promise<void>;
+}
+```
+
+##### Real-time Subscriptions
+
+```typescript
+// Automatic real-time updates via Supabase channel
+useEffect(() => {
+  const channel = supabase
+    .channel(`purchase-orders-${projectId}`)
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'purchase_orders',
+      filter: `project_id=eq.${projectId}`
+    }, () => {
+      fetchPurchaseOrders(); // Auto-refresh on any change
+    })
+    .subscribe();
+  
+  return () => supabase.removeChannel(channel);
+}, [projectId]);
+```
+
+---
+
+#### 2. [useMaterialRequests](file:///c:/Users/hp/Desktop/igochain-main/src/hooks/useMaterialRequests.ts#54-431) Hook
+
+**File**: [src/hooks/useMaterialRequests.ts](file:///c:/Users/hp/Desktop/igochain-main/src/hooks/useMaterialRequests.ts)
+
+**Purpose**: Manage integrated material procurement workflow
+
+##### API Methods
+
+```typescript
+interface UseMaterialRequestsReturn {
+  // State
+  requests: MaterialRequest[];
+  isLoading: boolean;
+  isSaving: boolean;
+  
+  // Methods
+  createRequest: (data: CreateRequestData) => Promise<void>;
+  updateRequest: (id: string, updates: Partial<MaterialRequest>) => Promise<void>;
+  assignToPurchase: (id: string, purchaseUserId: string) => Promise<void>;
+  selectQuote: (id: string, quoteId: string) => Promise<void>;
+  approveRequest: (id: string, role: 'boi' | 'admin' | 'ceo') => Promise<void>;
+  createPaymentFromRequest: (requestId: string) => Promise<void>;
+  updateDeliveryStatus: (id: string, status: string, notes?: string) => Promise<void>;
+  refetch: () => Promise<void>;
+}
+```
+
+##### Auto-Payment Creation Logic
+
+```typescript
+// When CEO approves, automatically create payment request
+const approveRequest = async (id: string, role: 'ceo') => {
+  // 1. Update approval status
+  await supabase
+    .from('material_requests')
+    .update({ 
+      approval_status: 'ceo_approved',
+      ceo_approved_by: user.id,
+      ceo_approved_at: new Date().toISOString()
+    })
+    .eq('id', id);
+  
+  // 2. Auto-create payment request
+  await createPaymentFromRequest(id);
+};
+```
+
+---
+
+#### 3. [useVendorQuotes](file:///c:/Users/hp/Desktop/igochain-main/src/hooks/useVendorQuotes.ts#40-184) Hook
+
+**File**: [src/hooks/useVendorQuotes.ts](file:///c:/Users/hp/Desktop/igochain-main/src/hooks/useVendorQuotes.ts)
+
+**Purpose**: Manage multi-vendor quote comparison
+
+##### API Methods
+
+```typescript
+interface UseVendorQuotesReturn {
+  // State
+  quotes: VendorQuote[];
+  isLoading: boolean;
+  isSaving: boolean;
+  
+  // Methods
+  addQuote: (data: Omit<VendorQuote, 'id' | 'created_at' | 'created_by' | 'is_selected'>) => Promise<void>;
+  selectQuote: (quoteId: string, materialRequestId: string) => Promise<void>;
+  deleteQuote: (quoteId: string) => Promise<void>;
+  refetch: () => Promise<void>;
+}
+```
+
+##### Quote Selection Flow
+
+```typescript
+const selectQuote = async (quoteId: string, materialRequestId: string) => {
+  // Step 1: Deselect all quotes for this request
+  await supabase
+    .from('vendor_quotes')
+    .update({ is_selected: false })
+    .eq('material_request_id', materialRequestId);
+  
+  // Step 2: Select the chosen quote
+  await supabase
+    .from('vendor_quotes')
+    .update({ is_selected: true })
+    .eq('id', quoteId);
+  
+  // Step 3: Update material request & trigger approval flow
+  await supabase
+    .from('material_requests')
+    .update({ 
+      selected_quote_id: quoteId,
+      approval_status: 'pending_boi'  // Start approval chain
+    })
+    .eq('id', materialRequestId);
+};
+```
+
+---
+
+#### 4. [usePurchaseProgress](file:///c:/Users/hp/Desktop/igochain-main/src/hooks/usePurchaseProgress.ts#16-114) Hook
+
+**File**: [src/hooks/usePurchaseProgress.ts](file:///c:/Users/hp/Desktop/igochain-main/src/hooks/usePurchaseProgress.ts)
+
+**Purpose**: Track and log procurement updates
+
+##### API Methods
+
+```typescript
+interface UsePurchaseProgressReturn {
+  // State
+  progressLogs: PurchaseProgressLog[];
+  allProgressLogs: PurchaseProgressLog[];
+  isLoading: boolean;
+  isSaving: boolean;
+  
+  // Methods
+  addProgress: (requestId: string, updateText: string, statusUpdate?: string) => Promise<void>;
+  getLatestProgress: (requestId: string) => PurchaseProgressLog | undefined;
+  getLogsForRequest: (requestId: string) => PurchaseProgressLog[];
+  refetch: () => Promise<void>;
+}
+```
+
+##### Dual Logging System
+
+```typescript
+// Logs to both tables for redundancy & different query patterns
+const addProgress = async (requestId: string, updateText: string, statusUpdate?: string) => {
+  // Log 1: Real-time updates table
+  await supabase.from('purchase_progress_logs').insert({
+    material_request_id: requestId,
+    update_text: updateText,
+    status_update: statusUpdate,
+    updated_by: user.id,
+    updated_by_name: user.name
+  });
+  
+  // Log 2: Audit trail table
+  await supabase.from('procurement_timeline').insert({
+    material_request_id: requestId,
+    action: 'progress_update',
+    performed_by: user.id,
+    performed_by_name: user.name,
+    details: { update_text: updateText, status_update: statusUpdate }
+  });
+};
+```
+
+---
+
+## 👥 User Workflows
+
+### Workflow 1: Integrated Material Procurement (Primary)
+
+#### Actor Roles & Responsibilities
+
+| Role | Responsibilities | Key Actions |
+|------|------------------|-------------|
+| **Engineer/Site Team** | Identify material needs | Create request from BOQ |
+| **Purchase Team** | Vendor sourcing & negotiation | Add 3+ quotes, track delivery |
+| **BOI** | Quality & price verification | Audit quotes, approve/reject |
+| **Admin** | Financial oversight | Approve high-value requests |
+| **CEO** | Final authority | Approve critical/high-value items |
+| **Accounts** | Payment execution | Process approved payments |
+
+#### Complete Workflow Diagram
+
+```mermaid
+sequenceDiagram
+    participant E as Engineer
+    participant P as Purchase
+    participant B as BOI
+    participant A as Admin
+    participant C as CEO
+    participant AC as Accounts
+    participant V as Vendor
+    
+    E->>P: Create Material Request
+    Note over E: Select BOQ items + urgency
+    
+    P->>P: Start Sourcing
+    P->>V: Contact Vendors
+    V->>P: Quote 1
+    V->>P: Quote 2
+    V->>P: Quote 3
+    
+    P->>P: Select Best Quote
+    P->>B: Submit for BOI Approval
+    
+    B->>B: Verify Rates & Specs
+    alt BOI Approves
+        B->>A: Forward to Admin
+        A->>A: Financial Check
+        alt Admin Approves
+            A->>C: Forward to CEO
+            C->>C: Final Review
+            alt CEO Approves
+                C->>AC: Auto-create Payment Request
+                AC->>V: Execute Payment
+                V->>E: Dispatch Material
+                E->>E: Mark Delivered
+            else CEO Holds
+                C->>P: Request Clarification
+            end
+        else Admin Rejects
+            A->>E: Rejection Notification
+        end
+    else BOI Rejects
+        B->>P: Send Back for Rework
+    end
+```
+
+#### Detailed Steps
+
+##### Step 1: Engineer Creates Request
+
+```typescript
+// UI: Material Request Form
+const createRequest = async () => {
+  await useMaterialRequests().createRequest({
+    project_id: selectedProject.id,
+    phase_id: selectedPhase?.id,
+    boq_items: [
+      {
+        boq_id: "uuid-1",
+        material_name: "Cement (OPC 53)",
+        quantity: 500,
+        unit: "bags",
+        estimated_rate: 450,
+        total_estimated: 225000,
+        urgent: true
+      }
+    ],
+    urgency: "high",
+    notes: "Required for foundation work - Phase 2"
+  });
+};
+```
+
+##### Step 2: Purchase Team Sourcing
+
+```typescript
+// UI: Purchase Dashboard - Sourcing Tab
+const handleStartSourcing = async (requestId: string) => {
+  // Update status to 'sourcing'
+  await useMaterialRequests().updateRequest(requestId, {
+    status: 'sourcing',
+    assigned_to_purchase: user.id
+  });
+  
+  // Add initial progress log
+  await usePurchaseProgress().addProgress(
+    requestId,
+    "Started vendor sourcing process",
+    "sourcing"
+  );
+};
+```
+
+##### Step 3: Add Vendor Quotes (Minimum 3)
+
+```typescript
+// UI: Add Quote Form
+const addVendorQuote = async () => {
+  await useVendorQuotes().addQuote({
+    material_request_id: requestId,
+    project_id: projectId,
+    vendor_name: "ABC Cement Traders",
+    vendor_contact: "+91 98765 43210",
+    vendor_email: "sales@abccement.com",
+    vendor_bank_name: "HDFC Bank",
+    vendor_account_number: "50100123456789",
+    vendor_ifsc: "HDFC0001234",
+    vendor_gst: "27AABCU9603R1ZM",
+    quoted_unit_price: 445,
+    quoted_total: 222500,
+    quoted_items: [
+      {
+        material_name: "Cement (OPC 53)",
+        quantity: 500,
+        unit: "bags",
+        unit_price: 445,
+        total: 222500
+      }
+    ],
+    quote_drive_link: "https://drive.google.com/...",
+    validity_date: "2026-03-06",
+    delivery_days: 3,
+    notes: "Bulk discount applied"
+  });
+};
+```
+
+##### Step 4: Quote Selection & Approval Initiation
+
+```typescript
+// UI: Quote Comparison Modal
+const selectQuote = async (quoteId: string) => {
+  // Selects quote & triggers BOI approval
+  await useVendorQuotes().selectQuote(quoteId, requestId);
+  // Auto-updates material_request.approval_status to 'pending_boi'
+};
+```
+
+##### Step 5: BOI Approval
+
+```typescript
+// UI: BOI Orders Page
+const approveAsBOI = async (requestId: string) => {
+  await useMaterialRequests().approveRequest(requestId, 'boi');
+  // Updates approval_status to 'boi_approved' → 'pending_admin'
+};
+```
+
+##### Step 6: Admin Approval
+
+```typescript
+// UI: Admin Dashboard - Approvals Tab
+const approveAsAdmin = async (requestId: string) => {
+  await useMaterialRequests().approveRequest(requestId, 'admin');
+  // Updates approval_status to 'admin_approved' → 'pending_ceo'
+};
+```
+
+##### Step 7: CEO Final Approval & Auto-Payment
+
+```typescript
+// UI: CEO Dashboard - Approvals Tab
+const approveAsCEO = async (requestId: string) => {
+  await useMaterialRequests().approveRequest(requestId, 'ceo');
+  
+  // Auto-creates payment request in payment_requests table
+  // Links payment to material_request via linked_payment_id
+  
+  // Notification sent to Accounts team
+};
+```
+
+##### Step 8: Delivery Tracking
+
+```typescript
+// UI: Purchase Dashboard - Order Tracking
+const updateDelivery = async (status: string) => {
+  await useMaterialRequests().updateDeliveryStatus(
+    requestId,
+    status,  // 'ordered' → 'loading' → 'shipped' → 'unloading' → 'delivered'
+    "LR #12345 - ABC Logistics - ETA: Feb 8, 2026"
+  );
+};
+```
+
+---
+
+### Workflow 2: Standalone Purchase Orders (Secondary)
+
+#### Use Cases
+
+- Quick procurement outside BOQ scope
+- Service contracts
+- Miscellaneous purchases
+- Emergency orders
+
+#### Workflow Diagram
+
+```mermaid
+graph LR
+    A[Employee: Create PO] --> B[Admin: Review]
+    B --> C{Decision}
+    C -->|Approve| D[CEO: Final Review]
+    C -->|Reject| A
+    D --> E{Decision}
+    E -->|Approve| F[Payment Created]
+    E -->|Hold| G[Request Clarification]
+    E -->|Reject| A
+    G --> D
+```
+
+#### Step-by-Step Process
+
+##### Step 1: Create Purchase Order
+
+```typescript
+// UI: Purchase Order Form
+const createPO = async () => {
+  const result = await usePurchaseOrders().createPurchaseOrder({
+    projectId: selectedProject.id,
+    vendorName: "XYZ Suppliers Pvt Ltd",
+    vendorBankDetails: "ICICI Bank - A/C: 123456789 - IFSC: ICIC0001234",
+    vendorUpi: "xyz@icici",
+    itemDescription: "Construction Tools - 50 items",
+    quantity: 50,
+    unitPrice: 1200,
+    totalAmount: 60000,
+    costComparisonUrl: "https://drive.google.com/file/...",
+    poDocumentUrl: "https://drive.google.com/file/..."
+  });
+  
+  // Auto-generates po_number via database sequence
+  // Returns: { success: true, data: { po_number: 1234, ... } }
+};
+```
+
+##### Step 2: Admin Approval
+
+```typescript
+const approveAsAdmin = async (poId: string) => {
+  await usePurchaseOrders().approvePurchaseOrder(poId, 'admin');
+  // status: 'pending' → 'admin_approved'
+};
+```
+
+##### Step 3: CEO Approval
+
+```typescript
+const approveAsCEO = async (poId: string) => {
+  await usePurchaseOrders().approvePurchaseOrder(poId, 'ceo');
+  // status: 'admin_approved' → 'ceo_approved'
+  // Triggers payment request creation (similar to material requests)
+};
+```
+
+##### Step 4: Rejection/Hold Flows
+
+```typescript
+// Rejection
+const rejectPO = async (poId: string) => {
+  await usePurchaseOrders().rejectPurchaseOrder(
+    poId,
+    "Quote not competitive - please re-negotiate"
+  );
+  // status → 'rejected'
+  // Requester can resubmit with updates
+};
+
+// Hold (CEO only)
+const holdPO = async (poId: string) => {
+  await usePurchaseOrders().holdPurchaseOrder(
+    poId,
+    "Waiting for budget approval from Board"
+  );
+  // status → 'ceo_hold'
+};
+```
+
+##### Step 5: Resubmission
+
+```typescript
+const resubmitPO = async (poId: string) => {
+  await usePurchaseOrders().resubmitPurchaseOrder(poId, {
+    vendorName: "Better Vendor Ltd",
+    totalAmount: 55000,  // Revised amount
+    costComparisonUrl: "https://drive.google.com/new-comparison"
+  });
+  // Resets all approvals, status → 'pending'
+};
+```
+
+---
+
+### Workflow 3: Vendor Portal (External Access)
+
+#### Purpose
+
+Allow external vendors to:
+- View PO details (read-only)
+- Update dispatch status
+- Upload invoices
+- No authentication required (token-based access)
+
+#### Access Flow
+
+```mermaid
+sequenceDiagram
+    participant A as Admin
+    participant S as System
+    participant V as Vendor
+    participant DB as Database
+    
+    A->>S: Create Purchase Order
+    S->>DB: Generate vendor_access_token
+    S->>V: Email with Portal Link
+    Note over V: Link: /vendor-portal/{token}
+    
+    V->>S: Open Portal (No Login)
+    S->>DB: Validate Token
+    alt Token Valid
+        DB->>S: Return PO Details
+        S->>V: Display PO
+        V->>S: Update Dispatch Status
+        V->>S: Upload Invoice
+        S->>DB: Update PO
+        DB->>A: Notify Admin
+    else Token Invalid
+        S->>V: Error: Invalid Access
+    end
+```
+
+#### Vendor Portal UI Components
+
+**File**: [src/pages/public/VendorPortalPage.tsx](file:///c:/Users/hp/Desktop/igochain-main/src/pages/public/VendorPortalPage.tsx)
+
+##### Key Features
+
+1. **Token Validation**: URL-based access (no password)
+2. **PO Details Display**: Read-only project & order info
+3. **Dispatch Update Form**:
+   - LR Number
+   - Transporter Name
+   - Dispatch Date
+4. **Invoice Upload**: Direct to Supabase Storage
+5. **Status Tracking**: Visual timeline
+
+##### Vendor Actions
+
+```typescript
+// 1. Mark as Dispatched
+const handleMarkDispatched = async () => {
+  await supabase
+    .from('purchase_orders')
+    .update({
+      delivery_status: 'DISPATCHED',
+      lr_number: lrNumber,
+      transporter_name: transporter,
+      dispatch_date: dispatchDate
+    })
+    .eq('vendor_access_token', token);
+  
+  // Sends real-time notification to purchase team
+};
+
+// 2. Upload Invoice
+const handleUploadInvoice = async (file: File) => {
+  // Upload to Supabase Storage
+  const { data, error } = await supabase.storage
+    .from('vendor-invoices')
+    .upload(`${poId}/${file.name}`, file);
+  
+  // Update PO with invoice URL
+  await supabase
+    .from('purchase_orders')
+    .update({ vendor_invoice_url: data.path })
+    .eq('vendor_access_token', token);
+};
+```
+
+---
+
+## 🎨 UI Components
+
+### Component Hierarchy
+
+```
+src/components/purchase/
+├── AddQuoteForm.tsx                  (16.5 KB)
+├── ApprovalChainDisplay.tsx          (5.2 KB)
+├── MaterialApprovalWidget.tsx        (27.7 KB)
+├── MaterialOrderTrackingWidget.tsx   (20.1 KB)
+├── MaterialRequestDetailModal.tsx    (9.5 KB)
+├── ProcurementTimelineWidget.tsx     (8.3 KB)
+├── PurchaseProgressModal.tsx         (7.3 KB)
+├── PurchaseUpdatesWidget.tsx         (7.1 KB)
+└── QuoteComparisonModal.tsx          (10.9 KB)
+```
+
+### Component Details
+
+#### 1. AddQuoteForm.tsx
+
+**Purpose**: Multi-step form for vendor quote entry
+
+**Features**:
+- Vendor information (name, contact, bank details, GST)
+- Quote details (items, pricing, delivery timeline)
+- Document upload (quote PDF via Drive link)
+- Validation (minimum 3 quotes recommended)
+
+**Usage**:
+```tsx
+<AddQuoteForm
+  materialRequestId={requestId}
+  projectId={projectId}
+  onSuccess={() => refetchQuotes()}
+/>
+```
+
+---
+
+#### 2. QuoteComparisonModal.tsx
+
+**Purpose**: Side-by-side comparison of vendor quotes
+
+**Features**:
+- Table view with all quote details
+- Price comparison highlights (cheapest in green)
+- Delivery days comparison
+- Select quote button (triggers approval flow)
+
+**Visual Layout**:
+```
+┌─────────────────────────────────────────────────────┐
+│ Quote Comparison - Material Request #1234          │
+├─────────────┬──────────┬──────────┬──────────┬─────┤
+│ Vendor      │ Quote 1  │ Quote 2  │ Quote 3  │     │
+├─────────────┼──────────┼──────────┼──────────┼─────┤
+│ Name        │ ABC Ltd  │ XYZ Corp │ Best Sup │     │
+│ Unit Price  │ ₹445     │ ₹450     │ ₹440 ✓   │     │
+│ Total       │ ₹222,500 │ ₹225,000 │ ₹220,000 │     │
+│ Delivery    │ 3 days   │ 5 days   │ 7 days   │     │
+│ Validity    │ 30 days  │ 45 days  │ 60 days  │     │
+│ Action      │ [Select] │ [Select] │ [Select] │     │
+└─────────────┴──────────┴──────────┴──────────┴─────┘
+```
+
+---
+
+#### 3. MaterialApprovalWidget.tsx
+
+**Purpose**: Multi-level approval interface (BOI/Admin/CEO)
+
+**Features**:
+- Role-based actions (approve/reject/hold)
+- Quote details display
+- Approval history timeline
+- Reason input for rejection/hold
+
+**Approval States**:
+```tsx
+{
+  pending_boi: <BOIActions />,
+  boi_approved: <AdminActions />,
+  admin_approved: <CEOActions />,
+  ceo_approved: <PaymentCreatedNotice />,
+  rejected: <RejectionDetails />
+}
+```
+
+---
+
+#### 4. MaterialOrderTrackingWidget.tsx
+
+**Purpose**: Real-time delivery status tracking
+
+**Features**:
+- Visual progress bar
+- Status timeline (ordered → loading → shipped → unloading → delivered)
+- LR number & transporter details
+- ETA display
+- Progress update form
+
+**Visual Representation**:
+```
+Delivery Status: In Transit
+
+[■■■■■■■■□□] 80% Complete
+
+Timeline:
+✓ Ordered       - Jan 30, 2:30 PM
+✓ Loading       - Jan 30, 6:00 PM
+✓ Shipped       - Jan 31, 8:00 AM  (LR: #12345, ABC Logistics)
+→ Unloading     - Expected: Feb 6, 10:00 AM
+  Delivered     - Pending
+```
+
+---
+
+#### 5. ApprovalChainDisplay.tsx
+
+**Purpose**: Visual representation of approval workflow
+
+**Function**:
+```tsx
+export function ApprovalChainDisplay({
+  approvalStatus,
+  boiApprovedBy,
+  adminApprovedBy,
+  ceoApprovedBy
+}: Props) {
+  const steps = getMaterialApprovalSteps(approvalStatus);
+  
+  return (
+    <div className="approval-chain">
+      {steps.map(step => (
+        <StepIndicator
+          label={step.role}
+          status={step.status}  // 'pending' | 'approved' | 'rejected'
+          approvedBy={step.approvedBy}
+          timestamp={step.timestamp}
+        />
+      ))}
+    </div>
+  );
+}
+```
+
+**Visual Output**:
+```
+BOI ✓ → Admin ✓ → CEO ⏳
+```
+
+---
+
+#### 6. PurchaseProgressModal.tsx
+
+**Purpose**: Display chronological progress updates
+
+**Features**:
+- Timeline view of all updates
+- Automatic timestamps
+- User attribution (who updated)
+- Status change highlights
+
+**Example Timeline**:
+```
+2026-02-06 10:30 AM - Ramesh Kumar (Purchase)
+  → Started vendor sourcing process
+
+2026-02-06 11:45 AM - Ramesh Kumar
+  → Received quote from ABC Cement - ₹445/bag
+
+2026-02-06 2:15 PM - Ramesh Kumar
+  → Received quote from XYZ Traders - ₹450/bag
+
+2026-02-06 3:00 PM - Ramesh Kumar
+  → Selected ABC Cement quote - Submitted for BOI approval
+```
+
+---
+
+#### 7. PurchaseUpdatesWidget.tsx
+
+**Purpose**: Dashboard widget showing latest updates across all requests
+
+**Features**:
+- Filterable by project
+- Real-time updates via Supabase Realtime
+- Quick navigation to request details
+
+---
+
+#### 8. ProcurementTimelineWidget.tsx
+
+**Purpose**: Project-wide procurement visualization
+
+**Features**:
+- Gantt-chart style timeline
+- Multi-request comparison
+- Status color coding
+- Deadline tracking
+
+---
+
+#### 9. MaterialRequestDetailModal.tsx
+
+**Purpose**: Comprehensive view of single material request
+
+**Features**:
+- All request metadata
+- BOQ items table
+- Attached quotes
+- Approval history
+- Progress log
+- Action buttons (context-aware)
+
+---
+
+### Page Components
+
+#### 1. Purchase Dashboard
+
+**File**: [src/pages/purchase/PurchaseDashboard.tsx](file:///c:/Users/hp/Desktop/igochain-main/src/pages/purchase/PurchaseDashboard.tsx)
+
+**Layout Structure**:
+```tsx
+<PurchaseDashboard>
+  <Header>
+    <Stats>
+      <Card>Pending Sourcing: {pendingCount}</Card>
+      <Card>Quoted: {quotedCount}</Card>
+      <Card>Ordered: {orderedCount}</Card>
+      <Card>Delivered: {deliveredCount}</Card>
+    </Stats>
+  </Header>
+  
+  <Tabs>
+    <Tab label="Pending Sourcing">
+      <MaterialRequestsList filter={{status: 'pending'}} />
+    </Tab>
+    <Tab label="Active Sourcing">
+      <MaterialRequestsList filter={{status: 'sourcing'}} />
+      <QuoteManagement />
+    </Tab>
+    <Tab label="Quoted">
+      <MaterialRequestsList filter={{status: 'quoted'}} />
+    </Tab>
+    <Tab label="Order Tracking">
+      <MaterialOrderTrackingWidget />
+    </Tab>
+    <Tab label="Completed">
+      <CompletedOrdersSection />
+    </Tab>
+  </Tabs>
+</PurchaseDashboard>
+```
+
+**Role-Based Visibility**:
+- **Purchase Team**: Full access to all tabs
+- **BOI**: Can view quoted requests for approval
+- **Engineers**: Can view their own requests only
+
+---
+
+## 💻 Code Architecture
+
+### File Structure
+
+```
+src/
+├── hooks/
+│   ├── usePurchaseOrders.ts        (292 lines - PO management)
+│   ├── useMaterialRequests.ts      (431 lines - Material workflow)
+│   ├── useVendorQuotes.ts          (184 lines - Quote comparison)
+│   └── usePurchaseProgress.ts      (114 lines - Progress tracking)
+│
+├── pages/
+│   ├── purchase/
+│   │   └── PurchaseDashboard.tsx   (588 lines - Main dashboard)
+│   ├── boi/
+│   │   └── BOIOrdersPage.tsx       (Approval queue)
+│   ├── admin/
+│   │   └── ProjectProcurementPage.tsx (Timeline view)
+│   └── public/
+│       └── VendorPortalPage.tsx    (416 lines - External access)
+│
+└── components/
+    └── purchase/
+        ├── AddQuoteForm.tsx
+        ├── QuoteComparisonModal.tsx
+        ├── MaterialApprovalWidget.tsx
+        ├── MaterialOrderTrackingWidget.tsx
+        ├── ApprovalChainDisplay.tsx
+        ├── PurchaseProgressModal.tsx
+        ├── PurchaseUpdatesWidget.tsx
+        ├── MaterialRequestDetailModal.tsx
+        └── ProcurementTimelineWidget.tsx
+```
+
+### Design Patterns
+
+#### 1. **Custom Hooks Pattern**
+
+Each data entity has a dedicated hook:
+- Encapsulates all CRUD operations
+- Manages local state + real-time sync
+- Provides loading/error states
+- Consistent API across components
+
+**Example**:
+```typescript
+// Single source of truth for purchase orders
+const {
+  purchaseOrders,
+  isLoading,
+  createPurchaseOrder,
+  approvePurchaseOrder
+} = usePurchaseOrders(projectId);
+```
+
+---
+
+#### 2. **Real-time Subscription Pattern**
+
+All hooks auto-subscribe to Supabase Realtime:
+```typescript
+useEffect(() => {
+  const channel = supabase
+    .channel('purchase-orders')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'purchase_orders'
+    }, () => fetchData())  // Auto-refresh on any change
+    .subscribe();
+  
+  return () => supabase.removeChannel(channel);
+}, []);
+```
+
+**Benefits**:
+- Users see updates instantly (no manual refresh)
+- Multi-user collaboration support
+- Reduced API calls (push-based vs poll-based)
+
+---
+
+#### 3. **Optimistic UI Updates**
+
+```typescript
+const approvePurchaseOrder = async (id: string) => {
+  // 1. Optimistic update (instant UI feedback)
+  setPurchaseOrders(prev =>
+    prev.map(po =>
+      po.id === id ? { ...po, status: 'admin_approved' } : po
+    )
+  );
+  
+  // 2. API call
+  try {
+    await supabase.from('purchase_orders').update({...}).eq('id', id);
+    toast.success('Approved!');
+  } catch (error) {
+    // 3. Rollback on error
+    fetchPurchaseOrders();  // Refetch to revert
+    toast.error('Failed to approve');
+  }
+};
+```
+
+---
+
+#### 4. **Compound Component Pattern**
+
+Complex widgets split into sub-components:
+```tsx
+// MaterialApprovalWidget.tsx
+<MaterialApprovalWidget>
+  <ApprovalWidget.Header />
+  <ApprovalWidget.QuoteDetails />
+  <ApprovalWidget.ApprovalHistory />
+  <ApprovalWidget.Actions />
+</MaterialApprovalWidget>
+```
+
+---
+
+### State Management Strategy
+
+#### Local State (useState)
+- Component-specific UI state (modals, tabs, filters)
+
+#### Custom Hooks (useEffect + Supabase)
+- Data fetching & synchronization
+- CRUD operations
+- Real-time subscriptions
+
+#### Context API (AuthContext)
+- User authentication
+- Role-based access control
+
+#### No Global State Library
+- Simple architecture, minimal overhead
+- Supabase acts as single source of truth
+- Real-time sync eliminates stale data issues
+
+---
+
+## 📖 Operational Guide
+
+### For Engineers (Site Team)
+
+#### How to Create a Material Request
+
+1. **Navigate**: Dashboard → Material Requests → New Request
+2. **Select Project & Phase**
+3. **Add BOQ Items**:
+   - Click "Add from BOQ"
+   - Select materials
+   - Adjust quantities if needed
+4. **Set Urgency**: Low / Normal / High / Critical
+5. **Add Notes** (optional): "Required for Phase 2 foundation work"
+6. **Submit**
+
+**Post-Submission**:
+- Request appears in Purchase Team dashboard
+- You'll receive notifications at each approval stage
+- Track delivery status in "My Requests" page
+
+---
+
+### For Purchase Team
+
+#### Handling New Requests
+
+**Step 1: Start Sourcing**
+1. Go to "Pending Sourcing" tab
+2. Click request to view details
+3. Click "Start Sourcing"
+4. Request moves to "Active Sourcing" tab
+
+**Step 2: Add Vendor Quotes (Minimum 3)**
+1. Click "Add Quote"
+2. Fill vendor details (name, contact, bank, GST)
+3. Enter quote details (price, delivery days, validity)
+4. Upload quote document (Google Drive link)
+5. Repeat for at least 3 vendors
+
+**Step 3: Select Best Quote**
+1. Click "Compare Quotes"
+2. Review side-by-side comparison
+3. Select best vendor (price + delivery balance)
+4. Click "Select & Submit for Approval"
+
+**System auto-triggers BOI approval**
+
+**Step 4: Track Delivery (After CEO Approval)**
+1. Go to "Order Tracking" tab
+2. Update delivery status:
+   - Ordered → Loading → Shipped → Unloading → Delivered
+3. Add LR number, transporter details, ETA
+4. Engineer receives real-time updates
+
+---
+
+### For BOI (Bureau of Inspection)
+
+#### Approval Process
+
+1. **Navigate**: BOI Dashboard → Orders Audit Queue
+2. **Review Request**:
+   - Check BOQ items match requirements
+   - Verify quote pricing is reasonable
+   - Review vendor credentials
+3. **Decision**:
+   - **Approve**: Click "Approve" → Forwards to Admin
+   - **Reject**: Enter reason → Returns to Purchase Team
+   - **Query**: Add comment → Request more info
+
+**Approval Criteria**:
+- Prices align with market rates
+- Vendor is reputable
+- Quote includes all necessary items
+- Delivery timeline is acceptable
+
+---
+
+### For Admin
+
+#### Approval Process
+
+**Similar to BOI, but with financial focus**:
+- Budget availability check
+- Project cost tracking
+- Vendor payment terms review
+
+**Actions**:
+- Approve → Forwards to CEO
+- Reject → Returns to requester
+- Hold → Awaiting information
+
+---
+
+### For CEO
+
+#### Final Approval
+
+**High-Value Thresholds**:
+- Material Requests >₹5 Lakhs: CEO approval required
+- Purchase Orders >₹3 Lakhs: CEO approval required
+
+**Actions**:
+1. **Approve**: Auto-creates payment request → Accounts Team notified
+2. **Hold**: Enter reason (e.g., "Board approval pending")
+3. **Reject**: Enter reason → Requester notified
+
+**Delegation**:
+- Can set auto-approval limits for routine items
+- Can delegate to GM for certain categories
+
+---
+
+### For External Vendors (Vendor Portal)
+
+#### Accessing Your Purchase Order
+
+1. **Open Email** from IGOChain
+2. **Click Portal Link**: `/vendor-portal/{your-unique-token}`
+3. **View PO Details** (no login required)
+
+#### Updating Dispatch Status
+
+1. Click "Mark as Dispatched"
+2. Enter:
+   - LR Number
+   - Transporter Name
+   - Dispatch Date
+3. Click "Submit"
+
+**System notifies Purchase Team instantly**
+
+#### Uploading Invoice
+
+1. Click "Upload Invoice"
+2. Select PDF file
+3. Click "Upload"
+
+**Invoice saved to project records automatically**
+
+---
+
+## 🔒 Security & Access Control
+
+### Row-Level Security (RLS) Policies
+
+#### purchase_orders Table
+
+```sql
+-- Users can create own purchase orders
+CREATE POLICY "Users can create own purchase orders"
+ON purchase_orders FOR INSERT
+WITH CHECK (requester_id = auth.uid());
+
+-- Users can view own POs + Admins see all
+CREATE POLICY "Users can view own purchase orders"
+ON purchase_orders FOR SELECT
+USING (
+  requester_id = auth.uid() OR
+  lower(get_my_role()) = ANY (ARRAY['hr', 'admin', 'gm', 'ceo', 'accounts'])
+);
+
+-- Only Admin/CEO/Accounts can update
+CREATE POLICY "Admin and CEO can update purchase orders"
+ON purchase_orders FOR UPDATE
+USING (lower(get_my_role()) = ANY (ARRAY['admin', 'ceo', 'accounts']))
+WITH CHECK (lower(get_my_role()) = ANY (ARRAY['admin', 'ceo', 'accounts']));
+```
+
+---
+
+#### material_requests Table
+
+```sql
+-- Team can view requests for their projects
+CREATE POLICY "Team can view material requests"
+ON material_requests FOR SELECT
+USING (
+  project_id IN (
+    SELECT id FROM projects WHERE
+      assigned_project_engineer_id = auth.uid() OR
+      assigned_site_manager_id = auth.uid() OR
+      assigned_manager_id = auth.uid() OR
+      assigned_engineer_id = auth.uid()
+  ) OR
+  EXISTS (
+    SELECT 1 FROM profiles WHERE id = auth.uid() AND (
+      role IN ('Admin', 'CEO', 'GM', 'GMO', 'SMO', 'BOI') OR
+      department = 'Purchase'
+    )
+  )
+);
+
+-- Engineers can create requests for assigned projects
+CREATE POLICY "Engineers can create material requests"
+ON material_requests FOR INSERT
+WITH CHECK (
+  requested_by = auth.uid() AND
+  project_id IN (
+    SELECT id FROM projects WHERE
+      assigned_project_engineer_id = auth.uid() OR
+      assigned_engineer_id = auth.uid()
+  )
+);
+
+-- Authorized users can update
+CREATE POLICY "Authorized users can update material requests"
+ON material_requests FOR UPDATE
+USING (
+  requested_by = auth.uid() OR
+  assigned_to_purchase = auth.uid() OR
+  EXISTS (
+    SELECT 1 FROM profiles WHERE id = auth.uid() AND (
+      role IN ('Admin', 'CEO', 'GM', 'GMO', 'SMO', 'BOI') OR
+      department = 'Purchase'
+    )
+  )
+);
+```
+
+---
+
+#### vendor_quotes Table
+
+```sql
+-- Team + Purchase can view quotes
+CREATE POLICY "Team can view vendor quotes"
+ON vendor_quotes FOR SELECT
+USING (
+  project_id IN (
+    SELECT id FROM projects WHERE
+      assigned_project_engineer_id = auth.uid() OR
+      assigned_engineer_id = auth.uid()
+  ) OR
+  EXISTS (
+    SELECT 1 FROM profiles WHERE id = auth.uid() AND (
+      role IN ('Admin', 'CEO', 'GM', 'GMO', 'SMO', 'BOI') OR
+      department = 'Purchase'
+    )
+  )
+);
+
+-- Only Purchase team can manage quotes
+CREATE POLICY "Purchase team can manage quotes"
+ON vendor_quotes FOR ALL
+USING (
+  EXISTS (
+    SELECT 1 FROM profiles WHERE id = auth.uid() AND (
+      role IN ('Admin', 'CEO', 'GM', 'GMO', 'SMO', 'BOI') OR
+      department = 'Purchase'
+    )
+  )
+);
+```
+
+---
+
+### Vendor Portal Security
+
+#### Token-Based Access (No Authentication)
+
+```sql
+-- Vendor portal bypasses RLS using service role
+-- Token validation happens in application layer
+
+-- Generate secure token on PO creation
+UPDATE purchase_orders
+SET vendor_access_token = encode(gen_random_bytes(32), 'hex')
+WHERE id = NEW.id;
+
+-- Vendor portal queries use service role key
+-- Token must match to view/update PO
+SELECT * FROM purchase_orders
+WHERE vendor_access_token = {provided_token};
+```
+
+**Security Considerations**:
+- Token: 64-character random hex (cryptographically secure)
+- One-time use: Token invalidated after order completion
+- Limited scope: Vendor can only view/update THEIR PO
+- No sensitive data exposed (no pricing from other vendors)
+
+---
+
+### Document Security (File Uploads)
+
+#### Supabase Storage Policies
+
+```sql
+-- Bucket: 'vendor-invoices'
+CREATE POLICY "Vendors can upload invoices"
+ON storage.objects FOR INSERT
+WITH CHECK (bucket_id = 'vendor-invoices');
+
+-- Bucket: 'purchase-documents'
+CREATE POLICY "Authenticated users can upload purchase docs"
+ON storage.objects FOR INSERT
+WITH CHECK (
+  bucket_id = 'purchase-documents' AND
+  auth.role() = 'authenticated'
+);
+
+-- Read access limited to internal users
+CREATE POLICY "Internal users can read purchase docs"
+ON storage.objects FOR SELECT
+USING (
+  bucket_id = 'purchase-documents' AND
+  EXISTS (
+    SELECT 1 FROM profiles WHERE id = auth.uid()
+  )
+);
+```
+
+---
+
+## 📊 Performance & Monitoring
+
+### Database Indexes
+
+```sql
+-- Material Requests
+CREATE INDEX idx_material_requests_project ON material_requests(project_id);
+CREATE INDEX idx_material_requests_status ON material_requests(status);
+CREATE INDEX idx_material_requests_approval_status ON material_requests(approval_status);
+
+-- Vendor Quotes
+CREATE INDEX idx_vendor_quotes_project ON vendor_quotes(project_id);
+CREATE INDEX idx_vendor_quotes_material_request ON vendor_quotes(material_request_id);
+CREATE INDEX idx_vendor_quotes_selected ON vendor_quotes(is_selected) WHERE is_selected = TRUE;
+
+-- Purchase Orders
+CREATE INDEX idx_purchase_orders_project ON purchase_orders(project_id);
+CREATE INDEX idx_purchase_orders_status ON purchase_orders(status);
+CREATE INDEX idx_purchase_orders_po_number ON purchase_orders(po_number);
+
+-- Progress Logs
+CREATE INDEX idx_purchase_progress_logs_material_request ON purchase_progress_logs(material_request_id);
+CREATE INDEX idx_procurement_timeline_material_request ON procurement_timeline(material_request_id);
+CREATE INDEX idx_procurement_timeline_created_at ON procurement_timeline(created_at DESC);
+```
+
+---
+
+### Query Optimization
+
+#### Efficient Data Fetching
+
+```typescript
+// ✅ GOOD: Single query with joins
+const { data } = await supabase
+  .from('material_requests')
+  .select(`
+    *,
+    requester:profiles!material_requests_requested_by_fkey(name, email),
+    project:projects!material_requests_project_id_fkey(project_id, project_name),
+    selected_quote:vendor_quotes!material_requests_selected_quote_id_fkey(*)
+  `)
+  .eq('status', 'pending');
+
+// ❌ BAD: N+1 query problem
+const requests = await supabase.from('material_requests').select('*');
+for (const req of requests) {
+  const requester = await supabase.from('profiles').select('*').eq('id', req.requested_by);
+}
+```
+
+---
+
+### Real-time Optimization
+
+#### Channel Management
+
+```typescript
+// Avoid creating multiple channels for same data
+// ✅ GOOD: One channel per hook instance
+useEffect(() => {
+  const channel = supabase
+    .channel(`purchase-orders-${projectId}`)
+    .on(...)
+    .subscribe();
+  
+  return () => supabase.removeChannel(channel);
+}, [projectId]);
+
+// ❌ BAD: Creating channel on every render
+const channel = supabase.channel('purchase-orders').on(...).subscribe();
+```
+
+---
+
+### Monitoring & Analytics
+
+#### Key Metrics to Track
+
+1. **Procurement Velocity**
+   - Average time: Request creation → CEO approval
+   - Average time: Approval → Delivery
+   - Bottleneck identification (which approval takes longest)
+
+2. **Cost Efficiency**
+   - Average savings per quote comparison
+   - Quote deviation % (highest vs lowest)
+   - Vendor performance (delivery on-time %)
+
+3. **System Health**
+   - Real-time subscription status
+   - API error rates
+   - Document upload success rates
+
+#### Logging Strategy
+
+```typescript
+// Audit trail in procurement_timeline
+await supabase.from('procurement_timeline').insert({
+  material_request_id: id,
+  action: 'ceo_approved',
+  performed_by: user.id,
+  performed_by_name: user.name,
+  details: {
+    previous_status: 'admin_approved',
+    new_status: 'ceo_approved',
+    approval_duration_hours: 2.5,
+    total_amount: 225000
+  }
+});
+```
+
+---
+
+## 🎯 Best Practices
+
+### For Developers
+
+1. **Always use custom hooks** - Don't query Supabase directly in components
+2. **Handle loading states** - Show skeletons during data fetch
+3. **Implement optimistic updates** - Instant UI feedback improves UX
+4. **Clean up subscriptions** - Prevent memory leaks in useEffect
+5. **Validate user input** - Both client-side and database constraints
+6. **Log actions** - Maintain audit trail for compliance
+
+### For Users
+
+1. **Purchase Team**:
+   - Add minimum 3 quotes (preferably 5)
+   - Upload quote documents (mandatory for audit)
+   - Update delivery status regularly
+
+2. **BOI/Admin/CEO**:
+   - Review requests promptly (SLA: 24 hours)
+   - Provide detailed rejection reasons
+   - Use hold status for queries, not rejection
+
+3. **Engineers**:
+   - Plan material requests 1 week in advance
+   - Mark urgency accurately (don't abuse "critical")
+   - Confirm delivery receipt promptly
+
+---
+
+## 📚 Related Documentation
+
+- [Engineering Module Documentation](file:///c:/Users/hp/Desktop/igochain-main/ENGINEERING_MODULE_DOCUMENTATION.md)
+- [Master System Documentation](file:///c:/Users/hp/Desktop/igochain-main/MASTER_SYSTEM_DOCUMENTATION.md)
+- [Original Purchase Order Module Docs](file:///c:/Users/hp/Desktop/igochain-main/purchase-order-module-documentation.md)
+
+---
+
+## 🔄 Changelog
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-02-06 | 1.0 | Initial comprehensive documentation |
+
+---
+
+**Document prepared by**: Antigravity AI Assistant  
+**For**: IGOChain ERP System  
+**Contact**: Development Team

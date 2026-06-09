@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- TODO: Set the document title to the name of your application -->
+  <title>IGO GROUP</title>
+  <meta name="description" content="Igo internal software">
+  <meta name="author" content="Lovable" />
+
+  <!-- TODO: Update og:title to match your application name -->
+
+
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="@Lovable" />
+  <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+
+
+
+
+  <link rel="icon" type="image/x-icon"
+    href="https://storage.googleapis.com/gpt-engineer-file-uploads/MeNDJeRwBzQKE0bacwgbm5NdA8C3/uploads/1767095962430-images.png">
+  <meta property="og:title" content="IGO GROUP">
+  <meta name="twitter:title" content="IGO GROUP">
+  <meta property="og:description" content="Igo internal software">
+  <meta name="twitter:description" content="Igo internal software">
+
+  <!-- Dynamic Theme Color (Default Corporate Blue) -->
+  <meta name="theme-color" content="#0f172a" id="theme-color-meta">
+</head>
+
+<body>
+  <div id="global-error-display"
+    style="display:none; color:red; padding:20px; font-family:monospace; white-space:pre-wrap;"></div>
+  <script>
+    window.onerror = function (message, source, lineno, colno, error) {
+      var display = document.getElementById('global-error-display');
+      display.style.display = 'block';
+      display.innerHTML += 'Global Error: ' + message + '\nAt: ' + source + ':' + lineno + ':' + colno + '\n\n';
+      console.error('Global Error Trap:', message, error);
+    };
+  </script>
+  <style>
+    :root {
+      --splash-bg: #F8FAFC;
+    }
+
+    .theme-valentine {
+      --splash-bg: #1a0508;
+    }
+
+    body {
+      margin: 0;
+      background-color: var(--splash-bg);
+      font-family: 'Outfit', sans-serif;
+    }
+  </style>
+  <script>
+    // Immediate Theme Background Application
+    try {
+      const stored = localStorage.getItem('theme-storage');
+      if (stored) {
+        const data = JSON.parse(stored);
+        const theme = data.state?.theme || data.theme;
+        if (theme && theme !== 'system') {
+          document.documentElement.classList.add('theme-' + theme);
+
+          if (theme === 'valentine') {
+            document.body.style.backgroundColor = '#1a0508';
+          }
+        }
+      }
+    } catch (e) { console.error('Theme load error:', e); }
+  </script>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>
