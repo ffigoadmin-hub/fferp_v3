@@ -368,7 +368,7 @@ const ALL_STAFF_ROLES = [
   'tele_caller', 'driver', 'back_office', 'shift_employee', 'ff_operations_manager',
   'bde',
   // FF New Roles
-  'hub_manager', 'l1_manager', 'collection_executive',
+  'hub_manager', 'l1_manager',
 ];
 
 // Operations + management roles (no pure field/driver roles)
@@ -724,13 +724,13 @@ const AppRoutes = () => {
       <Route path="/site-visit-request/success/:id" element={<ProtectedRoute allowedRoles={['rsh', 'RSH', 'smo', 'employee']}><SiteVisitSuccessPage /></ProtectedRoute>} />
 
       {/* Shift Module Routes — hub_manager, purchase_manager, ff_operations_manager are shift-eligible */}
-      <Route path="/shift/dashboard" element={<ProtectedRoute allowedRoles={['employee', 'admin', 'accounts', 'hr', 'smo', 'gmo', 'nsm', 'gm', 'farmmanager', 'site_visit_farm_manager', 'boi', 'datateam', 'data_team', 'data', 'director', 'Director', 'auditor', 'rsh', 'RSH', 'purchase_manager', 'purchase_head', 'hub_manager', 'ff_operations_manager', 'field_executive', 'bde', 'tele_caller', 'driver', 'back_office', 'shift_employee', 'warehouse_manager', 'qc_manager', 'collection_executive']}><ShiftDashboardPage /></ProtectedRoute>} />
-      <Route path="/shift/login" element={<ProtectedRoute allowedRoles={['employee', 'admin', 'accounts', 'hr', 'smo', 'gmo', 'nsm', 'gm', 'farmmanager', 'site_visit_farm_manager', 'boi', 'datateam', 'data_team', 'data', 'director', 'Director', 'auditor', 'rsh', 'RSH', 'purchase_manager', 'purchase_head', 'hub_manager', 'ff_operations_manager', 'field_executive', 'bde', 'tele_caller', 'driver', 'back_office', 'shift_employee', 'warehouse_manager', 'qc_manager', 'collection_executive']}><ShiftLoginPage /></ProtectedRoute>} />
-      <Route path="/shift/hourly" element={<ProtectedRoute allowedRoles={['employee', 'admin', 'accounts', 'hr', 'smo', 'gmo', 'nsm', 'gm', 'farmmanager', 'site_visit_farm_manager', 'boi', 'datateam', 'data_team', 'data', 'director', 'Director', 'auditor', 'rsh', 'RSH', 'purchase_manager', 'purchase_head', 'hub_manager', 'ff_operations_manager', 'field_executive', 'bde', 'tele_caller', 'driver', 'back_office', 'shift_employee', 'warehouse_manager', 'qc_manager', 'collection_executive']}><ShiftHourlyPage /></ProtectedRoute>} />
-      <Route path="/shift/break" element={<ProtectedRoute allowedRoles={['employee', 'admin', 'accounts', 'hr', 'smo', 'gmo', 'nsm', 'gm', 'farmmanager', 'site_visit_farm_manager', 'boi', 'datateam', 'data_team', 'data', 'director', 'Director', 'auditor', 'rsh', 'RSH', 'purchase_manager', 'purchase_head', 'hub_manager', 'ff_operations_manager', 'field_executive', 'bde', 'tele_caller', 'driver', 'back_office', 'shift_employee', 'warehouse_manager', 'qc_manager', 'collection_executive']}><ShiftBreakPage /></ProtectedRoute>} />
-      <Route path="/shift/eod" element={<ProtectedRoute allowedRoles={['employee', 'admin', 'accounts', 'hr', 'smo', 'gmo', 'nsm', 'gm', 'farmmanager', 'boi', 'datateam', 'data_team', 'data', 'director', 'Director', 'auditor', 'rsh', 'RSH', 'purchase_manager', 'purchase_head', 'hub_manager', 'ff_operations_manager', 'field_executive', 'bde', 'tele_caller', 'driver', 'back_office', 'shift_employee', 'warehouse_manager', 'qc_manager', 'collection_executive']}><ShiftEODPage /></ProtectedRoute>} />
-      <Route path="/shift/logout" element={<ProtectedRoute allowedRoles={['employee', 'admin', 'accounts', 'hr', 'smo', 'gmo', 'nsm', 'gm', 'farmmanager', 'boi', 'datateam', 'data_team', 'data', 'director', 'Director', 'auditor', 'rsh', 'RSH', 'purchase_manager', 'purchase_head', 'hub_manager', 'ff_operations_manager', 'field_executive', 'bde', 'tele_caller', 'driver', 'back_office', 'shift_employee', 'warehouse_manager', 'qc_manager', 'collection_executive']}><ShiftLogoutPage /></ProtectedRoute>} />
-      <Route path="/shift/history" element={<ProtectedRoute allowedRoles={['employee', 'admin', 'accounts', 'hr', 'smo', 'gmo', 'nsm', 'gm', 'farmmanager', 'boi', 'datateam', 'data_team', 'data', 'director', 'Director', 'auditor', 'rsh', 'RSH', 'purchase_manager', 'purchase_head', 'hub_manager', 'ff_operations_manager', 'field_executive', 'bde', 'tele_caller', 'driver', 'back_office', 'shift_employee', 'warehouse_manager', 'qc_manager', 'collection_executive']}><ShiftHistoryPage /></ProtectedRoute>} />
+      <Route path="/shift/dashboard" element={<ProtectedRoute allowedRoles={['employee', 'admin', 'accounts', 'hr', 'smo', 'gmo', 'nsm', 'gm', 'farmmanager', 'site_visit_farm_manager', 'boi', 'datateam', 'data_team', 'data', 'director', 'Director', 'auditor', 'rsh', 'RSH', 'purchase_manager', 'purchase_head', 'hub_manager', 'ff_operations_manager', 'field_executive', 'bde', 'tele_caller', 'driver', 'back_office', 'shift_employee', 'warehouse_manager', 'qc_manager']}><ShiftDashboardPage /></ProtectedRoute>} />
+      <Route path="/shift/login" element={<ProtectedRoute allowedRoles={['employee', 'admin', 'accounts', 'hr', 'smo', 'gmo', 'nsm', 'gm', 'farmmanager', 'site_visit_farm_manager', 'boi', 'datateam', 'data_team', 'data', 'director', 'Director', 'auditor', 'rsh', 'RSH', 'purchase_manager', 'purchase_head', 'hub_manager', 'ff_operations_manager', 'field_executive', 'bde', 'tele_caller', 'driver', 'back_office', 'shift_employee', 'warehouse_manager', 'qc_manager']}><ShiftLoginPage /></ProtectedRoute>} />
+      <Route path="/shift/hourly" element={<ProtectedRoute allowedRoles={['employee', 'admin', 'accounts', 'hr', 'smo', 'gmo', 'nsm', 'gm', 'farmmanager', 'site_visit_farm_manager', 'boi', 'datateam', 'data_team', 'data', 'director', 'Director', 'auditor', 'rsh', 'RSH', 'purchase_manager', 'purchase_head', 'hub_manager', 'ff_operations_manager', 'field_executive', 'bde', 'tele_caller', 'driver', 'back_office', 'shift_employee', 'warehouse_manager', 'qc_manager']}><ShiftHourlyPage /></ProtectedRoute>} />
+      <Route path="/shift/break" element={<ProtectedRoute allowedRoles={['employee', 'admin', 'accounts', 'hr', 'smo', 'gmo', 'nsm', 'gm', 'farmmanager', 'site_visit_farm_manager', 'boi', 'datateam', 'data_team', 'data', 'director', 'Director', 'auditor', 'rsh', 'RSH', 'purchase_manager', 'purchase_head', 'hub_manager', 'ff_operations_manager', 'field_executive', 'bde', 'tele_caller', 'driver', 'back_office', 'shift_employee', 'warehouse_manager', 'qc_manager']}><ShiftBreakPage /></ProtectedRoute>} />
+      <Route path="/shift/eod" element={<ProtectedRoute allowedRoles={['employee', 'admin', 'accounts', 'hr', 'smo', 'gmo', 'nsm', 'gm', 'farmmanager', 'boi', 'datateam', 'data_team', 'data', 'director', 'Director', 'auditor', 'rsh', 'RSH', 'purchase_manager', 'purchase_head', 'hub_manager', 'ff_operations_manager', 'field_executive', 'bde', 'tele_caller', 'driver', 'back_office', 'shift_employee', 'warehouse_manager', 'qc_manager']}><ShiftEODPage /></ProtectedRoute>} />
+      <Route path="/shift/logout" element={<ProtectedRoute allowedRoles={['employee', 'admin', 'accounts', 'hr', 'smo', 'gmo', 'nsm', 'gm', 'farmmanager', 'boi', 'datateam', 'data_team', 'data', 'director', 'Director', 'auditor', 'rsh', 'RSH', 'purchase_manager', 'purchase_head', 'hub_manager', 'ff_operations_manager', 'field_executive', 'bde', 'tele_caller', 'driver', 'back_office', 'shift_employee', 'warehouse_manager', 'qc_manager']}><ShiftLogoutPage /></ProtectedRoute>} />
+      <Route path="/shift/history" element={<ProtectedRoute allowedRoles={['employee', 'admin', 'accounts', 'hr', 'smo', 'gmo', 'nsm', 'gm', 'farmmanager', 'boi', 'datateam', 'data_team', 'data', 'director', 'Director', 'auditor', 'rsh', 'RSH', 'purchase_manager', 'purchase_head', 'hub_manager', 'ff_operations_manager', 'field_executive', 'bde', 'tele_caller', 'driver', 'back_office', 'shift_employee', 'warehouse_manager', 'qc_manager']}><ShiftHistoryPage /></ProtectedRoute>} />
 
       {/* Rental Module V2 Routes */}
       <Route path="/admin/rental-categories" element={<ProtectedRoute allowedRoles={['admin']}><AdminRentalCategoryPage /></ProtectedRoute>} />
@@ -799,10 +799,6 @@ const AppRoutes = () => {
       <Route path="/sales/customers" element={<ProtectedRoute allowedRoles={OPS_ROLES}><CustomerManagement /></ProtectedRoute>} />
       <Route path="/sales/collections" element={<ProtectedRoute allowedRoles={OPS_ROLES}><CollectionManagement /></ProtectedRoute>} />
       <Route path="/sales/targets" element={<ProtectedRoute allowedRoles={OPS_ROLES}><SalesTargets /></ProtectedRoute>} />
-
-      {/* ── Collection Executive Routes ── */}
-      <Route path="/collections/entry" element={<ProtectedRoute allowedRoles={['collection_executive','admin','ff_operations_manager']}><CollectionEntryPage /></ProtectedRoute>} />
-      <Route path="/collections/dashboard" element={<ProtectedRoute allowedRoles={['collection_executive','admin','ceo','gm','ff_operations_manager','accounts','l1_manager','auditor','field_executive','bde','tele_caller','back_office']}><CollectionDashboardPage /></ProtectedRoute>} />
 
       {/* Tele-Caller Module */}
       <Route path="/tele-caller" element={<ProtectedRoute allowedRoles={['tele_caller', 'admin', 'back_office', ...OPS_ROLES]}><TeleCallerDashboard /></ProtectedRoute>} />
@@ -951,4 +947,14 @@ const App = () => {
           </BrowserRouter>
         </TooltipProvider>
       </ErrorBoundary>
-    </QueryClientPro
+    </QueryClientProvider>
+  );
+};
+
+export default App;
+vider>
+);
+}
+
+export default App;
+p;

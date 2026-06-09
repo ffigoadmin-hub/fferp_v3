@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "mcp__ide__getDiagnostics",
-      "Bash(node -e \"const m = require\\('react-native-url-polyfill'\\); console.log\\('polyfill ok'\\)\")",
-      "Bash(node:*)"
-    ]
-  }
-}

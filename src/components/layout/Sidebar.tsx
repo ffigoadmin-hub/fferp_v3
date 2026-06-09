@@ -111,7 +111,7 @@ const navigationConfig: NavGroup[] = [
       'accounts', 'farmmanager', 'bd_data', 'rsh', 'RSH', 'site_visit_farm_manager',
       'cafe_manager', 'palm_cafe_manager', 'ff_operations_manager',
       'bde', 'field_executive', 'back_office', 'tele_caller', 'shift_employee', 'driver',
-      'purchase_manager', 'hub_manager', 'collection_executive',
+      'purchase_manager', 'hub_manager',
       // gm, l1_manager, auditor intentionally excluded — payment-only roles
     ],
     items: [
@@ -622,7 +622,6 @@ const navigationConfig: NavGroup[] = [
       { icon: ClipboardList, label: 'All Orders',         path: '/sales/orders' },
       { icon: Store,         label: 'App & Web Orders',   path: '/sales/app-orders' },
       { icon: Users,         label: 'Customers',          path: '/sales/customers' },
-      { icon: CreditCard,    label: 'Collections',        path: '/sales/collections' },
       { icon: Target,        label: 'Sales Targets',      path: '/sales/targets' },
       { icon: PhoneCall,     label: 'Tele-Caller CRM',    path: '/tele-caller' },
     ],
@@ -672,7 +671,6 @@ const navigationConfig: NavGroup[] = [
           { label: 'Bulk Orders',     path: '/sales/bulk-order' },
           { label: 'Customers',       path: '/sales/customers' },
           { label: 'Invoices',        path: '/sales/invoices' },
-          { label: 'Collections',     path: '/sales/collections' },
         ],
       },
     ],
@@ -722,7 +720,6 @@ const navigationConfig: NavGroup[] = [
     items: [
       { icon: FileBarChart, label: 'Reports Dashboard',    path: '/reports' },
       { icon: Banknote,     label: 'FF Payments Report',  path: '/reports/ff-payments' },
-      { icon: Wallet,       label: 'Cash Collections',    path: '/collections/dashboard' },
       { icon: BarChart3,    label: 'Daily Sales',         path: '/reports/sales' },
       { icon: ShoppingCart, label: 'Purchase Report',     path: '/reports/purchase' },
       { icon: Boxes,        label: 'Inventory Report',    path: '/reports/inventory' },
@@ -940,8 +937,6 @@ const navigationConfig: NavGroup[] = [
       { icon: ClipboardList,   label: 'All Orders',       path: '/sales/orders' },
       { icon: Store,           label: 'App & Web Orders', path: '/sales/app-orders' },
       { icon: Users,           label: 'Customers',        path: '/sales/customers' },
-      { icon: CreditCard,      label: 'Collections',           path: '/sales/collections' },
-      { icon: Wallet,          label: 'Cash Collections View', path: '/collections/dashboard' },
       { icon: Target,          label: 'Sales Targets',         path: '/sales/targets' },
     ],
   },
@@ -1086,25 +1081,6 @@ const navigationConfig: NavGroup[] = [
       { icon: Banknote,     label: 'Vendor Payments',    path: '/l1/payments',           badgeKey: 'l1' },
       { icon: Truck,        label: 'Transport Payments', path: '/l1/transport-payments', badgeKey: 'l1' },
       { icon: FileBarChart, label: 'FF Payments Report', path: '/reports/ff-payments' },
-    ],
-  },
-
-  // ── Collection Executive ─────────────────────────────────────────────────────
-  {
-    title: 'Shift',
-    icon: Clock,
-    roles: ['collection_executive'],
-    items: [
-      { icon: LayoutDashboard, label: 'Shift Dashboard', path: '/shift/dashboard' },
-    ],
-  },
-  {
-    title: 'Collections',
-    icon: Wallet,
-    roles: ['collection_executive'],
-    items: [
-      { icon: Plus,          label: 'New Collection',        path: '/collections/entry' },
-      { icon: ClipboardList, label: 'My Collections Today',  path: '/collections/dashboard' },
     ],
   },
 

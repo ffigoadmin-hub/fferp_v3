@@ -52,10 +52,11 @@ interface Invoice {
 
 /* ─── Status config ──────────────────────────────────────────────────────────── */
 const STATUS_CFG: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
-  unpaid:    { label: 'Unpaid',    cls: 'bg-amber-100 text-amber-700',  icon: <Clock className="h-3 w-3" /> },
-  paid:      { label: 'Paid',      cls: 'bg-green-100 text-green-700',  icon: <CheckCircle2 className="h-3 w-3" /> },
-  partial:   { label: 'Partial',   cls: 'bg-blue-100 text-blue-700',    icon: <Clock className="h-3 w-3" /> },
-  cancelled: { label: 'Cancelled', cls: 'bg-red-100 text-red-600',      icon: <XCircle className="h-3 w-3" /> },
+  unpaid:     { label: 'Unpaid',     cls: 'bg-amber-100 text-amber-700',   icon: <Clock className="h-3 w-3" /> },
+  paid:       { label: 'Paid',       cls: 'bg-green-100 text-green-700',   icon: <CheckCircle2 className="h-3 w-3" /> },
+  processing: { label: 'Processing', cls: 'bg-blue-100 text-blue-700',     icon: <RefreshCw className="h-3 w-3" /> },
+  partial:    { label: 'Partial',    cls: 'bg-purple-100 text-purple-700', icon: <Clock className="h-3 w-3" /> },
+  cancelled:  { label: 'Cancelled',  cls: 'bg-red-100 text-red-600',       icon: <XCircle className="h-3 w-3" /> },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -459,6 +460,18 @@ export default function SalesInvoicesPage() {
   const [syncing, setSyncing]           = useState(false);
   const queryClient = useQueryClient();
 
+  const updateStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await supabase.from('invoices').update({ status }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, vars) => {
+      toast.success(`Invoice marked as ${vars.status}`);
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+    },
+    onError: () => toast.error('Failed to update status'),
+  });
+
   const { data: invoices = [], isLoading } = useQuery<Invoice[]>({
     queryKey: ['invoices', search, statusFilter],
     queryFn: async () => {
@@ -560,7 +573,7 @@ export default function SalesInvoicesPage() {
           />
         </div>
         <div className="flex gap-1.5">
-          {['all', 'unpaid', 'paid', 'partial', 'cancelled'].map(s => (
+          {['all', 'unpaid', 'paid', 'processing', 'partial', 'cancelled'].map(s => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={cn(
                 'px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-colors',
@@ -598,7 +611,7 @@ export default function SalesInvoicesPage() {
             <span>Date</span>
             <span className="text-right">Amount</span>
             <span className="text-center">Status</span>
-            <span></span>
+            <span className="text-center">Actions</span>
           </div>
           {/* Rows */}
           <div className="divide-y divide-gray-50">
@@ -634,7 +647,38 @@ export default function SalesInvoicesPage() {
                 <div className="flex justify-center">
                   <StatusBadge status={inv.status} />
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                  {/* Quick status actions */}
+                  {inv.status !== 'paid' && (
+                    <button
+                      onClick={() => updateStatus.mutate({ id: inv.id, status: 'paid' })}
+                      disabled={updateStatus.isPending}
+                      className="px-2 py-1 text-[10px] font-bold rounded-md bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                      title="Mark as Paid"
+                    >
+                      Paid
+                    </button>
+                  )}
+                  {inv.status !== 'processing' && inv.status !== 'paid' && (
+                    <button
+                      onClick={() => updateStatus.mutate({ id: inv.id, status: 'processing' })}
+                      disabled={updateStatus.isPending}
+                      className="px-2 py-1 text-[10px] font-bold rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+                      title="Mark as Processing"
+                    >
+                      Process
+                    </button>
+                  )}
+                  {inv.status === 'paid' && (
+                    <button
+                      onClick={() => updateStatus.mutate({ id: inv.id, status: 'unpaid' })}
+                      disabled={updateStatus.isPending}
+                      className="px-2 py-1 text-[10px] font-bold rounded-md bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+                      title="Mark as Unpaid"
+                    >
+                      Unpaid
+                    </button>
+                  )}
                   <button
                     onClick={e => { e.stopPropagation(); setSelectedInvoice(inv); }}
                     className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
@@ -642,7 +686,6 @@ export default function SalesInvoicesPage() {
                   >
                     <Eye className="h-4 w-4" />
                   </button>
-                  <ChevronRight className="h-3.5 w-3.5 text-gray-300 group-hover:text-green-500 transition-colors" />
                 </div>
               </div>
             ))}
