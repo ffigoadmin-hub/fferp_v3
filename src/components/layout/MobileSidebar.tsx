@@ -672,6 +672,7 @@ const navigationConfig: NavGroup[] = [
       { icon: Plus,            label: 'New Order',         path: '/sales/new-order' },
       { icon: ClipboardList,   label: 'All Orders',        path: '/sales/orders' },
       { icon: Users,           label: 'Customers',         path: '/sales/customers' },
+      { icon: FileText,        label: 'Invoices',          path: '/sales/invoices' },
       { icon: Activity,        label: 'Sales Targets',     path: '/sales/targets' },
     ],
   },

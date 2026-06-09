@@ -934,7 +934,8 @@ const navigationConfig: NavGroup[] = [
       { icon: ClipboardList,   label: 'All Orders',       path: '/sales/orders' },
       { icon: Store,           label: 'App & Web Orders', path: '/sales/app-orders' },
       { icon: Users,           label: 'Customers',        path: '/sales/customers' },
-      { icon: Target,          label: 'Sales Targets',         path: '/sales/targets' },
+      { icon: FileText,        label: 'Invoices',         path: '/sales/invoices' },
+      { icon: Target,          label: 'Sales Targets',    path: '/sales/targets' },
     ],
   },
   {
