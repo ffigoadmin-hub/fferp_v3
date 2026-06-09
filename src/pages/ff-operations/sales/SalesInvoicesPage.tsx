@@ -458,18 +458,31 @@ export default function SalesInvoicesPage() {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [needsSetup, setNeedsSetup]     = useState(false);
   const [syncing, setSyncing]           = useState(false);
+  const [payModeFor, setPayModeFor]     = useState<string | null>(null);
   const queryClient = useQueryClient();
 
+  const PAYMENT_MODES = [
+    { label: 'Cash',   value: 'cash',   color: 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' },
+    { label: 'GPay',   value: 'gpay',   color: 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' },
+    { label: 'UPI',    value: 'upi',    color: 'bg-purple-100 text-purple-700 hover:bg-purple-200' },
+    { label: 'Online', value: 'online', color: 'bg-blue-100 text-blue-700 hover:bg-blue-200' },
+    { label: 'COD',    value: 'cod',    color: 'bg-orange-100 text-orange-700 hover:bg-orange-200' },
+    { label: 'Cheque', value: 'cheque', color: 'bg-gray-100 text-gray-700 hover:bg-gray-200' },
+  ];
+
   const updateStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase.from('invoices').update({ status }).eq('id', id);
+    mutationFn: async ({ id, status, paymentMode }: { id: string; status: string; paymentMode?: string }) => {
+      const update: Record<string, string> = { status };
+      if (paymentMode) update.payment_mode = paymentMode;
+      const { error } = await supabase.from('invoices').update(update).eq('id', id);
       if (error) throw error;
     },
     onSuccess: (_data, vars) => {
-      toast.success(`Invoice marked as ${vars.status}`);
+      const modeLabel = vars.paymentMode ? ` via ${vars.paymentMode.toUpperCase()}` : '';
+      toast.success(`Invoice marked as ${vars.status}${modeLabel}`);
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
     },
-    onError: () => toast.error('Failed to update status'),
+    onError: (err: any) => toast.error(`Failed: ${err?.message || err?.code || JSON.stringify(err)}`),
   });
 
   const { data: invoices = [], isLoading } = useQuery<Invoice[]>({
@@ -650,24 +663,33 @@ export default function SalesInvoicesPage() {
                 <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                   {/* Quick status actions */}
                   {inv.status !== 'paid' && (
-                    <button
-                      onClick={() => updateStatus.mutate({ id: inv.id, status: 'paid' })}
-                      disabled={updateStatus.isPending}
-                      className="px-2 py-1 text-[10px] font-bold rounded-md bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
-                      title="Mark as Paid"
-                    >
-                      Paid
-                    </button>
-                  )}
-                  {inv.status !== 'processing' && inv.status !== 'paid' && (
-                    <button
-                      onClick={() => updateStatus.mutate({ id: inv.id, status: 'processing' })}
-                      disabled={updateStatus.isPending}
-                      className="px-2 py-1 text-[10px] font-bold rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
-                      title="Mark as Processing"
-                    >
-                      Process
-                    </button>
+                    <div className="relative">
+                      <button
+                        onClick={() => setPayModeFor(payModeFor === inv.id ? null : inv.id)}
+                        disabled={updateStatus.isPending}
+                        className="px-2 py-1 text-[10px] font-bold rounded-md bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                        title="Mark as Paid — select payment mode"
+                      >
+                        Paid ▾
+                      </button>
+                      {payModeFor === inv.id && (
+                        <div className="absolute right-0 top-7 z-50 bg-white border border-gray-200 rounded-xl shadow-lg p-2 flex flex-col gap-1 min-w-[100px]">
+                          {PAYMENT_MODES.map(m => (
+                            <button
+                              key={m.value}
+                              onClick={() => {
+                                updateStatus.mutate({ id: inv.id, status: 'paid', paymentMode: m.value });
+                                setPayModeFor(null);
+                              }}
+                              disabled={updateStatus.isPending}
+                              className={cn('px-3 py-1.5 text-[10px] font-bold rounded-lg transition-colors text-left', m.color)}
+                            >
+                              {m.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   )}
                   {inv.status === 'paid' && (
                     <button
