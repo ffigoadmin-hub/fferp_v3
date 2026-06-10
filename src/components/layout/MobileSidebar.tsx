@@ -86,17 +86,18 @@ interface NavGroup {
 
 // Same navigation config as Sidebar
 const navigationConfig: NavGroup[] = [
-  // Consolidated Daily Workflow for ALL roles
+  // Daily Workflow — all roles except shift/purchase exec
   {
     title: 'Daily Workflow',
     icon: Clock,
     roles: [
-      'employee', 'director', 'Director', 'purchase_head', 'vendor_head',
+      'employee', 'director', 'Director', 'vendor_head',
       'nsm', 'datateam', 'data_team', 'data', 'boi', 'gmo', 'smo', 'hr', 'gm', 'admin',
       'accounts', 'farmmanager', 'bd_data', 'rsh', 'RSH', 'site_visit_farm_manager',
       'cafe_manager', 'palm_cafe_manager', 'ff_operations_manager',
-      'bde', 'field_executive', 'back_office', 'tele_caller', 'shift_employee', 'driver',
-      'purchase_manager', 'hub_manager', 'warehouse_manager', 'qc_manager',
+      'bde', 'field_executive', 'back_office', 'tele_caller', 'driver',
+      'hub_manager', 'warehouse_manager', 'qc_manager',
+      // purchase_manager, purchase_head, shift_employee → trimmed section below
     ],
     defaultOpen: true,
     items: [
@@ -115,6 +116,23 @@ const navigationConfig: NavGroup[] = [
       { icon: History, label: 'My Requests', path: '/my-requests' },
       { icon: Coffee, label: 'PALM CAFE', path: '/palm-cafe' },
       { icon: MessageSquare, label: 'Chat', path: '/chat' },
+    ],
+  },
+
+  // Daily Workflow — Purchase Exec / Shift Employee (trimmed)
+  {
+    title: 'Daily Workflow',
+    icon: Clock,
+    roles: ['purchase_manager', 'purchase_head', 'shift_employee'],
+    defaultOpen: true,
+    items: [
+      { icon: FileText,      label: 'EOD Summary',         path: '/eod-summary' },
+      { icon: Calendar,      label: 'Company Calendar',    path: '/company-calendar' },
+      { icon: AlertTriangle, label: 'My LOP / Discipline', path: '/my-lop' },
+      { icon: AlertTriangle, label: 'My Escalations',      path: '/dashboard/my-escalations' },
+      { icon: Calendar,      label: 'Leave Request',       path: '/leave-request' },
+      { icon: FileText,      label: 'My Payslip',          path: '/my-payslips' },
+      { icon: History,       label: 'My Requests',         path: '/my-requests' },
     ],
   },
   {
@@ -1005,31 +1023,4 @@ export function MobileSidebar({ onClose }: MobileSidebarProps) {
                         )}
                       >
                         <Icon className="w-4 h-4 shrink-0" />
-                        <span>{item.label}</span>
-                      </NavLink>
-                    );
-                  })}
-                </CollapsibleContent>
-              </Collapsible>
-            );
-          })}
-        </nav>
-      </ScrollArea>
-
-      {/* Footer */}
-      {!(userRole === 'smo' && userDepartment.includes('site visit')) && (
-        <div className="border-t border-[#1e3a5f] px-2 py-3">
-          <a
-            href="https://forms.gle/WDoNcZUXkp7BYZvZ7"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium text-[#4a6fa5] hover:text-white hover:bg-[#1a3450] transition-colors duration-150"
-          >
-            <MessageSquarePlus className="w-4 h-4 shrink-0" />
-            <span>Feedback & Suggestions</span>
-          </a>
-        </div>
-      )}
-    </div>
-  );
-}
+                        <span>{item.lab
