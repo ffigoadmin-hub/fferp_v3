@@ -1,661 +1,778 @@
 // @ts-nocheck
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import {
-  ArrowLeft, Plus, X, Upload, CheckCircle2, AlertCircle,
-  Scale, Package, Building2, CreditCard, User, Trash2,
-  ShoppingBag, ChevronDown, Image, FileCheck, Banknote,
+  ShoppingBag, ChevronDown, ChevronRight, Package, Building2,
+  Plus, Upload, X, CheckCircle2, AlertCircle, Scale, Image as ImageIcon,
+  Loader2, RefreshCw, Search, Calendar, Banknote,
 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
-import { fetchStoredVendors, vendorDisplayName, type StoredVendor } from '@/lib/vendorStore';
 import {
-  saveBuyOrder, fetchBuyOrderByProduct, markBuyOrderBillCreated,
-  type BuyVendorEntry, type BuyOrder,
-} from '@/lib/buyStore';
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface VendorCard {
+// ── Types ──────────────────────────────────────────────────────────────────────
+interface POItem {
   id: string;
-  type: 'static' | 'dynamic';
-  vendorName: string;
-  bankName: string;
-  accountNumber: string;
-  ifscCode: string;
-  gstin: string;
-  phone: string;
-  itemName: string;
-  buyQty: number | '';
-  price: number | '';
-  itemImageFile: File | null;
-  itemImageUrl: string;
-  weightScaleFile: File | null;
-  weightScaleUrl: string;
+  product_name: string;
+  item_name: string | null;
+  required_qty: number;
+  unit: string;
+  estimated_price: number | null;
+  status: string;
 }
 
-function emptyDynamic(): VendorCard {
-  return {
-    id: `dyn-${Date.now()}`,
-    type: 'dynamic',
-    vendorName: '', bankName: '', accountNumber: '', ifscCode: '',
-    gstin: '', phone: '', itemName: '',
-    buyQty: '', price: '',
-    itemImageFile: null, itemImageUrl: '',
-    weightScaleFile: null, weightScaleUrl: '',
-  };
+interface PurchaseOrder {
+  id: string;
+  po_number: string;
+  eod_date: string;
+  status: string;
+  hub_id: string;
+  items: POItem[];
 }
 
-function staticFromVendor(v: StoredVendor): VendorCard {
-  const bank = v.banks?.[0];
-  return {
-    id: `static-${v.id}-${Date.now()}`,
-    type: 'static',
-    vendorName: vendorDisplayName(v),
-    bankName: bank?.bankName ?? '',
-    accountNumber: bank?.accountNumber ?? '',
-    ifscCode: bank?.ifscCode ?? '',
-    gstin: v.gstin ?? '',
-    phone: v.mobile ?? v.workPhone ?? '',
-    itemName: '',
-    buyQty: '', price: '',
-    itemImageFile: null, itemImageUrl: '',
-    weightScaleFile: null, weightScaleUrl: '',
-  };
+interface Vendor {
+  id: string;
+  name: string;
+  contact_person: string | null;
+  phone: string | null;
+  bank_name: string | null;
+  account_number: string | null;
+  ifsc_code: string | null;
+  upi_id: string | null;
+  gst_number: string | null;
+  type: string | null;
 }
 
-// ─── Image Upload Box ─────────────────────────────────────────────────────────
+interface BuyFormState {
+  vendorType: 'static' | 'dynamic';
+  selectedVendor: Vendor | null;
+  // dynamic vendor fields
+  dynName: string;
+  dynPhone: string;
+  dynBank: string;
+  dynAccount: string;
+  dynIfsc: string;
+  dynUpi: string;
+  dynGst: string;
+  // purchase details
+  buyQty: string;
+  rate: string;
+  itemPhotoFile: File | null;
+  itemPhotoUrl: string;
+  scalePhotoFile: File | null;
+  scalePhotoUrl: string;
+  notes: string;
+}
 
-function ImageUploadBox({
-  label, icon: Icon, required, imageUrl, onFile, onRemove,
+const EMPTY_FORM: BuyFormState = {
+  vendorType: 'static',
+  selectedVendor: null,
+  dynName: '', dynPhone: '', dynBank: '', dynAccount: '', dynIfsc: '', dynUpi: '', dynGst: '',
+  buyQty: '', rate: '',
+  itemPhotoFile: null, itemPhotoUrl: '',
+  scalePhotoFile: null, scalePhotoUrl: '',
+  notes: '',
+};
+
+// ── Image Upload Box ───────────────────────────────────────────────────────────
+function PhotoBox({
+  label, icon: Icon, required, url, onFile, onRemove,
 }: {
   label: string; icon: React.ElementType; required?: boolean;
-  imageUrl: string; onFile: (f: File) => void; onRemove: () => void;
+  url: string; onFile: (f: File) => void; onRemove: () => void;
 }) {
   const ref = useRef<HTMLInputElement>(null);
-
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-1 text-xs font-semibold text-gray-600">
-        <Icon size={12} />
-        {label}
+        <Icon size={12} />{label}
         {required && <span className="text-red-500 ml-0.5">*</span>}
-        {imageUrl && <CheckCircle2 size={12} className="text-green-500 ml-auto" />}
-        {!imageUrl && required && <AlertCircle size={12} className="text-red-400 ml-auto" />}
+        {url
+          ? <CheckCircle2 size={12} className="text-green-500 ml-auto" />
+          : required && <AlertCircle size={12} className="text-amber-400 ml-auto" />}
       </div>
-      {imageUrl ? (
-        <div className="relative w-full h-28 rounded-xl overflow-hidden border-2 border-green-200 bg-green-50">
-          <img src={imageUrl} alt={label} className="w-full h-full object-cover" />
-          <button
-            onClick={onRemove}
-            className="absolute top-1 right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600"
-          >
+      {url ? (
+        <div className="relative w-full h-28 rounded-xl overflow-hidden border-2 border-green-200">
+          <img src={url} alt={label} className="w-full h-full object-cover" />
+          <button onClick={onRemove}
+            className="absolute top-1 right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600">
             <X size={10} />
           </button>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={() => ref.current?.click()}
-          className={`w-full h-28 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-colors
-            ${required ? 'border-amber-300 bg-amber-50 hover:bg-amber-100' : 'border-gray-200 bg-gray-50 hover:bg-gray-100'}`}
-        >
+        <button type="button" onClick={() => ref.current?.click()}
+          className={cn(
+            'w-full h-28 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition-colors',
+            required ? 'border-amber-300 bg-amber-50 hover:bg-amber-100' : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
+          )}>
           <Upload size={18} className={required ? 'text-amber-400' : 'text-gray-400'} />
           <span className="text-xs text-gray-500">Click to upload</span>
-          {required && <span className="text-[10px] text-amber-600 font-semibold">Required</span>}
         </button>
       )}
-      <input
-        ref={ref} type="file" accept="image/*" className="hidden"
-        onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ''; }}
-      />
+      <input ref={ref} type="file" accept="image/*" className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ''; }} />
     </div>
   );
 }
 
-// ─── Vendor Card ──────────────────────────────────────────────────────────────
-
-function VendorBuyCard({
-  card, onChange, onRemove, productName,
+// ── Buy Dialog ─────────────────────────────────────────────────────────────────
+function BuyDialog({
+  open, onClose, po, item, onSuccess,
 }: {
-  card: VendorCard;
-  onChange: (updated: VendorCard) => void;
-  onRemove: () => void;
-  productName: string;
+  open: boolean; onClose: () => void;
+  po: PurchaseOrder; item: POItem;
+  onSuccess: () => void;
 }) {
-  const set = (k: keyof VendorCard, v: any) => onChange({ ...card, [k]: v });
+  const { user } = useAuth();
+  const [form, setForm] = useState<BuyFormState>(EMPTY_FORM);
+  const [vendorSearch, setVendorSearch] = useState('');
+  const [showVendorList, setShowVendorList] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const handleImage = (key: 'itemImageFile' | 'weightScaleFile', urlKey: 'itemImageUrl' | 'weightScaleUrl', file: File) => {
+  const set = (k: keyof BuyFormState, v: any) => setForm(f => ({ ...f, [k]: v }));
+
+  // Fetch static vendors
+  const { data: vendors = [] } = useQuery({
+    queryKey: ['vendors-list'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('vendors')
+        .select('id,name,contact_person,phone,bank_name,account_number,ifsc_code,upi_id,gst_number,type')
+        .eq('is_active', true)
+        .order('name');
+      return (data ?? []) as Vendor[];
+    },
+  });
+
+  const filteredVendors = vendors.filter(v =>
+    v.name.toLowerCase().includes(vendorSearch.toLowerCase())
+  );
+
+  const handlePhotoFile = (key: 'itemPhotoFile' | 'scalePhotoFile', urlKey: 'itemPhotoUrl' | 'scalePhotoUrl', file: File) => {
     const url = URL.createObjectURL(file);
-    onChange({ ...card, [key]: file, [urlKey]: url });
+    setForm(f => ({ ...f, [key]: file, [urlKey]: url }));
   };
 
-  const removeImage = (key: 'itemImageFile' | 'weightScaleFile', urlKey: 'itemImageUrl' | 'weightScaleUrl') => {
-    if (card[urlKey]) URL.revokeObjectURL(card[urlKey]);
-    onChange({ ...card, [key]: null, [urlKey]: '' });
+  const removePhoto = (key: 'itemPhotoFile' | 'scalePhotoFile', urlKey: 'itemPhotoUrl' | 'scalePhotoUrl') => {
+    setForm(f => {
+      if (f[urlKey]) URL.revokeObjectURL(f[urlKey]);
+      return { ...f, [key]: null, [urlKey]: '' };
+    });
   };
 
-  const buyQtyNum = Number(card.buyQty) || 0;
-  const priceNum = Number(card.price) || 0;
-  const amount = buyQtyNum * priceNum;
-  const isComplete = buyQtyNum > 0 && priceNum > 0 && card.itemImageUrl && card.weightScaleUrl;
+  const buyQty = Number(form.buyQty) || 0;
+  const rate = Number(form.rate) || 0;
+  const amount = buyQty * rate;
+
+  const canSave =
+    (form.vendorType === 'static' ? !!form.selectedVendor : !!form.dynName.trim()) &&
+    buyQty > 0 && rate > 0 &&
+    !!form.itemPhotoUrl && !!form.scalePhotoUrl;
+
+  // ── Upload helper ──
+  const uploadPhoto = async (file: File, path: string): Promise<string> => {
+    const { error } = await supabase.storage
+      .from('app-images')
+      .upload(path, file, { upsert: true });
+    if (error) throw error;
+    const { data: { publicUrl } } = supabase.storage
+      .from('app-images')
+      .getPublicUrl(path);
+    return publicUrl;
+  };
+
+  const handleSave = async () => {
+    if (!canSave) return;
+    setSaving(true);
+    try {
+      const today = format(new Date(), 'yyyy-MM-dd');
+
+      // 1. Ensure vendor exists
+      let vendorId: string;
+      if (form.vendorType === 'static' && form.selectedVendor) {
+        vendorId = form.selectedVendor.id;
+      } else {
+        // Insert dynamic vendor
+        const { data: newVendor, error: vErr } = await supabase
+          .from('vendors')
+          .insert({
+            name: form.dynName.trim(),
+            phone: form.dynPhone.trim() || null,
+            bank_name: form.dynBank.trim() || null,
+            account_number: form.dynAccount.trim() || null,
+            ifsc_code: form.dynIfsc.trim() || null,
+            upi_id: form.dynUpi.trim() || null,
+            gst_number: form.dynGst.trim() || null,
+            type: 'dynamic',
+            is_active: true,
+          })
+          .select('id')
+          .single();
+        if (vErr) throw vErr;
+        vendorId = newVendor.id;
+      }
+
+      // 2. Upload photos
+      const ts = Date.now();
+      const itemPhotoPath = `purchase-receipts/${po.id}/${item.id}-item-${ts}.jpg`;
+      const scalePhotoPath = `purchase-receipts/${po.id}/${item.id}-scale-${ts}.jpg`;
+
+      const [itemPhotoPublic, scalePhotoPublic] = await Promise.all([
+        uploadPhoto(form.itemPhotoFile!, itemPhotoPath),
+        uploadPhoto(form.scalePhotoFile!, scalePhotoPath),
+      ]);
+
+      // 3. Insert purchase_entries
+      const { data: entry, error: entryErr } = await supabase
+        .from('purchase_entries')
+        .insert({
+          po_id: po.id,
+          vendor_id: vendorId,
+          purchased_by: user?.id,
+          total_amount: amount,
+          receipt_url: itemPhotoPublic,
+          notes: form.notes.trim() || null,
+        })
+        .select('id')
+        .single();
+      if (entryErr) throw entryErr;
+
+      // 4. Insert purchase_entry_items
+      await supabase.from('purchase_entry_items').insert({
+        entry_id: entry.id,
+        product_name: item.product_name || item.item_name || 'Item',
+        quantity: buyQty,
+        unit: item.unit || 'kg',
+        unit_price: rate,
+        total: amount,
+      });
+
+      // 5. Insert ff_vendor_payments → triggers payment chain
+      const paymentItems = [{
+        po_item_id: item.id,
+        product_name: item.product_name || item.item_name,
+        quantity: buyQty,
+        unit: item.unit || 'kg',
+        unit_price: rate,
+        total: amount,
+        item_photo_url: itemPhotoPublic,
+        scale_photo_url: scalePhotoPublic,
+      }];
+
+      const { error: payErr } = await supabase
+        .from('ff_vendor_payments')
+        .insert({
+          vendor_id: vendorId,
+          purchase_order_id: po.id,
+          hub_id: po.hub_id,
+          items: paymentItems,
+          gross_amount: amount,
+          deduction_amount: 0,
+          net_amount: amount,
+          payment_status: 'pending_ff_ops',
+          created_by: user?.id,
+          purchase_entry_id: entry.id,
+        });
+      if (payErr) throw payErr;
+
+      // 6. Update po_item status → ordered
+      await supabase
+        .from('purchase_order_items')
+        .update({ status: 'ordered', ordered_qty: buyQty, unit_price: rate, total_price: amount })
+        .eq('id', item.id);
+
+      toast.success(`✅ Purchase recorded — payment sent to FF Ops for approval`);
+      onSuccess();
+      onClose();
+
+      // Cleanup object URLs
+      if (form.itemPhotoUrl) URL.revokeObjectURL(form.itemPhotoUrl);
+      if (form.scalePhotoUrl) URL.revokeObjectURL(form.scalePhotoUrl);
+      setForm(EMPTY_FORM);
+
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save purchase');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClose = () => {
+    if (form.itemPhotoUrl) URL.revokeObjectURL(form.itemPhotoUrl);
+    if (form.scalePhotoUrl) URL.revokeObjectURL(form.scalePhotoUrl);
+    setForm(EMPTY_FORM);
+    setVendorSearch('');
+    setShowVendorList(false);
+    onClose();
+  };
 
   return (
-    <div className={`rounded-2xl border-2 p-5 space-y-4 transition-all ${isComplete ? 'border-green-200 bg-green-50/30' : 'border-gray-100 bg-white'}`}>
+    <Dialog open={open} onOpenChange={v => !v && handleClose()}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <ShoppingBag className="h-5 w-5 text-green-600" />
+            Buy — {item?.product_name || item?.item_name}
+            <span className="text-sm text-gray-400 font-normal ml-1">({po.po_number})</span>
+          </DialogTitle>
+        </DialogHeader>
 
-      {/* Card Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-2">
-          <div className={`px-2.5 py-1 rounded-full text-xs font-bold ${card.type === 'static' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
-            {card.type === 'static' ? '⭐ Regular Vendor' : '➕ Dynamic Vendor'}
-          </div>
-          {isComplete && (
-            <span className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
-              <CheckCircle2 size={10} /> Done
-            </span>
-          )}
-        </div>
-        <button onClick={onRemove} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-          <Trash2 size={14} />
-        </button>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        {/* Left: Vendor Details */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-            <Building2 size={11} /> Vendor Details
-          </h4>
-
-          {card.type === 'static' ? (
-            /* Static: read-only vendor info */
-            <div className="space-y-2 bg-blue-50 rounded-xl p-3">
-              <div>
-                <p className="text-xs text-gray-500">Vendor Name</p>
-                <p className="text-sm font-bold text-gray-900">{card.vendorName}</p>
+        <div className="space-y-5 pt-2">
+          {/* Required qty banner */}
+          <div className="bg-blue-50 rounded-xl px-4 py-3 flex items-center gap-4">
+            <Package className="h-5 w-5 text-blue-500 shrink-0" />
+            <div>
+              <p className="text-xs text-blue-500 font-medium">PO Required</p>
+              <p className="text-lg font-black text-blue-800">
+                {Number(item?.required_qty || 0).toFixed(1)} {item?.unit || 'kg'}
+              </p>
+            </div>
+            {item?.estimated_price && (
+              <div className="ml-auto text-right">
+                <p className="text-xs text-blue-500 font-medium">Est. Rate</p>
+                <p className="text-base font-bold text-blue-700">
+                  ₹{Number(item.estimated_price).toLocaleString('en-IN')}
+                </p>
               </div>
-              {card.phone && <div><p className="text-xs text-gray-500">Phone</p><p className="text-sm text-gray-800">{card.phone}</p></div>}
-              {card.gstin && <div><p className="text-xs text-gray-500">GSTIN</p><p className="text-xs font-mono text-gray-700">{card.gstin}</p></div>}
-              {card.bankName && (
-                <div className="pt-1 border-t border-blue-100">
-                  <p className="text-xs text-gray-500">Bank</p>
-                  <p className="text-sm text-gray-800">{card.bankName}</p>
-                  <p className="text-xs font-mono text-gray-600">{card.accountNumber}</p>
-                  <p className="text-xs font-mono text-gray-500">IFSC: {card.ifscCode}</p>
+            )}
+          </div>
+
+          {/* Vendor type toggle */}
+          <div className="flex gap-3">
+            {(['static', 'dynamic'] as const).map(t => (
+              <button key={t} onClick={() => set('vendorType', t)}
+                className={cn(
+                  'flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-colors',
+                  form.vendorType === t
+                    ? t === 'static'
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-purple-600 text-white border-purple-600'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                )}>
+                {t === 'static' ? '⭐ Regular Vendor' : '➕ New / Dynamic Vendor'}
+              </button>
+            ))}
+          </div>
+
+          {/* Vendor section */}
+          {form.vendorType === 'static' ? (
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide">
+                Select Vendor *
+              </label>
+              {form.selectedVendor ? (
+                <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+                  <div>
+                    <p className="font-bold text-gray-900">{form.selectedVendor.name}</p>
+                    {form.selectedVendor.phone && (
+                      <p className="text-xs text-gray-500">{form.selectedVendor.phone}</p>
+                    )}
+                    {form.selectedVendor.bank_name && (
+                      <p className="text-xs text-gray-500">
+                        {form.selectedVendor.bank_name} · {form.selectedVendor.account_number}
+                      </p>
+                    )}
+                  </div>
+                  <button onClick={() => set('selectedVendor', null)}
+                    className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg transition-colors">
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      value={vendorSearch}
+                      onChange={e => { setVendorSearch(e.target.value); setShowVendorList(true); }}
+                      onFocus={() => setShowVendorList(true)}
+                      placeholder="Search vendors…"
+                      className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    />
+                  </div>
+                  {showVendorList && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-30 max-h-52 overflow-y-auto">
+                      {filteredVendors.length === 0 ? (
+                        <p className="px-4 py-4 text-sm text-gray-400 text-center">No vendors found</p>
+                      ) : filteredVendors.map(v => (
+                        <button key={v.id}
+                          onClick={() => { set('selectedVendor', v); setShowVendorList(false); setVendorSearch(''); }}
+                          className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0">
+                          <p className="text-sm font-semibold text-gray-800">{v.name}</p>
+                          {v.bank_name && (
+                            <p className="text-xs text-gray-400">{v.bank_name} · {v.ifsc_code}</p>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           ) : (
-            /* Dynamic: editable fields */
-            <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-3 bg-purple-50 rounded-xl p-4">
+              <h4 className="col-span-2 text-xs font-bold text-purple-700 uppercase tracking-wide flex items-center gap-1.5">
+                <Building2 size={11} /> New Vendor Details
+              </h4>
               {[
-                { label: 'Vendor Name *', key: 'vendorName', placeholder: 'Enter vendor name' },
-                { label: 'Phone', key: 'phone', placeholder: 'Mobile number' },
-                { label: 'GSTIN', key: 'gstin', placeholder: 'GST Number' },
-                { label: 'Bank Name', key: 'bankName', placeholder: 'Bank name' },
-                { label: 'Account No.', key: 'accountNumber', placeholder: 'Account number' },
-                { label: 'IFSC Code', key: 'ifscCode', placeholder: 'IFSC code' },
+                { label: 'Vendor Name *', key: 'dynName', placeholder: 'Enter vendor name' },
+                { label: 'Phone',         key: 'dynPhone', placeholder: 'Mobile number' },
+                { label: 'GST Number',    key: 'dynGst',   placeholder: 'GST number' },
+                { label: 'UPI ID',        key: 'dynUpi',   placeholder: 'UPI ID / number' },
+                { label: 'Bank Name',     key: 'dynBank',  placeholder: 'Bank name' },
+                { label: 'Account No.',   key: 'dynAccount', placeholder: 'Account number' },
+                { label: 'IFSC Code',     key: 'dynIfsc',  placeholder: 'IFSC code' },
               ].map(f => (
-                <div key={f.key}>
-                  <label className="block text-[11px] font-semibold text-gray-500 mb-0.5">{f.label}</label>
+                <div key={f.key} className={f.key === 'dynName' ? 'col-span-2' : ''}>
+                  <label className="block text-[11px] font-semibold text-gray-600 mb-0.5">{f.label}</label>
                   <input
-                    value={card[f.key] || ''}
-                    onChange={e => set(f.key as keyof VendorCard, e.target.value)}
+                    value={form[f.key] || ''}
+                    onChange={e => set(f.key as keyof BuyFormState, e.target.value)}
                     placeholder={f.placeholder}
-                    className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-400"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-purple-400"
                   />
                 </div>
               ))}
             </div>
           )}
-        </div>
 
-        {/* Right: Purchase Details */}
-        <div className="space-y-3">
-          <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
-            <Package size={11} /> Purchase Details
-          </h4>
+          {/* Purchase details */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">
+                Qty ({item?.unit || 'kg'}) *
+              </label>
+              <input
+                type="number" min="0" step="0.1"
+                value={form.buyQty}
+                onChange={e => set('buyQty', e.target.value)}
+                placeholder="0.0"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-green-400"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">
+                Rate (₹/{item?.unit || 'kg'}) *
+              </label>
+              <input
+                type="number" min="0"
+                value={form.rate}
+                onChange={e => set('rate', e.target.value)}
+                placeholder="0"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-green-400"
+              />
+            </div>
+            <div className="flex flex-col justify-end">
+              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">
+                Amount
+              </label>
+              <div className="px-3 py-2.5 bg-green-50 border border-green-200 rounded-xl text-sm font-black text-green-800">
+                {amount > 0 ? `₹${amount.toLocaleString('en-IN')}` : '₹0'}
+              </div>
+            </div>
+          </div>
 
-          <div>
-            <label className="block text-[11px] font-semibold text-gray-500 mb-0.5">Item Name *</label>
-            <input
-              value={card.itemName}
-              onChange={e => set('itemName', e.target.value)}
-              placeholder={productName}
-              className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+          {/* Photo uploads */}
+          <div className="grid grid-cols-2 gap-4">
+            <PhotoBox
+              label="Item Photo" icon={ImageIcon} required
+              url={form.itemPhotoUrl}
+              onFile={f => handlePhotoFile('itemPhotoFile', 'itemPhotoUrl', f)}
+              onRemove={() => removePhoto('itemPhotoFile', 'itemPhotoUrl')}
+            />
+            <PhotoBox
+              label="Weight Scale Photo" icon={Scale} required
+              url={form.scalePhotoUrl}
+              onFile={f => handlePhotoFile('scalePhotoFile', 'scalePhotoUrl', f)}
+              onRemove={() => removePhoto('scalePhotoFile', 'scalePhotoUrl')}
             />
           </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 mb-0.5">Qty (kg) *</label>
-              <input
-                type="number" min="0"
-                value={card.buyQty}
-                onChange={e => set('buyQty', e.target.value === '' ? '' : parseFloat(e.target.value))}
-                placeholder="0"
-                className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-500 mb-0.5">Rate (₹/kg) *</label>
-              <input
-                type="number" min="0"
-                value={card.price}
-                onChange={e => set('price', e.target.value === '' ? '' : parseFloat(e.target.value))}
-                placeholder="0"
-                className="w-full px-2.5 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-              />
-            </div>
-          </div>
-
-          {amount > 0 && (
-            <div className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
-              <span className="text-xs text-gray-500">Amount</span>
-              <span className="text-sm font-bold text-gray-900">₹{amount.toLocaleString('en-IN')}</span>
-            </div>
+          {!form.scalePhotoUrl && (
+            <p className="text-[11px] text-red-500 font-semibold flex items-center gap-1">
+              <AlertCircle size={11} /> Weight scale photo is mandatory
+            </p>
           )}
 
-          {/* Image Uploads */}
-          <div className="pt-2 space-y-3">
-            <ImageUploadBox
-              label="Item Photo"
-              icon={Image}
-              required
-              imageUrl={card.itemImageUrl}
-              onFile={f => handleImage('itemImageFile', 'itemImageUrl', f)}
-              onRemove={() => removeImage('itemImageFile', 'itemImageUrl')}
+          {/* Notes */}
+          <div>
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">
+              Notes (optional)
+            </label>
+            <textarea
+              value={form.notes}
+              onChange={e => set('notes', e.target.value)}
+              rows={2}
+              placeholder="Any notes about this purchase…"
+              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
             />
-            <ImageUploadBox
-              label="Weight Scale Photo"
-              icon={Scale}
-              required
-              imageUrl={card.weightScaleUrl}
-              onFile={f => handleImage('weightScaleFile', 'weightScaleUrl', f)}
-              onRemove={() => removeImage('weightScaleFile', 'weightScaleUrl')}
-            />
-            {!card.weightScaleUrl && (
-              <p className="text-[10px] text-red-500 font-semibold flex items-center gap-1">
-                <AlertCircle size={10} /> Weight scale photo is mandatory — purchase will not be accepted without it
-              </p>
+          </div>
+
+          {/* Payment flow note */}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-2">
+            <Banknote className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-700">
+              On save, a <strong>vendor payment request</strong> will be submitted to FF Operations Manager
+              for approval → L1 → Auditor → CEO → Accounts.
+            </p>
+          </div>
+
+          {/* Save button */}
+          <button
+            onClick={handleSave}
+            disabled={!canSave || saving}
+            className={cn(
+              'w-full py-3.5 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2',
+              canSave && !saving
+                ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg'
+                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
             )}
+          >
+            {saving
+              ? <><Loader2 size={16} className="animate-spin" /> Saving…</>
+              : <><CheckCircle2 size={16} /> Save Purchase & Submit Payment</>}
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── PO Card (expandable) ───────────────────────────────────────────────────────
+function POCard({
+  po, onBuy,
+}: {
+  po: PurchaseOrder;
+  onBuy: (po: PurchaseOrder, item: POItem) => void;
+}) {
+  const [open, setOpen] = useState(true); // default open so exec sees items immediately
+
+  const itemsDone  = po.items.filter(i => ['ordered', 'received'].includes(i.status)).length;
+  const itemsTotal = po.items.length;
+  const pct = itemsTotal > 0 ? Math.round((itemsDone / itemsTotal) * 100) : 0;
+
+  return (
+    <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm bg-white">
+      {/* PO header */}
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-3 px-5 py-4 bg-white hover:bg-slate-50 transition-colors text-left"
+      >
+        {open
+          ? <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
+          : <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />}
+
+        <div className="flex-1 flex flex-wrap items-center gap-4">
+          <div>
+            <p className="text-[11px] text-gray-400 uppercase tracking-wide">PO</p>
+            <p className="text-sm font-bold text-blue-700">{po.po_number}</p>
+          </div>
+          <div>
+            <p className="text-[11px] text-gray-400 uppercase tracking-wide">EOD Date</p>
+            <p className="text-sm font-semibold text-gray-700 flex items-center gap-1">
+              <Calendar size={11} className="text-gray-400" />
+              {po.eod_date ? format(new Date(po.eod_date), 'd MMM yyyy') : '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] text-gray-400 uppercase tracking-wide">Progress</p>
+            <p className="text-sm font-semibold text-gray-700">{itemsDone}/{itemsTotal} items</p>
+          </div>
+          {/* progress bar */}
+          <div className="flex-1 max-w-32">
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={cn('h-full rounded-full transition-all', pct >= 100 ? 'bg-green-500' : 'bg-blue-500')}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-gray-400 mt-0.5 text-right">{pct}%</p>
           </div>
         </div>
-      </div>
+      </button>
+
+      {/* Item rows */}
+      {open && (
+        <div className="border-t border-gray-100 divide-y divide-gray-50">
+          {po.items.length === 0 ? (
+            <p className="px-5 py-4 text-sm text-gray-400">No items in this PO.</p>
+          ) : po.items.map(item => {
+            const done = ['ordered', 'received'].includes(item.status);
+            return (
+              <div key={item.id}
+                className={cn(
+                  'flex items-center gap-4 px-5 py-3.5 transition-colors',
+                  done ? 'bg-green-50' : 'hover:bg-gray-50'
+                )}>
+                {/* Product */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Package className={cn('h-4 w-4 shrink-0', done ? 'text-green-500' : 'text-gray-400')} />
+                    <p className="text-sm font-semibold text-gray-800 truncate">
+                      {item.product_name || item.item_name || '—'}
+                    </p>
+                    {done && (
+                      <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">
+                        <CheckCircle2 size={9} /> Bought
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 ml-6">
+                    Required: <span className="font-semibold">{Number(item.required_qty).toFixed(1)} {item.unit || 'kg'}</span>
+                    {item.estimated_price && (
+                      <span className="ml-2">Est. ₹{Number(item.estimated_price).toLocaleString('en-IN')}</span>
+                    )}
+                  </p>
+                </div>
+
+                {/* Buy button */}
+                <button
+                  onClick={() => onBuy(po, item)}
+                  disabled={done}
+                  className={cn(
+                    'shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all',
+                    done
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-green-600 hover:bg-green-700 text-white shadow-sm hover:shadow-md'
+                  )}
+                >
+                  <ShoppingBag size={13} />
+                  {done ? 'Done' : 'Buy'}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-// ─── Bill Creation Helper ─────────────────────────────────────────────────────
-
-function createBillsFromBuyOrder(
-  cards: VendorCard[],
-  product: string,
-  date: string,
-): void {
-  const BILL_STORE_KEY = 'ff_erp_bills_v1';
-  let bills: any[] = [];
-  try { bills = JSON.parse(localStorage.getItem(BILL_STORE_KEY) ?? '[]'); } catch {}
-
-  const maxSerial = bills.reduce((m: number, b: any) => {
-    const n = parseInt((b.billNumber ?? '').replace('BILL-', ''), 10) || 0;
-    return Math.max(m, n);
-  }, 0);
-
-  cards.forEach((card, idx) => {
-    const qty = Number(card.buyQty) || 0;
-    const price = Number(card.price) || 0;
-    const subTotal = qty * price;
-    const cgst = Math.round(subTotal * 0.025);
-    const sgst = Math.round(subTotal * 0.025);
-    const total = subTotal + cgst + sgst;
-
-    const bill = {
-      id: `buy-bill-${Date.now()}-${idx}`,
-      billNumber: `BILL-${String(maxSerial + idx + 1).padStart(3, '0')}`,
-      billDate: date,
-      dueDate: '',
-      poReference: '',
-      vendor: {
-        name: card.vendorName,
-        phone: card.phone,
-        email: '',
-        address: '',
-        gstin: card.gstin,
-        pan: '',
-      },
-      bank: {
-        bankName: card.bankName,
-        accountNumber: card.accountNumber,
-        ifscCode: card.ifscCode,
-        branch: '',
-        accountType: '',
-      },
-      lineItems: [{
-        id: 1,
-        product: card.itemName || product,
-        qty,
-        unit: 'kg',
-        rate: price,
-        discount: 0,
-        tax: 5,
-        amount: subTotal,
-      }],
-      notes: `Auto-generated from Buy order for ${product}`,
-      paymentTerms: 'Due on Receipt',
-      status: 'pending',
-      subTotal,
-      discountAmount: 0,
-      taxableAmount: subTotal,
-      cgst,
-      sgst,
-      total,
-      autoGenerated: true,
-      createdAt: new Date().toISOString(),
-    };
-    bills.unshift(bill);
-  });
-
-  localStorage.setItem(BILL_STORE_KEY, JSON.stringify(bills));
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
-
+// ── Main Page ──────────────────────────────────────────────────────────────────
 export default function BuyPage() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const state = (location.state ?? {}) as { product?: string; qty?: number; unit?: string };
+  const { user } = useAuth();
+  const hubId = (user as any)?.hub_id ?? null;
+  const isManagement = ['ceo', 'gm', 'admin', 'director', 'ff_operations_manager'].includes(user?.role ?? '');
+  const queryClient = useQueryClient();
 
-  const product = state.product ?? '';
-  const requiredQty = state.qty ?? 0;
-  const unit = state.unit ?? 'kg';
-  const today = format(new Date(), 'yyyy-MM-dd');
+  const [activePO, setActivePO] = useState<PurchaseOrder | null>(null);
+  const [activeItem, setActiveItem] = useState<POItem | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
-  // Redirect if no product
-  useEffect(() => {
-    if (!product) navigate('/purchase/auto-po', { replace: true });
-  }, [product]);
+  const { data: orders = [], isLoading, refetch } = useQuery({
+    queryKey: ['buy-page-pos', hubId],
+    queryFn: async () => {
+      let q = supabase
+        .from('purchase_orders')
+        .select('*, items:purchase_order_items(*)')
+        .in('status', ['pending', 'approved', 'ordered'])
+        .order('eod_date', { ascending: false });
 
-  const [cards, setCards] = useState<VendorCard[]>([]);
-  const [showVendorDropdown, setShowVendorDropdown] = useState(false);
-  const [vendorSearch, setVendorSearch] = useState('');
-  const [billCreated, setBillCreated] = useState(false);
+      if (!isManagement && hubId) q = q.eq('hub_id', hubId);
+      if (!showAll) q = q.limit(10);
 
-  const { data: allVendors = [] } = useQuery({
-    queryKey: ['vendors-list'],
-    queryFn: fetchStoredVendors,
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data ?? []) as PurchaseOrder[];
+    },
+    enabled: !!user,
+    refetchInterval: 30_000,
   });
-  const filteredVendors = allVendors.filter((v: StoredVendor) =>
-    vendorDisplayName(v).toLowerCase().includes(vendorSearch.toLowerCase())
-  );
 
-  // Load existing buy order if any
-  useEffect(() => {
-    if (!product) return;
-    fetchBuyOrderByProduct(product).then(existing => {
-      if (existing) setBillCreated(existing.billCreated);
-    });
-  }, [product]);
-
-  // ── Computed ────────────────────────────────────────────────
-  const totalBought = cards.reduce((s, c) => s + (Number(c.buyQty) || 0), 0);
-  const balance = Math.max(0, requiredQty - totalBought);
-  const progressPct = requiredQty > 0 ? Math.min(100, Math.round((totalBought / requiredQty) * 100)) : 0;
-
-  const allImagesOk = cards.length > 0 && cards.every(c => c.itemImageUrl && c.weightScaleUrl);
-  const allQtyOk = cards.length > 0 && cards.every(c => Number(c.buyQty) > 0 && Number(c.price) > 0);
-  const canCreateBill = totalBought >= requiredQty && allImagesOk && allQtyOk && !billCreated;
-
-  // ── Handlers ────────────────────────────────────────────────
-  const addStaticVendor = (v: StoredVendor) => {
-    setCards(prev => [...prev, staticFromVendor(v)]);
-    setShowVendorDropdown(false);
-    setVendorSearch('');
+  const handleBuy = (po: PurchaseOrder, item: POItem) => {
+    setActivePO(po);
+    setActiveItem(item);
   };
 
-  const addDynamicVendor = () => {
-    setCards(prev => [...prev, emptyDynamic()]);
+  const handleSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ['buy-page-pos'] });
+    queryClient.invalidateQueries({ queryKey: ['purchase-orders-exec'] });
   };
 
-  const updateCard = (id: string, updated: VendorCard) => {
-    setCards(prev => prev.map(c => c.id === id ? updated : c));
-  };
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-green-500" />
+      </div>
+    );
+  }
 
-  const removeCard = (id: string) => {
-    setCards(prev => prev.filter(c => c.id !== id));
-  };
-
-  const handleCreateBill = () => {
-    // Validate
-    for (const card of cards) {
-      if (!card.vendorName.trim()) { toast.error('Fill vendor name for all cards'); return; }
-      if (!card.weightScaleUrl) { toast.error(`Weight scale photo required for ${card.vendorName}`); return; }
-      if (!card.itemImageUrl) { toast.error(`Item photo required for ${card.vendorName}`); return; }
-    }
-
-    // Save buy order to store
-    const buyOrder: BuyOrder = {
-      id: `buy-${Date.now()}`,
-      product,
-      requiredQty,
-      unit,
-      date: today,
-      vendors: cards.map(c => ({
-        id: c.id,
-        type: c.type,
-        vendorName: c.vendorName,
-        bankName: c.bankName,
-        accountNumber: c.accountNumber,
-        ifscCode: c.ifscCode,
-        itemName: c.itemName || product,
-        buyQty: Number(c.buyQty) || 0,
-        price: Number(c.price) || 0,
-        hasItemImage: !!c.itemImageUrl,
-        hasWeightScaleImage: !!c.weightScaleUrl,
-      })),
-      billCreated: true,
-    };
-    saveBuyOrder(buyOrder).then(savedId => {
-      if (savedId) markBuyOrderBillCreated(savedId).catch(console.error);
-    });
-
-    // Create bills
-    createBillsFromBuyOrder(cards, product, today);
-    setBillCreated(true);
-
-    toast.success(`✅ ${cards.length} bill(s) created in Auto Bill`);
-    setTimeout(() => navigate('/purchase/auto-bill'), 1200);
-  };
-
-  const productEmoji: Record<string, string> = {
-    Onion: '🧅', Tomato: '🍅', Potato: '🥔', Carrot: '🥕',
-    Cabbage: '🥬', Beetroot: '🥦', Coriander: '🌿',
-  };
+  const totalItems  = orders.reduce((s, po) => s + po.items.length, 0);
+  const boughtItems = orders.reduce((s, po) => s + po.items.filter(i => ['ordered','received'].includes(i.status)).length, 0);
+  const pendingItems = totalItems - boughtItems;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-
+    <div className="space-y-6 max-w-4xl mx-auto pb-12 pt-4 px-4">
       {/* Header */}
-      <div className="bg-white border-b px-6 py-4 sticky top-0 z-20">
-        <div className="flex items-center gap-4">
-          <button onClick={() => navigate('/purchase/auto-po')}
-            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
-            <ArrowLeft size={18} />
-          </button>
-          <div className="flex items-center gap-2">
-            <span className="text-2xl">{productEmoji[product] ?? '📦'}</span>
-            <div>
-              <h1 className="text-lg font-bold text-gray-900">Buy {product}</h1>
-              <p className="text-xs text-gray-500">Add vendors and record purchase with proof</p>
-            </div>
-          </div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-[22px] font-bold text-slate-800 tracking-tight flex items-center gap-2">
+            <ShoppingBag className="h-6 w-6 text-green-600" />
+            Buy — Go Purchase
+          </h1>
+          <p className="text-[13px] text-slate-500">
+            Click <strong>Buy</strong> on each item to record vendor purchase and submit payment
+          </p>
         </div>
+        <button onClick={() => refetch()}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+          <RefreshCw className="h-4 w-4" />
+          Refresh
+        </button>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-6 space-y-6">
+      {/* Quick stats */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: 'Total Items',   value: totalItems,   color: 'text-blue-700',   bg: 'bg-blue-50'  },
+          { label: 'Pending Buy',   value: pendingItems, color: 'text-amber-700',  bg: 'bg-amber-50' },
+          { label: 'Bought',        value: boughtItems,  color: 'text-green-700',  bg: 'bg-green-50' },
+        ].map(s => (
+          <div key={s.label} className={cn('rounded-xl border border-gray-100 px-4 py-4 shadow-sm', s.bg)}>
+            <p className="text-[12px] font-medium text-slate-500 mb-1">{s.label}</p>
+            <p className={cn('text-2xl font-black', s.color)}>{s.value}</p>
+          </div>
+        ))}
+      </div>
 
-        {/* Progress Bar */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-6 text-sm">
-              <div>
-                <span className="text-gray-500">Required</span>
-                <p className="text-xl font-black text-gray-900">{requiredQty} {unit}</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Bought</span>
-                <p className="text-xl font-black text-green-600">{totalBought} {unit}</p>
-              </div>
-              <div>
-                <span className="text-gray-500">Balance</span>
-                <p className={`text-xl font-black ${balance > 0 ? 'text-amber-600' : 'text-green-600'}`}>
-                  {balance > 0 ? `${balance} ${unit}` : '✅ Fulfilled'}
-                </p>
-              </div>
-            </div>
-            <div className="text-right">
-              <span className="text-2xl font-black text-blue-600">{progressPct}%</span>
-              <p className="text-xs text-gray-400">purchased</p>
-            </div>
-          </div>
-          <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${progressPct >= 100 ? 'bg-green-500' : 'bg-blue-500'}`}
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
+      {/* PO list */}
+      {orders.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+          <ShoppingBag className="h-12 w-12 mb-3 opacity-30" />
+          <p className="font-medium">No pending POs to buy</p>
+          <p className="text-sm">EOD-generated POs will appear here after the nightly run</p>
         </div>
+      ) : (
+        <div className="space-y-4">
+          {orders.map(po => (
+            <POCard key={po.id} po={po} onBuy={handleBuy} />
+          ))}
 
-        {/* Vendor Cards */}
-        {cards.length > 0 && (
-          <div className="space-y-4">
-            {cards.map(card => (
-              <VendorBuyCard
-                key={card.id}
-                card={card}
-                productName={product}
-                onChange={updated => updateCard(card.id, updated)}
-                onRemove={() => removeCard(card.id)}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* Add Vendor Buttons */}
-        <div className="grid grid-cols-2 gap-4">
-
-          {/* Static Vendor */}
-          <div className="relative">
+          {!showAll && orders.length === 10 && (
             <button
-              onClick={() => setShowVendorDropdown(v => !v)}
-              className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl border-2 border-dashed border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold text-sm transition-colors"
+              onClick={() => setShowAll(true)}
+              className="w-full py-3 text-sm text-blue-600 font-semibold hover:underline"
             >
-              <Building2 size={16} /> Add Regular Vendor
-              <ChevronDown size={14} className={`transition-transform ${showVendorDropdown ? 'rotate-180' : ''}`} />
+              Load more POs…
             </button>
-            {showVendorDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-2xl shadow-xl z-30 overflow-hidden">
-                <div className="p-3 border-b">
-                  <input
-                    value={vendorSearch}
-                    onChange={e => setVendorSearch(e.target.value)}
-                    placeholder="Search vendors…"
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    autoFocus
-                  />
-                </div>
-                <div className="max-h-56 overflow-y-auto">
-                  {filteredVendors.length === 0 ? (
-                    <p className="px-4 py-4 text-sm text-gray-400 text-center">No vendors found</p>
-                  ) : filteredVendors.map(v => (
-                    <button
-                      key={v.id}
-                      onClick={() => addStaticVendor(v)}
-                      className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors border-b border-gray-50 last:border-0"
-                    >
-                      <p className="text-sm font-semibold text-gray-800">{vendorDisplayName(v)}</p>
-                      {v.banks?.[0]?.bankName && (
-                        <p className="text-xs text-gray-400">{v.banks[0].bankName} · {v.banks[0].ifscCode}</p>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Dynamic Vendor */}
-          <button
-            onClick={addDynamicVendor}
-            className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl border-2 border-dashed border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold text-sm transition-colors"
-          >
-            <Plus size={16} /> Add New Vendor
-          </button>
+          )}
         </div>
+      )}
 
-        {/* Validation Summary */}
-        {cards.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-            <h3 className="text-sm font-bold text-gray-700 mb-3">Checklist</h3>
-            <div className="space-y-2">
-              {[
-                {
-                  ok: totalBought >= requiredQty,
-                  label: `Total qty purchased (${totalBought}/${requiredQty} ${unit})`,
-                },
-                {
-                  ok: allQtyOk,
-                  label: 'All vendors have qty and price filled',
-                },
-                {
-                  ok: cards.every(c => !!c.itemImageUrl),
-                  label: 'Item photos uploaded for all vendors',
-                },
-                {
-                  ok: cards.every(c => !!c.weightScaleUrl),
-                  label: 'Weight scale photos uploaded for all vendors ← Required',
-                },
-              ].map(({ ok, label }) => (
-                <div key={label} className="flex items-center gap-2 text-sm">
-                  {ok
-                    ? <CheckCircle2 size={14} className="text-green-500 shrink-0" />
-                    : <AlertCircle size={14} className="text-amber-400 shrink-0" />}
-                  <span className={ok ? 'text-gray-700' : 'text-gray-400'}>{label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Create Bill Button */}
-        {billCreated ? (
-          <div className="flex items-center justify-center gap-2 py-5 bg-green-50 rounded-2xl border border-green-200">
-            <CheckCircle2 size={20} className="text-green-500" />
-            <span className="text-green-700 font-bold">Bills created successfully — check Auto Bill</span>
-          </div>
-        ) : (
-          <button
-            onClick={handleCreateBill}
-            disabled={!canCreateBill}
-            className={`w-full py-4 rounded-2xl text-base font-bold transition-all flex items-center justify-center gap-2
-              ${canCreateBill
-                ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg hover:shadow-xl'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
-          >
-            <FileCheck size={18} />
-            {canCreateBill
-              ? `Create Bill — ${cards.length} vendor${cards.length > 1 ? 's' : ''}`
-              : cards.length === 0
-                ? 'Add at least one vendor to continue'
-                : !allImagesOk
-                  ? 'Upload all required photos first'
-                  : balance > 0
-                    ? `Balance ${balance} ${unit} remaining`
-                    : 'Fill all vendor details'}
-          </button>
-        )}
-      </div>
+      {/* Buy dialog */}
+      {activePO && activeItem && (
+        <BuyDialog
+          open={!!(activePO && activeItem)}
+          onClose={() => { setActivePO(null); setActiveItem(null); }}
+          po={activePO}
+          item={activeItem}
+          onSuccess={handleSuccess}
+        />
+      )}
     </div>
   );
 }

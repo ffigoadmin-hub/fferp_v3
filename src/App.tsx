@@ -874,7 +874,7 @@ const AppRoutes = () => {
       <Route path="/purchase/auto-po"            element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager', 'field_executive', 'bde', 'tele_caller', 'hub_manager', 'gm', 'ceo']}><AutoPOPage /></ProtectedRoute>} />
       <Route path="/purchase/bills"              element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><PurchaseBillsPage /></ProtectedRoute>} />
       <Route path="/purchase/auto-bill"          element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><AutoBillPage /></ProtectedRoute>} />
-      <Route path="/purchase/buy"               element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><BuyPage /></ProtectedRoute>} />
+      <Route path="/purchase/buy"               element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'shift_employee', 'ff_operations_manager']}><BuyPage /></ProtectedRoute>} />
       <Route path="/purchase/recurring-bills"    element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><RecurringBillsPage /></ProtectedRoute>} />
       <Route path="/purchase/payments-made"      element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><PaymentsMadePage /></ProtectedRoute>} />
       <Route path="/purchase/vendor-credits"     element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><VendorCreditsPage /></ProtectedRoute>} />
@@ -949,4 +949,4 @@ const App = () => {
   );
 };
 
-export default App;
+ex
