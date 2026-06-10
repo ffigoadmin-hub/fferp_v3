@@ -952,7 +952,6 @@ const navigationConfig: NavGroup[] = [
     roles: ['field_executive', 'bde', 'tele_caller', 'back_office'],
     items: [
       { icon: ClipboardList,    label: 'Purchase Orders', path: '/purchase/orders' },
-      { icon: Plus,             label: 'New PO',          path: '/purchase/new' },
       { icon: Zap,              label: 'EOD PO Engine',   path: '/ff-operations/eod-po-engine' },
       { icon: Database,         label: 'Vendors',         path: '/purchase/vendors' },
     ],
