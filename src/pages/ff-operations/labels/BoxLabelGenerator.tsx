@@ -107,15 +107,16 @@ export default function BoxLabelGenerator() {
         .select('id, name, is_active')
         .eq('is_active', true)
         .order('name');
-      if (error) {
-        // Fallback: fetch without is_active filter in case column schema mismatch
-        const { data: allHubs } = await supabase
-          .from('hubs')
-          .select('id, name')
-          .order('name');
-        return allHubs ?? [];
-      }
-      return data ?? [];
+      const rows = error
+        ? ((await supabase.from('hubs').select('id, name').order('name')).data ?? [])
+        : (data ?? []);
+      // Deduplicate by name — DB may have duplicate seed rows
+      const seen = new Set<string>();
+      return rows.filter((h: any) => {
+        if (seen.has(h.name)) return false;
+        seen.add(h.name);
+        return true;
+      });
     },
   });
 
