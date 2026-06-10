@@ -287,10 +287,20 @@ function BuyDialog({
         });
       if (payErr) throw payErr;
 
-      // 6. Update po_item status → ordered
+      // 6. Accumulate ordered_qty → set partial or ordered
+      const { data: currentPOItem } = await supabase
+        .from('purchase_order_items')
+        .select('ordered_qty, required_qty')
+        .eq('id', item.id)
+        .single();
+      const prevOrdered  = Number(currentPOItem?.ordered_qty ?? 0);
+      const newOrdered   = prevOrdered + buyQty;
+      const requiredQty  = Number(currentPOItem?.required_qty ?? item.required_qty ?? 0);
+      const newItemStatus = newOrdered >= requiredQty ? 'ordered' : 'partial';
+
       await supabase
         .from('purchase_order_items')
-        .update({ status: 'ordered', ordered_qty: buyQty, unit_price: rate, total_price: amount })
+        .update({ status: newItemStatus, ordered_qty: newOrdered, unit_price: rate, total_price: amount })
         .eq('id', item.id);
 
       toast.success(`✅ Purchase recorded — payment sent to FF Ops for approval`);
@@ -350,6 +360,23 @@ function BuyDialog({
               </div>
             )}
           </div>
+
+          {/* Already bought (split vendor) banner */}
+          {(item?.ordered_qty ?? 0) > 0 && (
+            <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 flex items-center gap-3">
+              <CheckCircle2 className="h-4 w-4 text-orange-500 shrink-0" />
+              <div className="flex-1">
+                <p className="text-xs text-orange-600 font-semibold">Split Buy — Already Purchased</p>
+                <p className="text-sm font-bold text-orange-800">
+                  {Number(item.ordered_qty).toFixed(1)} {item?.unit || 'kg'} bought from previous vendor
+                  {' '}&bull;{' '}
+                  <span className="text-orange-600">
+                    Still need {Math.max(0, Number(item.required_qty) - Number(item.ordered_qty)).toFixed(1)} {item?.unit || 'kg'} more
+                  </span>
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Vendor type toggle */}
           <div className="flex gap-3">
@@ -572,6 +599,7 @@ function POCard({
   const [open, setOpen] = useState(true); // default open so exec sees items immediately
 
   const itemsDone  = po.items.filter(i => ['ordered', 'received'].includes(i.status)).length;
+  const itemsPartial = po.items.filter(i => i.status === 'partial').length;
   const itemsTotal = po.items.length;
   const pct = itemsTotal > 0 ? Math.round((itemsDone / itemsTotal) * 100) : 0;
 
@@ -600,7 +628,10 @@ function POCard({
           </div>
           <div>
             <p className="text-[11px] text-gray-400 uppercase tracking-wide">Progress</p>
-            <p className="text-sm font-semibold text-gray-700">{itemsDone}/{itemsTotal} items</p>
+            <p className="text-sm font-semibold text-gray-700">
+              {itemsDone}/{itemsTotal} done
+              {itemsPartial > 0 && <span className="ml-1 text-orange-500">· {itemsPartial} partial</span>}
+            </p>
           </div>
           {/* progress bar */}
           <div className="flex-1 max-w-32">
@@ -621,29 +652,42 @@ function POCard({
           {po.items.length === 0 ? (
             <p className="px-5 py-4 text-sm text-gray-400">No items in this PO.</p>
           ) : po.items.map(item => {
-            const done = ['ordered', 'received'].includes(item.status);
+            const done    = item.status === 'received' || item.status === 'ordered';
+            const partial = item.status === 'partial';
+            const alreadyBought = Number(item.ordered_qty ?? 0);
+            const stillNeed = Math.max(0, Number(item.required_qty) - alreadyBought);
             return (
               <div key={item.id}
                 className={cn(
                   'flex items-center gap-4 px-5 py-3.5 transition-colors',
-                  done ? 'bg-green-50' : 'hover:bg-gray-50'
+                  done    ? 'bg-green-50'  :
+                  partial ? 'bg-orange-50' : 'hover:bg-gray-50'
                 )}>
                 {/* Product */}
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <Package className={cn('h-4 w-4 shrink-0', done ? 'text-green-500' : 'text-gray-400')} />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Package className={cn('h-4 w-4 shrink-0',
+                      done ? 'text-green-500' : partial ? 'text-orange-400' : 'text-gray-400')} />
                     <p className="text-sm font-semibold text-gray-800 truncate">
                       {item.product_name || item.item_name || '—'}
                     </p>
                     {done && (
                       <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-[10px] font-bold">
-                        <CheckCircle2 size={9} /> Bought
+                        <CheckCircle2 size={9} /> Fully Bought
+                      </span>
+                    )}
+                    {partial && (
+                      <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-[10px] font-bold">
+                        <Package size={9} /> {alreadyBought.toFixed(1)}/{Number(item.required_qty).toFixed(1)} {item.unit || 'kg'}
                       </span>
                     )}
                   </div>
                   <p className="text-xs text-gray-500 ml-6">
                     Required: <span className="font-semibold">{Number(item.required_qty).toFixed(1)} {item.unit || 'kg'}</span>
-                    {item.estimated_price && (
+                    {partial && (
+                      <span className="ml-2 text-orange-600 font-semibold">· {stillNeed.toFixed(1)} {item.unit || 'kg'} still needed</span>
+                    )}
+                    {item.estimated_price && !partial && (
                       <span className="ml-2">Est. ₹{Number(item.estimated_price).toLocaleString('en-IN')}</span>
                     )}
                   </p>
@@ -657,11 +701,13 @@ function POCard({
                     'shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all',
                     done
                       ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-green-600 hover:bg-green-700 text-white shadow-sm hover:shadow-md'
+                      : partial
+                        ? 'bg-orange-500 hover:bg-orange-600 text-white shadow-sm hover:shadow-md'
+                        : 'bg-green-600 hover:bg-green-700 text-white shadow-sm hover:shadow-md'
                   )}
                 >
                   <ShoppingBag size={13} />
-                  {done ? 'Done' : 'Buy'}
+                  {done ? 'Done' : partial ? 'Buy More' : 'Buy'}
                 </button>
               </div>
             );
@@ -721,8 +767,8 @@ export default function BuyPage() {
     );
   }
 
-  const totalItems  = orders.reduce((s, po) => s + po.items.length, 0);
-  const boughtItems = orders.reduce((s, po) => s + po.items.filter(i => ['ordered','received'].includes(i.status)).length, 0);
+  const totalItems   = orders.reduce((s, po) => s + po.items.length, 0);
+  const boughtItems  = orders.reduce((s, po) => s + po.items.filter(i => ['ordered','received'].includes(i.status)).length, 0);
   const pendingItems = totalItems - boughtItems;
 
   return (
@@ -748,9 +794,9 @@ export default function BuyPage() {
       {/* Quick stats */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Total Items',   value: totalItems,   color: 'text-blue-700',   bg: 'bg-blue-50'  },
-          { label: 'Pending Buy',   value: pendingItems, color: 'text-amber-700',  bg: 'bg-amber-50' },
-          { label: 'Bought',        value: boughtItems,  color: 'text-green-700',  bg: 'bg-green-50' },
+          { label: 'Total Items',  value: totalItems,   color: 'text-blue-700',  bg: 'bg-blue-50'  },
+          { label: 'Pending Buy',  value: pendingItems, color: 'text-amber-700', bg: 'bg-amber-50' },
+          { label: 'Bought',       value: boughtItems,  color: 'text-green-700', bg: 'bg-green-50' },
         ].map(s => (
           <div key={s.label} className={cn('rounded-xl border border-gray-100 px-4 py-4 shadow-sm', s.bg)}>
             <p className="text-[12px] font-medium text-slate-500 mb-1">{s.label}</p>
