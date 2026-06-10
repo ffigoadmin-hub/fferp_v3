@@ -62,10 +62,13 @@ interface BuyFormState {
   // purchase details
   buyQty: string;
   rate: string;
+  amount: string;            // manual entry
   itemPhotoFile: File | null;
   itemPhotoUrl: string;
   scalePhotoFile: File | null;
   scalePhotoUrl: string;
+  proofPhotoFile: File | null;   // vendor payment proof / handwritten slip
+  proofPhotoUrl: string;
   notes: string;
 }
 
@@ -73,9 +76,10 @@ const EMPTY_FORM: BuyFormState = {
   vendorType: 'static',
   selectedVendor: null,
   dynName: '', dynPhone: '', dynBank: '', dynAccount: '', dynIfsc: '', dynUpi: '', dynGst: '',
-  buyQty: '', rate: '',
+  buyQty: '', rate: '', amount: '',
   itemPhotoFile: null, itemPhotoUrl: '',
   scalePhotoFile: null, scalePhotoUrl: '',
+  proofPhotoFile: null, proofPhotoUrl: '',
   notes: '',
 };
 
@@ -153,26 +157,26 @@ function BuyDialog({
     v.name.toLowerCase().includes(vendorSearch.toLowerCase())
   );
 
-  const handlePhotoFile = (key: 'itemPhotoFile' | 'scalePhotoFile', urlKey: 'itemPhotoUrl' | 'scalePhotoUrl', file: File) => {
+  const handlePhotoFile = (key: 'itemPhotoFile' | 'scalePhotoFile' | 'proofPhotoFile', urlKey: 'itemPhotoUrl' | 'scalePhotoUrl' | 'proofPhotoUrl', file: File) => {
     const url = URL.createObjectURL(file);
     setForm(f => ({ ...f, [key]: file, [urlKey]: url }));
   };
 
-  const removePhoto = (key: 'itemPhotoFile' | 'scalePhotoFile', urlKey: 'itemPhotoUrl' | 'scalePhotoUrl') => {
+  const removePhoto = (key: 'itemPhotoFile' | 'scalePhotoFile' | 'proofPhotoFile', urlKey: 'itemPhotoUrl' | 'scalePhotoUrl' | 'proofPhotoUrl') => {
     setForm(f => {
-      if (f[urlKey]) URL.revokeObjectURL(f[urlKey]);
+      if (f[urlKey]) URL.revokeObjectURL(f[urlKey] as string);
       return { ...f, [key]: null, [urlKey]: '' };
     });
   };
 
   const buyQty = Number(form.buyQty) || 0;
   const rate = Number(form.rate) || 0;
-  const amount = buyQty * rate;
+  const amount = Number(form.amount) || 0;
 
   const canSave =
     (form.vendorType === 'static' ? !!form.selectedVendor : !!form.dynName.trim()) &&
-    buyQty > 0 && rate > 0 &&
-    !!form.itemPhotoUrl && !!form.scalePhotoUrl;
+    buyQty > 0 && rate > 0 && amount > 0 &&
+    !!form.itemPhotoUrl && !!form.scalePhotoUrl && !!form.proofPhotoUrl;
 
   // ── Upload helper ──
   const uploadPhoto = async (file: File, path: string): Promise<string> => {
@@ -219,12 +223,14 @@ function BuyDialog({
 
       // 2. Upload photos
       const ts = Date.now();
-      const itemPhotoPath = `purchase-receipts/${po.id}/${item.id}-item-${ts}.jpg`;
+      const itemPhotoPath  = `purchase-receipts/${po.id}/${item.id}-item-${ts}.jpg`;
       const scalePhotoPath = `purchase-receipts/${po.id}/${item.id}-scale-${ts}.jpg`;
+      const proofPhotoPath = `purchase-receipts/${po.id}/${item.id}-proof-${ts}.jpg`;
 
-      const [itemPhotoPublic, scalePhotoPublic] = await Promise.all([
+      const [itemPhotoPublic, scalePhotoPublic, proofPhotoPublic] = await Promise.all([
         uploadPhoto(form.itemPhotoFile!, itemPhotoPath),
         uploadPhoto(form.scalePhotoFile!, scalePhotoPath),
+        uploadPhoto(form.proofPhotoFile!, proofPhotoPath),
       ]);
 
       // 3. Insert purchase_entries
@@ -262,6 +268,7 @@ function BuyDialog({
         total: amount,
         item_photo_url: itemPhotoPublic,
         scale_photo_url: scalePhotoPublic,
+        payment_proof_url: proofPhotoPublic,
       }];
 
       const { error: payErr } = await supabase
@@ -291,8 +298,9 @@ function BuyDialog({
       onClose();
 
       // Cleanup object URLs
-      if (form.itemPhotoUrl) URL.revokeObjectURL(form.itemPhotoUrl);
+      if (form.itemPhotoUrl)  URL.revokeObjectURL(form.itemPhotoUrl);
       if (form.scalePhotoUrl) URL.revokeObjectURL(form.scalePhotoUrl);
+      if (form.proofPhotoUrl) URL.revokeObjectURL(form.proofPhotoUrl);
       setForm(EMPTY_FORM);
 
     } catch (err: any) {
@@ -303,8 +311,9 @@ function BuyDialog({
   };
 
   const handleClose = () => {
-    if (form.itemPhotoUrl) URL.revokeObjectURL(form.itemPhotoUrl);
+    if (form.itemPhotoUrl)  URL.revokeObjectURL(form.itemPhotoUrl);
     if (form.scalePhotoUrl) URL.revokeObjectURL(form.scalePhotoUrl);
+    if (form.proofPhotoUrl) URL.revokeObjectURL(form.proofPhotoUrl);
     setForm(EMPTY_FORM);
     setVendorSearch('');
     setShowVendorList(false);
@@ -467,18 +476,22 @@ function BuyDialog({
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-green-400"
               />
             </div>
-            <div className="flex flex-col justify-end">
+            <div>
               <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">
-                Amount
+                Amount (₹) *
               </label>
-              <div className="px-3 py-2.5 bg-green-50 border border-green-200 rounded-xl text-sm font-black text-green-800">
-                {amount > 0 ? `₹${amount.toLocaleString('en-IN')}` : '₹0'}
-              </div>
+              <input
+                type="number" min="0"
+                value={form.amount}
+                onChange={e => set('amount', e.target.value)}
+                placeholder="Enter amount"
+                className="w-full px-3 py-2.5 border border-green-300 bg-green-50 rounded-xl text-sm font-bold text-green-800 focus:outline-none focus:ring-2 focus:ring-green-400"
+              />
             </div>
           </div>
 
           {/* Photo uploads */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-3">
             <PhotoBox
               label="Item Photo" icon={ImageIcon} required
               url={form.itemPhotoUrl}
@@ -491,10 +504,17 @@ function BuyDialog({
               onFile={f => handlePhotoFile('scalePhotoFile', 'scalePhotoUrl', f)}
               onRemove={() => removePhoto('scalePhotoFile', 'scalePhotoUrl')}
             />
+            <PhotoBox
+              label="Payment Proof / Slip" icon={Banknote} required
+              url={form.proofPhotoUrl}
+              onFile={f => handlePhotoFile('proofPhotoFile', 'proofPhotoUrl', f)}
+              onRemove={() => removePhoto('proofPhotoFile', 'proofPhotoUrl')}
+            />
           </div>
-          {!form.scalePhotoUrl && (
+          {(!form.scalePhotoUrl || !form.proofPhotoUrl) && (
             <p className="text-[11px] text-red-500 font-semibold flex items-center gap-1">
-              <AlertCircle size={11} /> Weight scale photo is mandatory
+              <AlertCircle size={11} />
+              {!form.proofPhotoUrl ? 'Vendor payment proof / slip photo is mandatory' : 'Weight scale photo is mandatory'}
             </p>
           )}
 
@@ -757,7 +777,7 @@ export default function BuyPage() {
               onClick={() => setShowAll(true)}
               className="w-full py-3 text-sm text-blue-600 font-semibold hover:underline"
             >
-              Load more POs…
+              Load more POs...
             </button>
           )}
         </div>
