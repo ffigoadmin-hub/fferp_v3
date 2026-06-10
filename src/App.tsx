@@ -949,4 +949,4 @@ const App = () => {
   );
 };
 
-ex
+export default App;
