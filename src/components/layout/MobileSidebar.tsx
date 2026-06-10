@@ -1023,4 +1023,32 @@ export function MobileSidebar({ onClose }: MobileSidebarProps) {
                         )}
                       >
                         <Icon className="w-4 h-4 shrink-0" />
-                        <span>{item.lab
+                        <span>{item.label}</span>
+                      </NavLink>
+                    );
+                  })}
+                </CollapsibleContent>
+              </Collapsible>
+            );
+          })}
+        </nav>
+      </ScrollArea>
+
+      {/* Footer */}
+      {!(userRole === 'smo' && userDepartment.includes('site visit')) && (
+        <div className="border-t border-[#1e3a5f] px-2 py-3">
+          <a
+            href="https://forms.gle/WDoNcZUXkp7BYZvZ7"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium text-[#4a6fa5] hover:text-white hover:bg-[#1a3450] transition-colors duration-150"
+          >
+            <MessageSquarePlus className="w-4 h-4 shrink-0" />
+            <span>Feedback &amp; Suggestions</span>
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
