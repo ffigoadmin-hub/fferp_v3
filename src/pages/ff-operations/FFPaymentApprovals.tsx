@@ -35,11 +35,11 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const APPROVAL_CHAIN = [
-  'pending_ff_ops', 'pending_gm', 'pending_l1', 'pending_auditor', 'pending_ceo', 'approved',
+  'pending_ff_ops', 'pending_l1', 'pending_gm', 'pending_auditor', 'pending_ceo', 'approved',
 ];
 
 function ApprovalProgress({ status }: { status: string }) {
-  const steps = ['FF Ops', 'GM', 'L1', 'Auditor', 'CEO', 'Done'];
+  const steps = ['FF Ops', 'L1', 'GM', 'Auditor', 'CEO', 'Done'];
   const idx = APPROVAL_CHAIN.indexOf(status);
   if (status === 'paid') return <span className="text-xs text-green-600 font-semibold">✓ Paid</span>;
   if (status === 'rejected') return <span className="text-xs text-red-500 font-semibold">✗ Rejected</span>;
@@ -367,9 +367,9 @@ function PaymentCard({
 
 // ── Next status map ───────────────────────────────────────────
 const NEXT_STATUS: Record<string, string> = {
-  ff_operations_manager: 'pending_gm',
-  gm:      'pending_l1',
-  l1_manager: 'pending_auditor',
+  ff_operations_manager: 'pending_l1',
+  l1_manager: 'pending_gm',
+  gm:      'pending_auditor',
   auditor: 'pending_ceo',
   ceo:     'approved',
   admin:   'approved',
@@ -633,3 +633,4 @@ export default function FFPaymentApprovals() {
     </div>
   );
 }
+
