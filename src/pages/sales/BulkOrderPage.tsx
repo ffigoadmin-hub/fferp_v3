@@ -267,7 +267,6 @@ export default function BulkOrderPage() {
           notes:         [String(r.salesperson ?? '').trim() ? `By: ${String(r.salesperson).trim()}` : '', String(r.notes ?? '').trim()].filter(Boolean).join(' | ') || null,
           hub_id:        hubMap[hubName.toLowerCase()] ?? null,
           hub_name:      hubName || null,
-          shift:         Number(r.shift) || null,
           ...(isRealUuid ? { created_by: user!.id } : {}),
         };
       }).filter(o => o.customer_id); // skip rows with no customer
@@ -831,3 +830,4 @@ export default function BulkOrderPage() {
     </div>
   );
 }
+                                                  
