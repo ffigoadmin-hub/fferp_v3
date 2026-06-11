@@ -1028,7 +1028,6 @@ const navigationConfig: NavGroup[] = [
     roles: ['purchase_manager', 'purchase_head'],
     items: [
       { icon: Plus,        label: 'New FF Vendor Payment',    path: '/ff/vendor-payment/new' },
-      { icon: CreditCard,  label: 'Submit Vendor Payment',    path: '/purchase/payment-form' },
       { icon: History,     label: 'My Submitted Payments',    path: '/my-submitted-payments' },
       { icon: History,     label: 'Payments Made',            path: '/purchase/payments-made' },
     ],
@@ -1386,3 +1385,4 @@ export function Sidebar() {
   );
 }
 
+                                                                                                
