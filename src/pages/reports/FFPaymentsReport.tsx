@@ -52,7 +52,7 @@ export default function FFPaymentsReport() {
       let q = (supabase as any)
         .from('ff_vendor_payments')
         .select(`id, created_at, payment_status, gross_amount, deduction_amount, net_amount, utr_number, paid_at,
-          vendors(name, bank_name, bank_account, bank_ifsc),
+          vendors(name, bank_name, account_number, ifsc_code),
           hubs(name)`)
         .gte('created_at', from + 'T00:00:00')
         .lte('created_at', to   + 'T23:59:59')
@@ -106,8 +106,8 @@ export default function FFPaymentsReport() {
           'UTR':            p.utr_number || '—',
           'Paid On':        p.paid_at ? format(new Date(p.paid_at), 'dd MMM yyyy') : '—',
           'Bank':           p.vendors?.bank_name    || '—',
-          'Account':        p.vendors?.bank_account || '—',
-          'IFSC':           p.vendors?.bank_ifsc    || '—',
+          'Account':        p.vendors?.account_number || '—',
+          'IFSC':           p.vendors?.ifsc_code    || '—',
         }))
       : transportPayments.map(p => ({
           'Created':        format(new Date(p.created_at), 'dd MMM yyyy'),
