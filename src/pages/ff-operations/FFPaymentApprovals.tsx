@@ -369,7 +369,7 @@ function PaymentCard({
 const NEXT_STATUS: Record<string, string> = {
   ff_operations_manager: 'pending_l1',
   l1_manager: 'pending_gm',
-  gm:      'pending_auditor',
+  gm:         'pending_auditor',
   auditor: 'pending_ceo',
   ceo:     'approved',
   admin:   'approved',
@@ -404,7 +404,7 @@ export default function FFPaymentApprovals() {
   };
 
   // Fetch vendor payments
-  const { data: vendorPayments = [], isLoading: vLoading, refetch: vRefetch, isRefetching: vRefetching } = useQuery({
+  const { data: vendorPayments = [], isLoading: vLoading, refetch: vRefetch } = useQuery({
     queryKey: ['ff-vendor-payments', statusFilter, role],
     queryFn: async () => {
       let q = (supabase as any)
@@ -429,7 +429,7 @@ export default function FFPaymentApprovals() {
   });
 
   // Fetch transport payments
-  const { data: transportPayments = [], isLoading: tLoading, refetch: tRefetch, isRefetching: tRefetching } = useQuery({
+  const { data: transportPayments = [], isLoading: tLoading, refetch: tRefetch } = useQuery({
     queryKey: ['ff-transport-payments', statusFilter, role],
     queryFn: async () => {
       let q = (supabase as any)
@@ -548,10 +548,9 @@ export default function FFPaymentApprovals() {
         </div>
         <button
           onClick={() => { vRefetch(); tRefetch(); }}
-          disabled={vRefetching || tRefetching}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50 transition disabled:opacity-60"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50 transition"
         >
-          <RefreshCw className={"w-3.5 h-3.5 " + ((vRefetching || tRefetching) ? "animate-spin" : "")} /> {vRefetching || tRefetching ? "Refreshing..." : "Refresh"}
+          <RefreshCw className="w-3.5 h-3.5" /> Refresh
         </button>
       </div>
 
@@ -633,5 +632,3 @@ export default function FFPaymentApprovals() {
       )}
     </div>
   );
-}
-
