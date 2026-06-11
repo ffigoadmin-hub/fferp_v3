@@ -30,14 +30,14 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const APPROVAL_CHAIN = [
-  'pending_ff_ops', 'pending_gm', 'pending_l1', 'pending_auditor', 'pending_ceo', 'approved',
+  'pending_ff_ops', 'pending_l1', 'pending_gm', 'pending_auditor', 'pending_ceo', 'approved',
 ];
 
 function ApprovalTimeline({ status }: { status: string }) {
   const steps = [
     { key: 'pending_ff_ops',   label: 'FF Ops' },
-    { key: 'pending_gm',       label: 'GM' },
     { key: 'pending_l1',       label: 'L1' },
+    { key: 'pending_gm',       label: 'GM' },
     { key: 'pending_auditor',  label: 'Auditor' },
     { key: 'pending_ceo',      label: 'CEO' },
     { key: 'approved',         label: 'Approved' },
