@@ -293,7 +293,7 @@ function PaymentCard({
                 <span className="font-semibold text-gray-800"><b>Net:</b> ₹{Number(payment.net_amount || 0).toLocaleString('en-IN')}</span>
               </div>
               {/* Bank Details — shown to approvers so they know where money goes */}
-              {payment.vendors && (payment.vendors.bank_account || payment.vendors.bank_ifsc) && (
+              {payment.vendors && (payment.vendors.account_number || payment.vendors.ifsc_code) && (
                 <div className="mb-3 p-3 rounded-lg border border-blue-100 bg-blue-50/60">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-500 mb-1.5 flex items-center gap-1">
                     <Building2 className="w-3 h-3" /> Bank Transfer Details
@@ -305,11 +305,11 @@ function PaymentCard({
                     </div>
                     <div>
                       <p className="text-gray-400 text-[10px]">Account No.</p>
-                      <p className="font-semibold text-gray-800 font-mono">{payment.vendors.bank_account || '—'}</p>
+                      <p className="font-semibold text-gray-800 font-mono">{payment.vendors.account_number || '—'}</p>
                     </div>
                     <div>
                       <p className="text-gray-400 text-[10px]">IFSC</p>
-                      <p className="font-semibold text-gray-800 font-mono">{payment.vendors.bank_ifsc || '—'}</p>
+                      <p className="font-semibold text-gray-800 font-mono">{payment.vendors.ifsc_code || '—'}</p>
                     </div>
                   </div>
                   {payment.vendors.phone && (
@@ -409,7 +409,7 @@ export default function FFPaymentApprovals() {
     queryFn: async () => {
       let q = (supabase as any)
         .from('ff_vendor_payments')
-        .select(`*, vendors(name, bank_name, bank_account, bank_ifsc, phone), hubs(name)`)
+        .select(`*, vendors(name, bank_name, account_number, ifsc_code, phone), hubs(name)`)
         .order('created_at', { ascending: false });
 
       if (statusFilter === 'pending') {
