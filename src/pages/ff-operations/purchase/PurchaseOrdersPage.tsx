@@ -14,11 +14,10 @@ import {
 import { cn } from '@/lib/utils';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-// Items stored as JSON in purchase_orders.items by purchaseStore / EOD engine
 interface POItem {
-  id: number | string;
-  itemName?: string;       // purchaseStore format
-  product_name?: string;   // purchase_order_items table format
+  id?: number | string;
+  itemName?: string;
+  product_name?: string;
   item_name?: string;
   quantity?: number;
   required_qty?: number;
@@ -46,21 +45,20 @@ interface PurchaseOrder {
   items: POItem[];
 }
 
-// Helper — get item name from either format
 function itemName(i: POItem) { return i.itemName || i.product_name || i.item_name || '—'; }
 function itemQty(i: POItem)  { return Number(i.quantity ?? i.required_qty ?? 0); }
 function itemRate(i: POItem) { return Number(i.rate ?? i.unit_price ?? i.estimated_price ?? 0); }
 
 // ── Status config ──────────────────────────────────────────────────────────────
 const STATUS: Record<string, { label: string; cls: string; icon: ElementType }> = {
-  pending_approval: { label: 'Pending Approval', cls: 'bg-yellow-100 text-yellow-700', icon: Clock         },
-  pending:          { label: 'Pending',           cls: 'bg-amber-100  text-amber-700',  icon: Clock         },
-  approved:         { label: 'Approved',          cls: 'bg-blue-100   text-blue-700',   icon: CheckCircle2  },
-  ordered:          { label: 'Ordered',           cls: 'bg-purple-100 text-purple-700', icon: ShoppingBag   },
-  received:         { label: 'Received',          cls: 'bg-green-100  text-green-700',  icon: CheckCircle2  },
-  cancelled:        { label: 'Cancelled',         cls: 'bg-red-100    text-red-600',    icon: XCircle       },
-  partial:          { label: 'Partial',           cls: 'bg-orange-100 text-orange-700', icon: Package       },
-  open:             { label: 'Open',              cls: 'bg-sky-100    text-sky-700',    icon: CheckCircle2  },
+  pending_approval: { label: 'Pending Approval', cls: 'bg-yellow-100 text-yellow-700', icon: Clock        },
+  pending:          { label: 'Pending',           cls: 'bg-amber-100  text-amber-700',  icon: Clock        },
+  approved:         { label: 'Approved',          cls: 'bg-blue-100   text-blue-700',   icon: CheckCircle2 },
+  ordered:          { label: 'Ordered',           cls: 'bg-purple-100 text-purple-700', icon: ShoppingBag  },
+  received:         { label: 'Received',          cls: 'bg-green-100  text-green-700',  icon: CheckCircle2 },
+  cancelled:        { label: 'Cancelled',         cls: 'bg-red-100    text-red-600',    icon: XCircle      },
+  partial:          { label: 'Partial',           cls: 'bg-orange-100 text-orange-700', icon: Package      },
+  open:             { label: 'Open',              cls: 'bg-sky-100    text-sky-700',    icon: CheckCircle2 },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -83,7 +81,6 @@ function PORow({ po }: { po: PurchaseOrder }) {
 
   return (
     <div className="border border-gray-100 rounded-xl overflow-hidden shadow-sm">
-      {/* Header row */}
       <button
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center gap-4 px-5 py-4 bg-white hover:bg-slate-50 transition-colors text-left"
@@ -93,14 +90,12 @@ function PORow({ po }: { po: PurchaseOrder }) {
           : <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />}
 
         <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3 items-center">
-          {/* PO number + hub */}
           <div>
             <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wide">PO Number</p>
             <p className="text-sm font-bold text-blue-700">{po.po_number}</p>
             {po.hub_name && <p className="text-[11px] text-gray-500 mt-0.5">{po.hub_name}</p>}
           </div>
 
-          {/* Date */}
           <div className="flex items-center gap-2">
             <Calendar className="h-3.5 w-3.5 text-gray-400" />
             <div>
@@ -111,7 +106,6 @@ function PORow({ po }: { po: PurchaseOrder }) {
             </div>
           </div>
 
-          {/* Items count + amount */}
           <div className="flex items-center gap-2">
             <Hash className="h-3.5 w-3.5 text-gray-400" />
             <div>
@@ -122,13 +116,11 @@ function PORow({ po }: { po: PurchaseOrder }) {
             </div>
           </div>
 
-          {/* Status */}
           <div className="flex justify-end md:justify-start">
             <StatusBadge status={po.status} />
           </div>
         </div>
 
-        {/* Buy button */}
         <button
           onClick={e => {
             e.stopPropagation();
@@ -141,7 +133,6 @@ function PORow({ po }: { po: PurchaseOrder }) {
         </button>
       </button>
 
-      {/* Items table */}
       {open && (
         <div className="bg-gray-50 border-t border-gray-100 px-5 py-3">
           {items.length === 0 ? (
@@ -189,7 +180,7 @@ export default function PurchaseOrdersPage() {
   const { data: orders = [], isLoading, refetch } = useQuery({
     queryKey: ['purchase-orders-exec', hubId],
     queryFn: async () => {
-      let q = supabase
+      let q = (supabase as any)
         .from('purchase_orders')
         .select('id, po_number, hub_id, hub_name, status, total_amount, sub_total, vendor_name, delivery_date, order_date, created_at, notes, items')
         .order('created_at', { ascending: false });
@@ -198,7 +189,6 @@ export default function PurchaseOrdersPage() {
 
       const { data, error } = await q;
       if (error) throw error;
-      // Ensure items is always an array
       return (data ?? []).map((po: any) => ({
         ...po,
         items: Array.isArray(po.items) ? po.items : [],
@@ -213,7 +203,6 @@ export default function PurchaseOrdersPage() {
       ? orders.filter(o => o.status === 'pending' || o.status === 'pending_approval')
       : orders.filter(o => o.status === filter);
 
-  // Group by date (order_date → delivery_date → created_at date)
   const grouped = filtered.reduce<Record<string, PurchaseOrder[]>>((acc, po) => {
     const raw = po.order_date ?? po.delivery_date ?? po.created_at;
     const key = raw ? raw.slice(0, 10) : 'Unknown';
@@ -223,10 +212,10 @@ export default function PurchaseOrdersPage() {
   }, {});
 
   const tabs: Array<{ key: typeof filter; label: string }> = [
-    { key: 'all',      label: 'All POs'   },
-    { key: 'pending',  label: 'Pending'   },
-    { key: 'ordered',  label: 'Ordered'   },
-    { key: 'received', label: 'Received'  },
+    { key: 'all',      label: 'All POs'  },
+    { key: 'pending',  label: 'Pending'  },
+    { key: 'ordered',  label: 'Ordered'  },
+    { key: 'received', label: 'Received' },
   ];
 
   if (isLoading) {
@@ -239,16 +228,13 @@ export default function PurchaseOrdersPage() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12 pt-4 px-4">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-[22px] font-bold text-slate-800 tracking-tight flex items-center gap-2">
             <ShoppingCart className="h-6 w-6 text-blue-600" />
             My Purchase Orders
           </h1>
-          <p className="text-[13px] text-slate-500">
-            All EOD-generated POs assigned to your hub
-          </p>
+          <p className="text-[13px] text-slate-500">All EOD-generated POs assigned to your hub</p>
         </div>
         <button
           onClick={() => refetch()}
@@ -259,13 +245,12 @@ export default function PurchaseOrdersPage() {
         </button>
       </div>
 
-      {/* Stats bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total POs',  value: orders.length,                                          color: 'text-blue-700',   bg: 'bg-blue-50'   },
-          { label: 'Pending',    value: orders.filter(o => o.status === 'pending' || o.status === 'pending_approval').length, color: 'text-amber-700', bg: 'bg-amber-50' },
-          { label: 'Ordered',    value: orders.filter(o => o.status === 'ordered').length,       color: 'text-purple-700', bg: 'bg-purple-50' },
-          { label: 'Received',   value: orders.filter(o => o.status === 'received').length,      color: 'text-green-700',  bg: 'bg-green-50'  },
+          { label: 'Total POs', value: orders.length,                                                                              color: 'text-blue-700',   bg: 'bg-blue-50'   },
+          { label: 'Pending',   value: orders.filter(o => o.status === 'pending' || o.status === 'pending_approval').length,       color: 'text-amber-700',  bg: 'bg-amber-50'  },
+          { label: 'Ordered',   value: orders.filter(o => o.status === 'ordered').length,                                          color: 'text-purple-700', bg: 'bg-purple-50' },
+          { label: 'Received',  value: orders.filter(o => o.status === 'received').length,                                         color: 'text-green-700',  bg: 'bg-green-50'  },
         ].map(s => (
           <div key={s.label} className={cn('rounded-xl border border-gray-100 px-5 py-4 shadow-sm', s.bg)}>
             <p className="text-[12px] font-medium text-slate-500 mb-1">{s.label}</p>
@@ -274,17 +259,14 @@ export default function PurchaseOrdersPage() {
         ))}
       </div>
 
-      {/* Filter tabs */}
-      <div className="flex gap-2 border-b border-gray-200 pb-0">
+      <div className="flex gap-2 border-b border-gray-200">
         {tabs.map(t => (
           <button
             key={t.key}
             onClick={() => setFilter(t.key)}
             className={cn(
               'px-4 py-2 text-sm font-semibold border-b-2 transition-colors -mb-px',
-              filter === t.key
-                ? 'border-blue-600 text-blue-700'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+              filter === t.key ? 'border-blue-600 text-blue-700' : 'border-transparent text-gray-500 hover:text-gray-700'
             )}
           >
             {t.label}
@@ -297,7 +279,32 @@ export default function PurchaseOrdersPage() {
         ))}
       </div>
 
-      {/* PO list grouped by EOD date */}
       {Object.keys(grouped).length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-gray-400">
- 
+          <Package className="h-12 w-12 mb-3 opacity-30" />
+          <p className="font-medium">No purchase orders found</p>
+          <p className="text-sm">EOD-generated POs will appear here</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {Object.entries(grouped)
+            .sort(([a], [b]) => b.localeCompare(a))
+            .map(([date, pos]) => (
+              <div key={date}>
+                <div className="flex items-center gap-2 mb-3">
+                  <Calendar className="h-4 w-4 text-gray-400" />
+                  <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider">
+                    {date !== 'Unknown' ? format(new Date(date), 'd MMMM yyyy') : 'Unknown Date'}
+                  </h3>
+                  <span className="text-xs text-gray-400">({pos.length} PO{pos.length !== 1 ? 's' : ''})</span>
+                </div>
+                <div className="space-y-2">
+                  {pos.map(po => <PORow key={po.id} po={po} />)}
+                </div>
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
