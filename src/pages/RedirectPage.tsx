@@ -43,7 +43,7 @@ export function RedirectPage() {
         palm_cafe_manager:         '/cafe/manager',
         director:                  '/director/workflow',
         // ── Farmers Factory roles ────────────────────────────
-        ff_operations_manager:     '/ff-operations/gm-dashboard',
+        ff_operations_manager:     '/ff-operations',
         purchase_manager:          '/purchase',
         purchase_head:             '/purchase',
         warehouse_manager:         '/warehouse',
@@ -89,10 +89,16 @@ export function RedirectPage() {
         }
       } else {
         // Roles that participate in the shift system — only these get redirected to /shift/dashboard
+        // shift_employee (purchase exec) always lands on /purchase — no shift check needed
+        if (normalizedRole === 'shift_employee') {
+          navigate('/purchase', { replace: true });
+          return;
+        }
+
         const SHIFT_ELIGIBLE_ROLES = new Set([
           'hub_manager', 'purchase_manager', 'purchase_head',
           'field_executive', 'tele_caller', 'bde', 'driver',
-          'back_office', 'shift_employee', 'farmmanager',
+          'back_office', 'farmmanager',
         ]);
 
         if (SHIFT_ELIGIBLE_ROLES.has(normalizedRole)) {
@@ -182,12 +188,4 @@ export function RedirectPage() {
         <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-6 relative z-10" />
         <motion.p
           initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-zinc-400 font-medium tracking-wide relative z-10"
-        >
-          Synchronizing Workspace...
-        </motion.p>
-      </div>
-    </div>
-  );
-}
+          animate={{ opa
