@@ -17,7 +17,7 @@ export function RedirectPage() {
 
     try {
       const roleRoutes: Record<string, string> = {
-        // ── IGO Chain roles ──────────────────────────────────
+        // \u2500\u2500 IGO Chain roles \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
         employee:                  '/employee-dashboard',
         hr:                        '/hr-dashboard',
         admin:                     '/admin-dashboard',
@@ -42,7 +42,7 @@ export function RedirectPage() {
         cafe_manager:              '/cafe/manager',
         palm_cafe_manager:         '/cafe/manager',
         director:                  '/director/workflow',
-        // ── Farmers Factory roles ────────────────────────────
+        // \u2500\u2500 Farmers Factory roles \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
         ff_operations_manager:     '/ff-operations',
         purchase_manager:          '/purchase',
         purchase_head:             '/purchase',
@@ -68,7 +68,6 @@ export function RedirectPage() {
         return;
       }
 
-      // Optimized: Parallelized checks
       if (normalizedRole === 'employee') {
         const [shiftCheck, weekOffCheck] = await Promise.all([
           supabase.from('shift_user_assignments')
@@ -88,8 +87,7 @@ export function RedirectPage() {
           destination = '/my-tasks';
         }
       } else {
-        // Roles that participate in the shift system — only these get redirected to /shift/dashboard
-        // shift_employee (purchase exec) always lands on /purchase — no shift check needed
+        // shift_employee (purchase exec) always lands on /purchase directly
         if (normalizedRole === 'shift_employee') {
           navigate('/purchase', { replace: true });
           return;
@@ -113,9 +111,6 @@ export function RedirectPage() {
             destination = '/shift/dashboard';
           }
         }
-        // Management / admin roles (admin, ceo, gm, l1_manager, auditor, accounts,
-        // ff_operations_manager, warehouse_manager, qc_manager, etc.) are NEVER
-        // redirected via shift check — they always land on their role-based destination.
 
         if (normalizedRole === 'smo' || normalizedRole === 'rsh' || normalizedRole === 'site_visit_farm_manager' || normalizedRole === 'farmmanager') {
           const { data: deptProfile } = await supabase
@@ -123,13 +118,13 @@ export function RedirectPage() {
             .select('department')
             .eq('id', userId)
             .maybeSingle();
-            
+
           const dept = (deptProfile?.department || user?.department || '').toLowerCase();
-          
+
           if (normalizedRole === 'smo' && (dept === 'site visit' || dept === 'rental sourcing')) {
             destination = '/site-visit-fm-dashboard';
           } else if (normalizedRole === 'rsh') {
-             destination = '/site-visit-request/my';
+            destination = '/site-visit-request/my';
           }
         }
       }
@@ -137,7 +132,6 @@ export function RedirectPage() {
       navigate(destination, { replace: true });
     } catch (error) {
       console.error('Redirect logic failed:', error);
-      // Fallback redirect
       navigate('/day-start', { replace: true });
     }
   }, [navigate, isProcessing]);
@@ -153,10 +147,9 @@ export function RedirectPage() {
     if (user) {
       performRedirect(user.id, user.role);
     } else if (session) {
-      // Handle race condition where session exists but user profile isn't in context yet
       const fetchProfileAndRedirect = async () => {
         try {
-          const { data: profile, error } = await (supabase as any)
+          const { data: profile } = await (supabase as any)
             .from('profiles')
             .select('role')
             .eq('id', session.user.id)
@@ -165,14 +158,11 @@ export function RedirectPage() {
           if (profile?.role) {
             performRedirect(session.user.id, profile.role);
           } else {
-            console.error('No profile found for session user:', session.user.id);
-            // If no profile exists after 3 seconds, redirect to login to be safe
             setTimeout(() => {
               navigate('/login', { replace: true });
             }, 3000);
           }
         } catch (err) {
-          console.error('Error in fetchProfileAndRedirect:', err);
           navigate('/login', { replace: true });
         }
       };
@@ -188,4 +178,12 @@ export function RedirectPage() {
         <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-6 relative z-10" />
         <motion.p
           initial={{ opacity: 0 }}
-          animate={{ opa
+          animate={{ opacity: 1 }}
+          className="text-zinc-400 font-medium tracking-wide relative z-10"
+        >
+          Synchronizing Workspace...
+        </motion.p>
+      </div>
+    </div>
+  );
+}
