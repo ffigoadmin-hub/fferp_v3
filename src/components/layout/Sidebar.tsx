@@ -993,11 +993,11 @@ const navigationConfig: NavGroup[] = [
     ],
   },
 
-  // ── PURCHASE EXECUTIVE (purchase_manager, purchase_head) ─────────────────────
+  // ── PURCHASE EXECUTIVE (shift_employee, purchase_manager, purchase_head) ───────
   {
     title: 'My PO Queue',
     icon: ShoppingCart,
-    roles: ['purchase_manager', 'purchase_head'],
+    roles: ['shift_employee', 'purchase_manager', 'purchase_head'],
     items: [
       { icon: LayoutDashboard, label: 'Purchase Dashboard',  path: '/purchase' },
       { icon: ClipboardList,   label: 'My Purchase Orders',  path: '/purchase/orders' },
@@ -1007,7 +1007,7 @@ const navigationConfig: NavGroup[] = [
   {
     title: 'Labels',
     icon: Tags,
-    roles: ['purchase_manager', 'purchase_head'],
+    roles: ['shift_employee', 'purchase_manager', 'purchase_head'],
     items: [
       { icon: Package, label: 'Box Label Generator', path: '/ff-operations/labels' },
     ],
@@ -1015,7 +1015,7 @@ const navigationConfig: NavGroup[] = [
   {
     title: 'Vendors',
     icon: Database,
-    roles: ['purchase_manager', 'purchase_head'],
+    roles: ['shift_employee', 'purchase_manager', 'purchase_head'],
     items: [
       { icon: Database,   label: 'Vendors',         path: '/purchase/vendors' },
       { icon: BarChart3,  label: 'Rate Comparison', path: '/purchase/rate-comparison' },
@@ -1025,7 +1025,7 @@ const navigationConfig: NavGroup[] = [
   {
     title: 'Payments',
     icon: CreditCard,
-    roles: ['purchase_manager', 'purchase_head'],
+    roles: ['shift_employee', 'purchase_manager', 'purchase_head'],
     items: [
       { icon: Plus,        label: 'New FF Vendor Payment',    path: '/ff/vendor-payment/new' },
       { icon: History,     label: 'My Submitted Payments',    path: '/my-submitted-payments' },
