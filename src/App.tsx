@@ -944,4 +944,10 @@ const App = () => {
               <SpeedInsights />
             </AlertProvider>
           </BrowserRouter>
-        </TooltipProv
+        </TooltipProvider>
+      </ErrorBoundary>
+    </QueryClientProvider>
+  );
+};
+
+export default App;
