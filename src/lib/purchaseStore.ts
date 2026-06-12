@@ -71,7 +71,7 @@ function poToPayload(po: StoredPO): Record<string, any> {
     delivery_date: po.deliveryDate || null,
     payment_terms: po.paymentTerms || null,
   };
-  if (po.hub_id)    payload.hub_id    = po.hub_id;
+  if (po.hub_id && po.hub_id !== 'unassigned')    payload.hub_id    = po.hub_id;
   if (po.hub_name)  payload.hub_name  = po.hub_name;
   if (po.vendor_id) payload.vendor_id = po.vendor_id;
   return payload;
