@@ -231,7 +231,7 @@ export default function OrderListPage() {
       const dbStatus = statusFilter === 'submit_po' ? 'confirmed' : statusFilter;
       if (dbStatus !== 'all') q = q.eq('status', dbStatus);
       if (!isManagement && (user as any)?.hub_id)
-        q = (q as any).or(\`hub_id.eq.${(user as any).hub_id},hub_id.is.null\`);
+        q = (q as any).or(`hub_id.eq.${(user as any).hub_id},hub_id.is.null`);
 
       const { data, error } = await q;
       if (error) throw error;
