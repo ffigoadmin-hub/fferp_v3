@@ -230,10 +230,8 @@ export default function OrderListPage() {
       // 'submit_po' is a UI-only filter — maps to 'confirmed' in the DB
       const dbStatus = statusFilter === 'submit_po' ? 'confirmed' : statusFilter;
       if (dbStatus !== 'all') q = q.eq('status', dbStatus);
-      // Show hub-specific orders AND orders with no hub (app/website orders from customers
-      // without a hub assignment) — both are relevant to the sales team
       if (!isManagement && (user as any)?.hub_id)
-        q = (q as any).or(`hub_id.eq.${(user as any).hub_id},hub_id.is.null`);
+        q = (q as any).or(\`hub_id.eq.${(user as any).hub_id},hub_id.is.null\`);
 
       const { data, error } = await q;
       if (error) throw error;
@@ -582,3 +580,13 @@ export default function OrderListPage() {
             </tbody>
           </table>
         )}
+      </div>
+
+      {filtered.length > 0 && (
+        <p className="text-center text-[11px] text-slate-400">
+          Showing {filtered.length} of {orders.length} orders
+        </p>
+      )}
+    </div>
+  );
+}
