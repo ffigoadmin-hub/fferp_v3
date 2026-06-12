@@ -724,3 +724,22 @@ export default function BoxLabelGenerator() {
               '✂️ Cut each label and stick on the box',
               '📦 Send boxes to hub',
  
+              '📲 Track delivery with FF Scanner App',
+            ].map((s, i) => (
+              <p key={i} style={{ fontSize: 13, color: '#374151', marginBottom: 6 }}>{s}</p>
+            ))}
+          </div>
+
+          <Button
+            onClick={handleReset}
+            variant="outline"
+            style={{ marginTop: 8, borderRadius: 10, fontSize: 14 }}
+          >
+            <RotateCcw size={16} style={{ marginRight: 6 }} /> Generate More Labels
+          </Button>
+        </div>
+      )}
+
+    </div>
+  );
+}
