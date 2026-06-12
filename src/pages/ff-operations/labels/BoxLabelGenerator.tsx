@@ -75,7 +75,7 @@ function generateBarcodeDataURL(text: string): string {
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function BoxLabelGenerator() {
   const { user } = useAuth();
-  const isPurchaseExec = (user as any)?.role === 'shift_employee';
+  const isPurchaseExec = ['shift_employee', 'purchase_manager'].includes((user as any)?.role);
   const userHubId = (user as any)?.hub_id ?? '';
 
   const [mode, setMode] = useState<'single' | 'po_batch'>('single');
@@ -91,7 +91,7 @@ export default function BoxLabelGenerator() {
   const [pdfReady, setPdfReady] = useState(false);
   const [step, setStep] = useState<'form' | 'preview' | 'done'>('form');
 
-  // Lock hub to user's hub for purchase execs (shift_employee)
+  // Lock hub to user's hub for purchase execs (purchase_manager or shift_employee)
   useEffect(() => {
     if (isPurchaseExec && userHubId) {
       setForm(f => ({ ...f, hub_id: userHubId }));
@@ -723,4 +723,4 @@ export default function BoxLabelGenerator() {
               '🖨️ Print the PDF on A4 paper',
               '✂️ Cut each label and stick on the box',
               '📦 Send boxes to hub',
-              '📱 Hub Manager scans with FF Sca
+ 
