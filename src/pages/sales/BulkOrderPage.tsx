@@ -242,12 +242,14 @@ export default function BulkOrderPage() {
         });
 
       if (newCustomerRows.length > 0) {
-        const { data: inserted } = await supabase
+        const { data: inserted, error: custErr } = await supabase
           .from('customers').insert(newCustomerRows).select('id, phone');
+        if (custErr) console.warn('[BulkOrder] customer insert failed (RLS?):', custErr.message);
         for (const c of (inserted ?? [])) if (c.phone) phoneToId[c.phone] = c.id;
       }
 
       // ── STEP 4: Batch-insert ALL orders in one call ─────────────────────
+      // customer_id is nullable — we still import even if customer creation was blocked by RLS
       const orderRows = csvPreview.map((r: any) => {
         const phone    = String(r.phone ?? '').trim();
         const hubName  = String(r.hub_name ?? '').trim();
@@ -268,7 +270,7 @@ export default function BulkOrderPage() {
           hub_name:      hubName || null,
           ...(isRealUuid ? { created_by: user!.id } : {}),
         };
-      }).filter(o => o.customer_id); // skip rows with no customer
+      }).filter(o => o.customer_name); // only require customer_name, not customer_id
 
       const { data: createdOrders, error: oErr } = await supabase
         .from('sales_orders').insert(orderRows).select('id, customer_id, customer_name, total_amount, payment_mode, notes');
