@@ -809,10 +809,6 @@ const AppRoutes = () => {
       <Route path="/driver" element={<ProtectedRoute allowedRoles={['driver', 'admin', ...OPS_ROLES]}><DriverView /></ProtectedRoute>} />
       <Route path="/logistics/driver" element={<Navigate to="/driver" replace />} />
 
-      {/* Collections Module */}
-      <Route path="/collections/entry" element={<ProtectedRoute allowedRoles={['collection_executive', 'admin', 'ff_operations_manager', 'ceo']}><CollectionEntryPage /></ProtectedRoute>} />
-      <Route path="/collections/dashboard" element={<ProtectedRoute allowedRoles={['collection_executive', 'admin', 'ff_operations_manager', 'ceo', 'accounts']}><CollectionDashboardPage /></ProtectedRoute>} />
-
       {/* Catalog Module */}
       <Route path="/catalog" element={<ProtectedRoute allowedRoles={OPS_ROLES}><ProductCatalogPage /></ProtectedRoute>} />
       <Route path="/catalog/new" element={<ProtectedRoute allowedRoles={OPS_ROLES}><ProductFormPage /></ProtectedRoute>} />
@@ -935,4 +931,17 @@ const App = () => {
                       <AppLayout>
                         <Suspense fallback={
                           <div className="min-h-screen flex items-center justify-center">
-                            <Loader2 class
+                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                          </div>
+                        }>
+                          <AppRoutes />
+                        </Suspense>
+                      </AppLayout>
+                    </>
+                  } />
+                </Routes>
+              </ChatOverlayProvider>
+              <SpeedInsights />
+            </AlertProvider>
+          </BrowserRouter>
+        </TooltipProv
