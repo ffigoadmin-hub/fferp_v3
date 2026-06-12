@@ -262,7 +262,6 @@ export default function BulkOrderPage() {
           status:        'confirmed',
           payment_mode:  String(r.payment_mode ?? 'cod').toLowerCase(),
           subtotal:      total,
-          net_amount:    total,
           total_amount:  total,
           notes:         [String(r.salesperson ?? '').trim() ? `By: ${String(r.salesperson).trim()}` : '', String(r.notes ?? '').trim()].filter(Boolean).join(' | ') || null,
           hub_id:        hubMap[hubName.toLowerCase()] ?? null,
