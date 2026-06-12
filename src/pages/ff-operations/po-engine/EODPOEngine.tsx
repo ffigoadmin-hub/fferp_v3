@@ -404,7 +404,8 @@ export default function EODPOEngine() {
       const newPOs: GeneratedPO[] = [];
       let serial = (await fetchMaxPOSerial()) + 1;
 
-      // ── Step 3: For each hub → compute shortfall → group by vendor → create PO ──
+      // ── Step 3: One PO per hub — all shortfall items, no vendor grouping ──
+      // Vendor is selected later by the purchase executive in the Buy page
       for (const [, hubData] of hubDemand) {
         const stock = hubStock.get(hubData.hubId) ?? new Map();
 
@@ -422,52 +423,43 @@ export default function EODPOEngine() {
         }
         if (shortfallItems.length === 0) continue;
 
-        // Group shortfall items by vendor (one PO per vendor per hub)
-        const vendorItems = new Map<string, typeof shortfallItems>();
-        shortfallItems.forEach(item => {
-          const v = vendorFor(item.product);
-          if (!vendorItems.has(v)) vendorItems.set(v, []);
-          vendorItems.get(v)!.push(item);
-        });
+        // One PO per hub — all items together
+        const poNumber = `PO-${String(serial).padStart(5, '0')}`;
+        const poItems = shortfallItems.map((item, idx) => ({
+          id:              idx + 1,
+          itemName:        item.product,
+          account:         'Cost of Goods Sold',
+          quantity:        item.qty,
+          rate:            item.rate,
+          tax:             'GST 5%',
+          discount:        0,
+          customerDetails: `${hubData.hubName} — ${targetDate}`,
+        }));
 
-        for (const [vendor, items] of vendorItems) {
-          const poNumber = `PO-${String(serial).padStart(5, '0')}`;
-          const poItems = items.map((item, idx) => ({
-            id:              idx + 1,
-            itemName:        item.product,
-            account:         'Cost of Goods Sold',
-            quantity:        item.qty,
-            rate:            item.rate,
-            tax:             'GST 5%',
-            discount:        0,
-            customerDetails: `${hubData.hubName} — ${targetDate}`,
-          }));
+        const subTotal = poItems.reduce((a, i) => a + i.quantity * i.rate, 0);
+        const total    = Math.round(subTotal * 1.05);
 
-          const subTotal = poItems.reduce((a, i) => a + i.quantity * i.rate, 0);
-          const total    = Math.round(subTotal * 1.05);
+        const po: StoredPO = {
+          id:           '',
+          poNumber,
+          vendorName:   '',   // vendor assigned later during Buy
+          date:         format(new Date(), 'yyyy-MM-dd'),
+          deliveryDate: targetDate,
+          paymentTerms: 'Due on Receipt',
+          status:       'pending_approval',
+          items:        poItems,
+          subTotal,
+          total,
+          notes:        `Auto-generated for ${hubData.hubName} | ${targetDate}. Items: ${shortfallItems.map(i => i.product).join(', ')}.`,
+          hub_id:       hubData.hubId,
+          hub_name:     hubData.hubName,
+        };
 
-          const po: StoredPO = {
-            id:           '',
-            poNumber,
-            vendorName:   vendor,
-            date:         format(new Date(), 'yyyy-MM-dd'),
-            deliveryDate: targetDate,
-            paymentTerms: 'Due on Receipt',
-            status:       'pending_approval',
-            items:        poItems,
-            subTotal,
-            total,
-            notes:        `Auto-generated for ${hubData.hubName} | ${targetDate}. Products: ${items.map(i => i.product).join(', ')}.`,
-            hub_id:       hubData.hubId,
-            hub_name:     hubData.hubName,
-          };
+        const savedId = await savePOToStore(po);
+        if (!savedId) console.warn('[EOD PO] Supabase save failed for', poNumber);
 
-          const savedId = await savePOToStore(po);
-          if (!savedId) console.warn('[EOD PO] Supabase save failed for', poNumber);
-
-          newPOs.push({ poNumber, vendor, items, total });
-          serial++;
-        }
+        newPOs.push({ poNumber, vendor: hubData.hubName, items: shortfallItems, total });
+        serial++;
       }
 
       // Mark all shortfall products as PO created
@@ -476,7 +468,7 @@ export default function EODPOEngine() {
       setShowPOPreview(true);
 
       toast.success(`✅ ${newPOs.length} PO${newPOs.length > 1 ? 's' : ''} generated & saved to database!`, {
-        description: `${shortfallProducts.length} products · Visible to purchase executive`,
+        description: `${newPOs.length} hub${newPOs.length > 1 ? 's' : ''} · Visible to purchase executives`,
       });
     } catch (err: any) {
       toast.error('PO generation failed', { description: err?.message });
@@ -690,7 +682,7 @@ export default function EODPOEngine() {
                   ['Aggregate demand', 'Sums up all product quantities across orders'],
                   ['Check stock', 'Compares demand vs current inventory across all hubs'],
                   ['Calculate shortfall', 'Flags products where stock < requirement'],
-                  ['Generate POs', 'Creates POs per vendor and saves to Purchase Orders'],
+                  ['Generate POs', 'Creates one PO per hub with all items — vendor selected later during Buy'],
                 ].map(([step, desc], i) => (
                   <li key={i} className="flex gap-2.5">
                     <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-600 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
@@ -729,7 +721,7 @@ export default function EODPOEngine() {
                         <span className="text-[12px] font-bold text-gray-800">{po.poNumber}</span>
                         <span className="text-[12px] font-semibold text-green-600">₹{fmt(po.total)}</span>
                       </div>
-                      <p className="text-[11px] text-gray-500 mb-1">{po.vendor}</p>
+                      <p className="text-[11px] text-blue-600 font-semibold mb-1">{po.vendor}</p>
                       <div className="space-y-0.5">
                         {po.items.map((item, i) => (
                           <p key={i} className="text-[10px] text-gray-500">
@@ -771,3 +763,4 @@ export default function EODPOEngine() {
     </div>
   );
 }
+                                                                                                                                                                                                                          
