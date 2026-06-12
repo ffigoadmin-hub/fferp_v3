@@ -215,7 +215,7 @@ function ProductRow({ row, onTogglePO }: { row: ProductDemand; onTogglePO: (name
 
 export default function EODPOEngine() {
   const qc = useQueryClient();
-  const [targetDate, setTargetDate] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'));
+  const [targetDate, setTargetDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [poCreatedSet, setPoCreatedSet] = useState<Set<string>>(new Set());
   const [generatedPOs, setGeneratedPOs] = useState<GeneratedPO[]>([]);
   const [generating, setGenerating] = useState(false);
@@ -446,7 +446,7 @@ export default function EODPOEngine() {
           date:         format(new Date(), 'yyyy-MM-dd'),
           deliveryDate: targetDate,
           paymentTerms: 'Due on Receipt',
-          status:       'pending_approval',
+          status:       'pending',
           items:        poItems,
           subTotal,
           total,

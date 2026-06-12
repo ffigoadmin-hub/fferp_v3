@@ -62,7 +62,7 @@ function rowToPO(row: any): StoredPO {
 function poToPayload(po: StoredPO): Record<string, any> {
   const payload: Record<string, any> = {
     po_number:     po.poNumber,
-    status:        po.status === 'open' ? 'approved' : po.status,
+    status:        (po.status === 'open' || po.status === 'pending_approval') ? 'pending' : po.status,
     sub_total:     po.subTotal,
     total_amount:  po.total,
     notes:         po.notes || null,
@@ -130,7 +130,32 @@ export async function savePOToStore(po: StoredPO): Promise<string | null> {
     .select('id')
     .single();
   if (error) { console.error('[purchaseStore] savePOToStore:', error.message); return null; }
-  return data?.id ?? null;
+  const poId = data?.id ?? null;
+
+  // Also insert items into purchase_order_items so BuyPage can render them
+  if (poId && po.items && po.items.length > 0) {
+    // Remove any old items first (in case of upsert/update)
+    await supabase.from('purchase_order_items').delete().eq('po_id', poId);
+    const itemRows = po.items.map(item => ({
+      po_id:          poId,
+      hub_id:         po.hub_id ?? null,
+      product_name:   item.itemName,
+      item_name:      item.itemName,
+      required_qty:   item.quantity,
+      quantity:       item.quantity,
+      unit:           'KG',
+      estimated_price: item.rate,
+      unit_price:     item.rate,
+      total_price:    Math.round(item.quantity * item.rate),
+      status:         'pending',
+      ordered_qty:    0,
+      received_qty:   0,
+    }));
+    const { error: itemErr } = await supabase.from('purchase_order_items').insert(itemRows);
+    if (itemErr) console.error('[purchaseStore] insert purchase_order_items:', itemErr.message);
+  }
+
+  return poId;
 }
 
 export async function markPOBilled(poNumber: string): Promise<void> {
