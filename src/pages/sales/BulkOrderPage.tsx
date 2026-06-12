@@ -11,7 +11,7 @@ import {
   Plus, Trash2, RefreshCw, CheckCircle2, ShoppingBag,
   Phone, MapPin, User, Store, Package, CalendarDays,
   FileText, AlertCircle, IndianRupee, ChevronDown,
-  Upload, Download, X, Building2,
+  Upload, Download, X,
 } from 'lucide-react';
 
 /* ─── Types ───────────────────────────────────────────────────────────────── */
@@ -400,7 +400,7 @@ export default function BulkOrderPage() {
             <table className="w-full text-xs">
               <thead className="bg-gray-50 text-gray-500 sticky top-0">
                 <tr>
-                  {['salesperson','customer_name','phone','hub_name','shift','product_name','qty','unit','unit_price','payment_mode'].map(h => (
+                  {['customer_name','phone','address','product_name','qty','unit','unit_price','payment_mode'].map(h => (
                     <th key={h} className="px-3 py-2 text-left font-semibold whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -408,19 +408,9 @@ export default function BulkOrderPage() {
               <tbody className="divide-y divide-gray-50">
                 {csvPreview.slice(0, 10).map((r: any, i: number) => (
                   <tr key={i} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 font-bold text-blue-700 whitespace-nowrap">{r.salesperson ?? '—'}</td>
                     <td className="px-3 py-2 font-semibold text-gray-800 whitespace-nowrap">{r.customer_name}</td>
                     <td className="px-3 py-2 text-gray-500">{r.phone}</td>
-                    <td className="px-3 py-2">
-                      <span className="flex items-center gap-1 text-purple-600 font-semibold whitespace-nowrap">
-                        <Building2 className="h-3 w-3" />{r.hub_name}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      <span className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${r.shift === '1' || r.shift === 1 ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
-                        S{r.shift}
-                      </span>
-                    </td>
+                    <td className="px-3 py-2 text-gray-500 max-w-[140px] truncate">{r.address ?? r.area ?? '—'}</td>
                     <td className="px-3 py-2 font-semibold text-gray-800">{r.product_name}</td>
                     <td className="px-3 py-2 text-center">{r.qty}</td>
                     <td className="px-3 py-2">{r.unit}</td>
@@ -830,4 +820,4 @@ export default function BulkOrderPage() {
     </div>
   );
 }
-                                                  
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                
