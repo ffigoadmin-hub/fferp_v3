@@ -260,7 +260,7 @@ export default function BulkOrderPage() {
           order_date:    today,
           delivery_date: String(r.delivery_date ?? today).trim() || today,
           status:        'confirmed',
-          payment_mode:  String(r.payment_mode ?? 'cod').toLowerCase(),
+          payment_mode:  (() => { const m = String(r.payment_mode ?? 'cod').toLowerCase().trim(); const map: Record<string,string> = { 'credit':'credit','cod':'cod','cash':'cash','upi':'upi','online':'upi','card':'cod','cheque':'cash','partial':'cod' }; return map[m] ?? 'cod'; })(),
           subtotal:      total,
           total_amount:  total,
           notes:         [String(r.salesperson ?? '').trim() ? `By: ${String(r.salesperson).trim()}` : '', String(r.notes ?? '').trim()].filter(Boolean).join(' | ') || null,
