@@ -1,6 +1,7 @@
 // @ts-nocheck
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   QrCode, Barcode, Printer, Download, Package,
   Plus, Loader2, CheckCircle2, AlertCircle,
@@ -73,10 +74,14 @@ function generateBarcodeDataURL(text: string): string {
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function BoxLabelGenerator() {
+  const { user } = useAuth();
+  const isPurchaseExec = (user as any)?.role === 'shift_employee';
+  const userHubId = (user as any)?.hub_id ?? '';
+
   const [mode, setMode] = useState<'single' | 'po_batch'>('single');
   const [form, setForm] = useState<FormState>({
     product_id: '',
-    hub_id: '',
+    hub_id: isPurchaseExec ? userHubId : '',
     weight_kg: '',
     num_boxes: '10',
     po_ref: '',
@@ -85,6 +90,13 @@ export default function BoxLabelGenerator() {
   const [generatedBoxes, setGeneratedBoxes] = useState<GeneratedBox[]>([]);
   const [pdfReady, setPdfReady] = useState(false);
   const [step, setStep] = useState<'form' | 'preview' | 'done'>('form');
+
+  // Lock hub to user's hub for purchase execs (shift_employee)
+  useEffect(() => {
+    if (isPurchaseExec && userHubId) {
+      setForm(f => ({ ...f, hub_id: userHubId }));
+    }
+  }, [isPurchaseExec, userHubId]);
 
   // ── Fetch products ──
   const { data: products = [] } = useQuery({
@@ -432,20 +444,32 @@ export default function BoxLabelGenerator() {
               <label style={{ fontSize: 13, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 6 }}>
                 Destination Hub *
               </label>
-              <select
-                value={form.hub_id}
-                onChange={e => setForm(f => ({ ...f, hub_id: e.target.value }))}
-                style={{
+              {isPurchaseExec ? (
+                <div style={{
                   width: '100%', padding: '10px 12px', borderRadius: 8,
-                  border: '1px solid #d1d5db', fontSize: 14, color: '#111827',
-                  background: '#fff', outline: 'none',
-                }}
-              >
-                <option value="">— Select hub —</option>
-                {hubs.map(h => (
-                  <option key={h.id} value={h.id}>{h.name}</option>
-                ))}
-              </select>
+                  border: '1px solid #d1d5db', fontSize: 14, color: '#374151',
+                  background: '#f9fafb', display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <Building2 size={14} style={{ color: '#6b7280' }} />
+                  {hubs.find(h => h.id === userHubId)?.name ?? 'Your Hub'}
+                  <span style={{ fontSize: 11, color: '#9ca3af', marginLeft: 4 }}>(locked to your hub)</span>
+                </div>
+              ) : (
+                <select
+                  value={form.hub_id}
+                  onChange={e => setForm(f => ({ ...f, hub_id: e.target.value }))}
+                  style={{
+                    width: '100%', padding: '10px 12px', borderRadius: 8,
+                    border: '1px solid #d1d5db', fontSize: 14, color: '#111827',
+                    background: '#fff', outline: 'none',
+                  }}
+                >
+                  <option value="">— Select hub —</option>
+                  {hubs.map(h => (
+                    <option key={h.id} value={h.id}>{h.name}</option>
+                  ))}
+                </select>
+              )}
             </div>
 
             {/* Weight + Boxes row */}
@@ -699,35 +723,4 @@ export default function BoxLabelGenerator() {
               '🖨️ Print the PDF on A4 paper',
               '✂️ Cut each label and stick on the box',
               '📦 Send boxes to hub',
-              '📱 Hub Manager scans with FF Scanner App → QC pass/fail',
-              '📊 Inventory updates automatically',
-            ].map((s, i) => (
-              <div key={i} style={{ fontSize: 13, color: '#4b5563', padding: '5px 0', display: 'flex', gap: 8 }}>
-                <span>{s}</span>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-            <Button
-              onClick={handleDownloadPDF}
-              variant="outline"
-              style={{ height: 44, paddingInline: 24, borderRadius: 10, fontWeight: 700 }}
-            >
-              <Download size={16} style={{ marginRight: 6 }} /> Re-download PDF
-            </Button>
-            <Button
-              onClick={handleReset}
-              style={{
-                height: 44, paddingInline: 24, borderRadius: 10, fontWeight: 700,
-                background: '#16a34a', color: '#fff', border: 'none',
-              }}
-            >
-              <Plus size={16} style={{ marginRight: 6 }} /> Generate Another Batch
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+              '📱 Hub Manager scans with FF Sca
