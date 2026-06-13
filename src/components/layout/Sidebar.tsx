@@ -113,7 +113,7 @@ const navigationConfig: NavGroup[] = [
       'bde', 'field_executive', 'back_office', 'tele_caller', 'driver',
       // gm, l1_manager, auditor intentionally excluded — payment-only roles
       // purchase_manager, purchase_head, shift_employee → trimmed section below
-      // hub_manager → hub-specific sections below (My Hub, Payments, Inventory)
+      // hub_manager → trimmed section below
     ],
     items: [
       { icon: Home,          label: 'My Dashboard',          path: '/employee-dashboard' },
@@ -1369,4 +1369,19 @@ export function Sidebar() {
           className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12.5px] font-medium transition-all duration-150"
           style={{ color: '#9CA3AF' }}
           onMouseEnter={e => {
-            (e.currentTarget as HTMLElement).style.background = '#F9FAFB'
+            (e.currentTarget as HTMLElement).style.background = '#F9FAFB';
+            (e.currentTarget as HTMLElement).style.color = '#374151';
+          }}
+          onMouseLeave={e => {
+            (e.currentTarget as HTMLElement).style.background = 'transparent';
+            (e.currentTarget as HTMLElement).style.color = '#9CA3AF';
+          }}
+        >
+          <MessageSquarePlus className="w-3.5 h-3.5 shrink-0" />
+          <span>Feedback &amp; Suggestions</span>
+        </a>
+      </div>
+    </aside>
+  );
+}
+
