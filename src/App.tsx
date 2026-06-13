@@ -845,7 +845,7 @@ const AppRoutes = () => {
       <Route path="/ff-operations/task-assign"        element={<ProtectedRoute allowedRoles={['ff_operations_manager','admin']}><TaskAssign /></ProtectedRoute>} />
       <Route path="/ff-operations/payment-approvals"  element={<ProtectedRoute allowedRoles={['ff_operations_manager','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
       {/* Phase 4: Payment submission forms */}
-      <Route path="/ff/vendor-payment/new"    element={<ProtectedRoute allowedRoles={['hub_manager','purchase_manager','purchase_head','ff_operations_manager','admin','shift_employee']}><FFVendorPaymentForm /></ProtectedRoute>} />
+      <Route path="/ff/vendor-payment/new"    element={<ProtectedRoute allowedRoles={['hub_manager','purchase_manager','purchase_head','shift_employee','ff_operations_manager','admin']}><FFVendorPaymentForm /></ProtectedRoute>} />
       <Route path="/ff/transport-payment/new" element={<ProtectedRoute allowedRoles={['hub_manager','ff_operations_manager','admin']}><FFTransportPaymentForm /></ProtectedRoute>} />
       {/* Phase 5: FF Payments Report */}
       <Route path="/reports/ff-payments" element={<ProtectedRoute allowedRoles={['admin','ceo','gm','l1_manager','auditor','ff_operations_manager','accounts']}><FFPaymentsReport /></ProtectedRoute>} />
@@ -865,8 +865,8 @@ const AppRoutes = () => {
       {/* Accounts — FF payments (mark-as-paid) */}
       <Route path="/accounts/ff-payments"           element={<ProtectedRoute allowedRoles={['accounts','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
       <Route path="/accounts/ff-transport-payments" element={<ProtectedRoute allowedRoles={['accounts','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
-      {/* My Submitted Payments — hub_manager, purchase_manager */}
-      <Route path="/my-submitted-payments" element={<ProtectedRoute allowedRoles={['hub_manager','purchase_manager','purchase_head','ff_operations_manager','admin','shift_employee']}><MySubmittedPayments /></ProtectedRoute>} />
+      {/* My Submitted Payments — hub_manager, purchase_manager, shift_employee */}
+      <Route path="/my-submitted-payments" element={<ProtectedRoute allowedRoles={['hub_manager','purchase_manager','purchase_head','shift_employee','ff_operations_manager','admin']}><MySubmittedPayments /></ProtectedRoute>} />
 
       {/* FF Operations — Purchase sub-pages */}
       <Route path="/purchase/expenses"           element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><PurchaseExpensesPage /></ProtectedRoute>} />
@@ -877,7 +877,7 @@ const AppRoutes = () => {
       <Route path="/purchase/auto-bill"          element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><AutoBillPage /></ProtectedRoute>} />
       <Route path="/purchase/buy"               element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'shift_employee', 'ff_operations_manager']}><BuyPage /></ProtectedRoute>} />
       <Route path="/purchase/recurring-bills"    element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><RecurringBillsPage /></ProtectedRoute>} />
-      <Route path="/purchase/payments-made"      element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager', 'shift_employee']}><PaymentsMadePage /></ProtectedRoute>} />
+      <Route path="/purchase/payments-made"      element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><PaymentsMadePage /></ProtectedRoute>} />
       <Route path="/purchase/vendor-credits"     element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><VendorCreditsPage /></ProtectedRoute>} />
 
       {/* FF Operations — Sales sub-pages — tele_caller + hub_manager + ceo + gm added */}
@@ -951,3 +951,4 @@ const App = () => {
 };
 
 export default App;
+                                                                                                                                                                                              
