@@ -104,7 +104,7 @@ export function useHourlyReports(date: Date) {
       return { success: true, data };
     } catch (error) {
       console.error('Error submitting report:', error);
-      toast.error('Failed to submit report');
+      const errMsg = (error as any)?.message || (error as any)?.code || 'unknown'; toast.error(`Report error: ${errMsg}`);
       return { success: false, error };
     } finally {
       setIsSaving(false);

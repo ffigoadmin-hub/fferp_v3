@@ -90,7 +90,7 @@ export function useHourlyPlans(date: Date) {
       return { success: true, data };
     } catch (error) {
       console.error('Error submitting plan:', error);
-      toast.error('Failed to submit plan');
+      const errMsg = (error as any)?.message || (error as any)?.code || 'unknown'; toast.error(`Plan error: ${errMsg}`);
       return { success: false, error };
     } finally {
       setIsSaving(false);
