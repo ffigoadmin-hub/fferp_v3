@@ -675,7 +675,7 @@ export default function EmployeeMyPayslipsPage() {
   useEffect(() => { fetchMyPayslips(); }, [user]);
 
   async function fetchMyPayslips() {
-    toast.info(`fetch called user=${user?.id ?? 'NULL'}`);
+    toast.info(`fetchMyPayslips called. user=${user?.id ?? 'NULL'}`);
     if (!user) return;
     try {
       setLoading(true);
@@ -687,9 +687,9 @@ export default function EmployeeMyPayslipsPage() {
         .or(`profile_id.eq.${user.id},employee_id.eq.${user.id}`)
         .order('created_at', { ascending: false });
 
-      if (empError) { toast.error(`S1 err: ${empError.message}`); setPayslips([]); return; }
-      if (!batchEmployees || batchEmployees.length === 0) { toast.error('S1: 0 rows'); setPayslips([]); return; }
-      toast.success(`S1 OK: ${batchEmployees.length} rows`);
+      if (empError) { toast.error(`Step1 error: ${empError.message}`); setPayslips([]); return; }
+      if (!batchEmployees || batchEmployees.length === 0) { toast.error('Step1: 0 rows returned'); setPayslips([]); return; }
+      toast.success(`Step1 OK: ${batchEmployees.length} rows`);
 
       // Step 2: fetch batch metadata for those batch IDs
       const batchIds = [...new Set(batchEmployees.map((be: any) => be.batch_id))];
@@ -698,8 +698,8 @@ export default function EmployeeMyPayslipsPage() {
         .select('id, month, year, status, paid_at')
         .in('id', batchIds);
 
-      if (batchError) { toast.error(`S2 err: ${batchError.message}`); setPayslips([]); return; }
-      toast.success(`S2 OK: ${batches?.length ?? 0} batches`);
+      if (batchError) { toast.error(`Step2 error: ${batchError.message}`); setPayslips([]); return; }
+      toast.success(`Step2 OK: ${batches?.length ?? 0} batches`);
 
       const batchMap: Record<string, any> = {};
       (batches || []).forEach((b: any) => { batchMap[b.id] = b; });
@@ -810,4 +810,25 @@ export default function EmployeeMyPayslipsPage() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-           
+              <div className="flex gap-4 mt-2">
+                <span className="flex items-center gap-1.5 text-[10px] text-gray-500">
+                  <div className="w-2.5 h-2.5 rounded-sm bg-green-600" /> Net Pay
+                </span>
+                <span className="flex items-center gap-1.5 text-[10px] text-gray-500">
+                  <div className="w-2.5 h-2.5 rounded-sm bg-blue-200" /> Basic Salary
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Payslip cards grid */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {payslips.map(p => (
+              <PayslipCard key={p.id} p={p} onClick={() => setSelectedPayslip(p)} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
