@@ -139,7 +139,7 @@ const navigationConfig: NavGroup[] = [
   {
     title: 'Daily Workflow',
     icon: Clock,
-    roles: ['purchase_manager', 'purchase_head', 'shift_employee'],
+    roles: ['purchase_manager', 'purchase_head', 'shift_employee', 'hub_manager'],
     items: [
       { icon: FileText,      label: 'EOD Summary',         path: '/eod-summary' },
       { icon: Calendar,      label: 'Company Calendar',    path: '/company-calendar' },
@@ -1369,5 +1369,4 @@ export function Sidebar() {
           className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[12.5px] font-medium transition-all duration-150"
           style={{ color: '#9CA3AF' }}
           onMouseEnter={e => {
-            (e.currentTarget as HTMLElement).style.background = '#F9FAFB';
-            (
+            (e.currentTarget as HTMLElement).style.background = '#F9FAFB'

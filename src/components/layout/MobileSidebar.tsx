@@ -124,7 +124,7 @@ const navigationConfig: NavGroup[] = [
   {
     title: 'Daily Workflow',
     icon: Clock,
-    roles: ['purchase_manager', 'purchase_head', 'shift_employee'],
+    roles: ['purchase_manager', 'purchase_head', 'shift_employee', 'hub_manager'],
     defaultOpen: true,
     items: [
       { icon: FileText,      label: 'EOD Summary',         path: '/eod-summary' },
@@ -1037,4 +1037,4 @@ export function MobileSidebar({ onClose }: MobileSidebarProps) {
 
       {/* Footer */}
       {!(userRole === 'smo' && userDepartment.includes('site visit')) && (
-        <div className="border
+        <div cl
