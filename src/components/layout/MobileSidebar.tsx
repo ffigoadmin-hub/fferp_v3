@@ -793,11 +793,11 @@ const navigationConfig: NavGroup[] = [
     ],
   },
 
-  // ── Purchase Manager / Head ───────────────────────────────────────────────
+  // ── Purchase Manager / Head / shift_employee ──────────────────────────────
   {
     title: 'Shift',
     icon: Clock,
-    roles: ['purchase_manager', 'purchase_head'],
+    roles: ['shift_employee', 'purchase_manager', 'purchase_head'],
     defaultOpen: false,
     items: [
       { icon: LayoutDashboard, label: 'Shift Dashboard', path: '/shift/dashboard' },

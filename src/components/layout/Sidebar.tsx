@@ -983,11 +983,11 @@ const navigationConfig: NavGroup[] = [
     ],
   },
 
-  // ── Shift Dashboard — purchase_manager & purchase_head ───────────────────────
+  // ── Shift Dashboard — shift_employee, purchase_manager & purchase_head ─────────
   {
     title: 'Shift',
     icon: Clock,
-    roles: ['purchase_manager', 'purchase_head'],
+    roles: ['shift_employee', 'purchase_manager', 'purchase_head'],
     items: [
       { icon: LayoutDashboard, label: 'Shift Dashboard', path: '/shift/dashboard' },
     ],
