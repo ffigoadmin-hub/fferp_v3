@@ -686,8 +686,9 @@ export default function EmployeeMyPayslipsPage() {
         .or(`profile_id.eq.${user.id},employee_id.eq.${user.id}`)
         .order('created_at', { ascending: false });
 
-      if (empError) { console.error('salary_batch_employees error:', empError); setPayslips([]); return; }
-      if (!batchEmployees || batchEmployees.length === 0) { setPayslips([]); return; }
+      if (empError) { toast.error(`Step1 error: ${empError.message}`); setPayslips([]); return; }
+      if (!batchEmployees || batchEmployees.length === 0) { toast.error('Step1: 0 rows returned'); setPayslips([]); return; }
+      toast.success(`Step1 OK: ${batchEmployees.length} rows`);
 
       // Step 2: fetch batch metadata for those batch IDs
       const batchIds = [...new Set(batchEmployees.map((be: any) => be.batch_id))];
@@ -696,7 +697,8 @@ export default function EmployeeMyPayslipsPage() {
         .select('id, month, year, status, paid_at')
         .in('id', batchIds);
 
-      if (batchError) { console.error('salary_batches error:', batchError); setPayslips([]); return; }
+      if (batchError) { toast.error(`Step2 error: ${batchError.message}`); setPayslips([]); return; }
+      toast.success(`Step2 OK: ${batches?.length ?? 0} batches`);
 
       const batchMap: Record<string, any> = {};
       (batches || []).forEach((b: any) => { batchMap[b.id] = b; });
@@ -803,8 +805,4 @@ export default function EmployeeMyPayslipsPage() {
                     <Tooltip formatter={(v: any) => [fmtFull(v)]}
                       contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #E5E7EB' }} />
                     <Bar dataKey="Net Pay" fill="#16A34A" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="Basic"   fill="#BFDBFE" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-           
+                    <Bar 
