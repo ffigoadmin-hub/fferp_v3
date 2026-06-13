@@ -111,9 +111,9 @@ const navigationConfig: NavGroup[] = [
       'accounts', 'farmmanager', 'bd_data', 'rsh', 'RSH', 'site_visit_farm_manager',
       'cafe_manager', 'palm_cafe_manager', 'ff_operations_manager',
       'bde', 'field_executive', 'back_office', 'tele_caller', 'driver',
-      'hub_manager',
       // gm, l1_manager, auditor intentionally excluded — payment-only roles
       // purchase_manager, purchase_head, shift_employee → trimmed section below
+      // hub_manager → hub-specific sections below (My Hub, Payments, Inventory)
     ],
     items: [
       { icon: Home,          label: 'My Dashboard',          path: '/employee-dashboard' },
@@ -1370,18 +1370,4 @@ export function Sidebar() {
           style={{ color: '#9CA3AF' }}
           onMouseEnter={e => {
             (e.currentTarget as HTMLElement).style.background = '#F9FAFB';
-            (e.currentTarget as HTMLElement).style.color = '#374151';
-          }}
-          onMouseLeave={e => {
-            (e.currentTarget as HTMLElement).style.background = 'transparent';
-            (e.currentTarget as HTMLElement).style.color = '#9CA3AF';
-          }}
-        >
-          <MessageSquarePlus className="w-3.5 h-3.5 shrink-0" />
-          <span>Feedback &amp; Suggestions</span>
-        </a>
-      </div>
-    </aside>
-  );
-}
-
+            (
