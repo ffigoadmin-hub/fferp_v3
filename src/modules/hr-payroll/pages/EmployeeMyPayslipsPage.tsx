@@ -683,7 +683,7 @@ export default function EmployeeMyPayslipsPage() {
       // Step 1: employee's own records — no join
       const { data: batchEmployees, error: empError } = await supabase
         .from('salary_batch_employees')
-        .select('id, batch_id, employee_name, department, basic_salary, increment, incentive, lop_days, lop_amount, tds, days_in_month, selected_days, net_pay, status, created_at')
+        .select('id, batch_id, employee_name, department, earned_salary, increment, incentive, lop_days, lop_amount, tds, days_in_month, selected_days, net_pay, status, created_at')
         .or(`profile_id.eq.${user.id},employee_id.eq.${user.id}`)
         .order('created_at', { ascending: false });
 
@@ -716,7 +716,7 @@ export default function EmployeeMyPayslipsPage() {
             employee_id:   user.employeeId  || '',
             department:    be.department    || user.department || '',
             designation:   user.role        || '',
-            basic_salary:  be.basic_salary  || 0,
+            basic_salary:  be.earned_salary || be.net_pay || 0,
             increment:     be.increment     || 0,
             incentive:     be.incentive     || 0,
             lop_days:      be.lop_days      || 0,
