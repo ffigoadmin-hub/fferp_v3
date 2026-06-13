@@ -48,7 +48,7 @@ export function RedirectPage() {
         purchase_head:             '/purchase',
         warehouse_manager:         '/warehouse',
         qc_manager:                '/warehouse/qc',
-        hub_manager:               '/warehouse',
+        hub_manager:               '/shift/dashboard',
         l1_manager:                '/l1/payments',
         field_executive:           '/sales',
         bde:                       '/sales',
