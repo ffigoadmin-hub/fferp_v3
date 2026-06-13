@@ -679,46 +679,57 @@ export default function EmployeeMyPayslipsPage() {
     try {
       setLoading(true);
 
-      const { data: batchEmployees, error } = await supabase
+      // Step 1: employee's own records — no join
+      const { data: batchEmployees, error: empError } = await supabase
         .from('salary_batch_employees')
-        .select(`
-          id, batch_id, employee_name, department,
-          basic_salary, increment, incentive,
-          lop_days, lop_amount, tds,
-          days_in_month, selected_days, net_pay, status,
-          salary_batches!inner(month, year, from_day, to_day, status, paid_at)
-        `)
+        .select('id, batch_id, employee_name, department, basic_salary, increment, incentive, lop_days, lop_amount, tds, days_in_month, selected_days, net_pay, status, created_at')
         .or(`profile_id.eq.${user.id},employee_id.eq.${user.id}`)
         .order('created_at', { ascending: false });
 
-      if (error) { toast.error('Failed to load payslips'); return; }
+      if (empError) { console.error('salary_batch_employees error:', empError); setPayslips([]); return; }
+      if (!batchEmployees || batchEmployees.length === 0) { setPayslips([]); return; }
 
-      const formatted: PayslipData[] = (batchEmployees || []).map((be: any) => {
-        const batch = be.salary_batches;
-        return {
-          id:           be.id,
-          month:        batch.month,
-          year:         batch.year,
-          employee_name: be.employee_name || user.name || '',
-          employee_id:  user.employeeId || '',
-          department:   be.department || user.department || '',
-          designation:  user.role || '',
-          basic_salary: be.basic_salary || 0,
-          increment:    be.increment    || 0,
-          incentive:    be.incentive    || 0,
-          lop_days:     be.lop_days     || 0,
-          lop_amount:   be.lop_amount   || 0,
-          tds:          be.tds          || 0,
-          days_in_month: getDaysInMonth(batch.year, batch.month),
-          selected_days: be.selected_days || getDaysInMonth(batch.year, batch.month),
-          net_pay:      be.net_pay      || 0,
-          paid_at:      batch.paid_at,
-          status:       be.status || batch.status || 'Draft',
-        };
-      }).filter((p: PayslipData) => ['Paid', 'PAID', 'Paid Already'].includes(p.status));
+      // Step 2: fetch batch metadata for those batch IDs
+      const batchIds = [...new Set(batchEmployees.map((be: any) => be.batch_id))];
+      const { data: batches, error: batchError } = await supabase
+        .from('salary_batches')
+        .select('id, month, year, from_day, to_day, status, paid_at')
+        .in('id', batchIds);
+
+      if (batchError) { console.error('salary_batches error:', batchError); setPayslips([]); return; }
+
+      const batchMap: Record<string, any> = {};
+      (batches || []).forEach((b: any) => { batchMap[b.id] = b; });
+
+      const formatted: PayslipData[] = batchEmployees
+        .map((be: any) => {
+          const batch = batchMap[be.batch_id];
+          if (!batch) return null;
+          return {
+            id:            be.id,
+            month:         batch.month,
+            year:          batch.year,
+            employee_name: be.employee_name || user.name || '',
+            employee_id:   user.employeeId  || '',
+            department:    be.department    || user.department || '',
+            designation:   user.role        || '',
+            basic_salary:  be.basic_salary  || 0,
+            increment:     be.increment     || 0,
+            incentive:     be.incentive     || 0,
+            lop_days:      be.lop_days      || 0,
+            lop_amount:    be.lop_amount    || 0,
+            tds:           be.tds           || 0,
+            days_in_month: getDaysInMonth(batch.year, batch.month),
+            selected_days: be.selected_days || getDaysInMonth(batch.year, batch.month),
+            net_pay:       be.net_pay       || 0,
+            paid_at:       batch.paid_at,
+            status:        be.status || batch.status || 'Draft',
+          };
+        })
+        .filter((p): p is PayslipData => p !== null && ['Paid', 'PAID', 'Paid Already'].includes(p.status));
 
       setPayslips(formatted);
-    } catch { toast.error('Failed to load payslips'); }
+    } catch (err) { console.error('fetchMyPayslips exception:', err); }
     finally   { setLoading(false); }
   }
 
