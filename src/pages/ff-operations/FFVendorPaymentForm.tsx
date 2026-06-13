@@ -208,7 +208,7 @@ export default function FFVendorPaymentForm() {
         </button>
         <div>
           <h1 className="text-xl font-bold text-gray-900">New Vendor Payment Request</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Submit a vendor payment for approval · goes to FF Ops → GM → L1 → Auditor → CEO</p>
+          <p className="text-xs text-gray-500 mt-0.5">Submit a vendor payment for approval · goes to FF Ops → L1 → GM → Auditor → CEO</p>
         </div>
       </div>
 
@@ -421,7 +421,7 @@ export default function FFVendorPaymentForm() {
         {/* Approval chain visual */}
         <div className="mt-4 flex items-center gap-1.5 text-xs text-gray-400 flex-wrap">
           <span className="font-medium text-gray-600">Approval path:</span>
-          {['You','FF Ops','GM','L1','Auditor','CEO','✓ Paid'].map((s, i) => (
+          {['You','FF Ops','L1','GM','Auditor','CEO','✓ Paid'].map((s, i) => (
             <span key={s} className="flex items-center gap-1">
               <span className={`px-2 py-0.5 rounded-full ${i === 0 ? 'bg-blue-100 text-blue-700 font-medium' : 'bg-gray-100 text-gray-500'}`}>{s}</span>
               {i < 6 && <span className="text-gray-300">→</span>}
