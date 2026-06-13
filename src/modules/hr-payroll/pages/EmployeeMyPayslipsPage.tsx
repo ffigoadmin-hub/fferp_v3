@@ -693,7 +693,7 @@ export default function EmployeeMyPayslipsPage() {
       const batchIds = [...new Set(batchEmployees.map((be: any) => be.batch_id))];
       const { data: batches, error: batchError } = await supabase
         .from('salary_batches')
-        .select('id, month, year, from_day, to_day, status, paid_at')
+        .select('id, month, year, status, paid_at')
         .in('id', batchIds);
 
       if (batchError) { console.error('salary_batches error:', batchError); setPayslips([]); return; }
@@ -726,7 +726,7 @@ export default function EmployeeMyPayslipsPage() {
             status:        be.status || batch.status || 'Draft',
           };
         })
-        .filter((p): p is PayslipData => p !== null && ['Paid', 'PAID', 'Paid Already'].includes(p.status));
+        .filter((p): p is PayslipData => p !== null && ['Paid', 'PAID', 'Paid Already', 'paid'].includes(p.status));
 
       setPayslips(formatted);
     } catch (err) { console.error('fetchMyPayslips exception:', err); }
@@ -807,25 +807,4 @@ export default function EmployeeMyPayslipsPage() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <div className="flex gap-4 mt-2">
-                <span className="flex items-center gap-1.5 text-[10px] text-gray-500">
-                  <div className="w-2.5 h-2.5 rounded-sm bg-green-600" /> Net Pay
-                </span>
-                <span className="flex items-center gap-1.5 text-[10px] text-gray-500">
-                  <div className="w-2.5 h-2.5 rounded-sm bg-blue-200" /> Basic Salary
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Payslip cards grid */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {payslips.map(p => (
-              <PayslipCard key={p.id} p={p} onClick={() => setSelectedPayslip(p)} />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+           
