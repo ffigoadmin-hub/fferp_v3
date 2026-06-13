@@ -66,7 +66,7 @@ export function useHourlyReports(date: Date) {
         : 0;
 
       // Check if report already exists
-      const existingReport = reports.find(r => r.time_slot === timeSlot);
+      const existingReport = reports.find(r => String(r.time_slot) === String(timeSlot));
 
       if (existingReport) {
         return { success: false, error: 'Report already submitted for this slot' };
@@ -77,7 +77,7 @@ export function useHourlyReports(date: Date) {
         .insert({
           user_id: user.id,
           date: dateStr,
-          time_slot: timeSlot,
+          time_slot: parseInt(timeSlot),
           report_text: reportText,
           status: 'submitted',
           is_late: isLate,
@@ -104,7 +104,7 @@ export function useHourlyReports(date: Date) {
       return { success: true, data };
     } catch (error) {
       console.error('Error submitting report:', error);
-      const errMsg = (error as any)?.message || (error as any)?.code || 'unknown'; toast.error(`Report error: ${errMsg}`);
+      toast.error('Failed to submit report');
       return { success: false, error };
     } finally {
       setIsSaving(false);
@@ -112,7 +112,7 @@ export function useHourlyReports(date: Date) {
   };
 
   const getReportForSlot = (timeSlot: string) => {
-    return reports.find(r => r.time_slot === timeSlot);
+    return reports.find(r => String(r.time_slot) === String(timeSlot));
   };
 
   return {

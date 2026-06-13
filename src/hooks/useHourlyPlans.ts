@@ -55,7 +55,7 @@ export function useHourlyPlans(date: Date) {
     
     try {
       // Check if plan already exists
-      const existingPlan = plans.find(p => p.time_slot === timeSlot);
+      const existingPlan = plans.find(p => String(p.time_slot) === String(timeSlot));
       
       if (existingPlan) {
         return { success: false, error: 'Plan already submitted for this slot' };
@@ -72,7 +72,7 @@ export function useHourlyPlans(date: Date) {
         .insert({
           user_id: user.id,
           date: dateStr,
-          time_slot: timeSlot,
+          time_slot: parseInt(timeSlot),
           plan_text: JSON.stringify(planData),
           status: 'locked',
         })
@@ -90,7 +90,7 @@ export function useHourlyPlans(date: Date) {
       return { success: true, data };
     } catch (error) {
       console.error('Error submitting plan:', error);
-      const errMsg = (error as any)?.message || (error as any)?.code || 'unknown'; toast.error(`Plan error: ${errMsg}`);
+      toast.error('Failed to submit plan');
       return { success: false, error };
     } finally {
       setIsSaving(false);
@@ -98,7 +98,7 @@ export function useHourlyPlans(date: Date) {
   };
 
   const getPlanForSlot = (timeSlot: string) => {
-    return plans.find(p => p.time_slot === timeSlot);
+    return plans.find(p => String(p.time_slot) === String(timeSlot));
   };
 
   const getParsedPlan = (timeSlot: string): { tasks: number[]; notes: string } | null => {
