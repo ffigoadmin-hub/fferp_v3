@@ -675,7 +675,7 @@ export default function EmployeeMyPayslipsPage() {
   useEffect(() => { fetchMyPayslips(); }, [user]);
 
   async function fetchMyPayslips() {
-    toast.info(`fetchMyPayslips called. user=${user?.id ?? 'NULL'}`);
+    toast.info(`fetch called user=${user?.id ?? 'NULL'}`);
     if (!user) return;
     try {
       setLoading(true);
@@ -687,9 +687,9 @@ export default function EmployeeMyPayslipsPage() {
         .or(`profile_id.eq.${user.id},employee_id.eq.${user.id}`)
         .order('created_at', { ascending: false });
 
-      if (empError) { toast.error(`Step1 error: ${empError.message}`); setPayslips([]); return; }
-      if (!batchEmployees || batchEmployees.length === 0) { toast.error('Step1: 0 rows returned'); setPayslips([]); return; }
-      toast.success(`Step1 OK: ${batchEmployees.length} rows`);
+      if (empError) { toast.error(`S1 err: ${empError.message}`); setPayslips([]); return; }
+      if (!batchEmployees || batchEmployees.length === 0) { toast.error('S1: 0 rows'); setPayslips([]); return; }
+      toast.success(`S1 OK: ${batchEmployees.length} rows`);
 
       // Step 2: fetch batch metadata for those batch IDs
       const batchIds = [...new Set(batchEmployees.map((be: any) => be.batch_id))];
@@ -698,8 +698,8 @@ export default function EmployeeMyPayslipsPage() {
         .select('id, month, year, status, paid_at')
         .in('id', batchIds);
 
-      if (batchError) { toast.error(`Step2 error: ${batchError.message}`); setPayslips([]); return; }
-      toast.success(`Step2 OK: ${batches?.length ?? 0} batches`);
+      if (batchError) { toast.error(`S2 err: ${batchError.message}`); setPayslips([]); return; }
+      toast.success(`S2 OK: ${batches?.length ?? 0} batches`);
 
       const batchMap: Record<string, any> = {};
       (batches || []).forEach((b: any) => { batchMap[b.id] = b; });
@@ -805,4 +805,9 @@ export default function EmployeeMyPayslipsPage() {
                       tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
                     <Tooltip formatter={(v: any) => [fmtFull(v)]}
                       contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #E5E7EB' }} />
-                    <Bar dataKey="Net 
+                    <Bar dataKey="Net Pay" fill="#16A34A" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="Basic"   fill="#BFDBFE" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+           
