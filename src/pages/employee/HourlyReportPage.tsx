@@ -483,8 +483,8 @@ export function HourlyReportPage({ embedded = false }: HourlyReportPageProps) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-3">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <div className="lg:col-span-3 space-y-3">
             {TIME_SLOTS.map((slot, index) => {
               const existingReport = getReportForSlot(slot.id);
               const existingPlan = getPlanForSlot(slot.id);
@@ -629,7 +629,7 @@ export function HourlyReportPage({ embedded = false }: HourlyReportPageProps) {
             })}
           </div>
 
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-2">
             <AnimatePresence mode="wait">
               {selectedSlot ? (
                 <motion.div
@@ -965,13 +965,13 @@ export function HourlyReportPage({ embedded = false }: HourlyReportPageProps) {
 
                       <div>
                         <Label className="text-sm mb-2 block">Type of Extra Work *</Label>
-                        <div className="flex gap-2">
+                        <div className="grid grid-cols-2 gap-2">
                           <Button
                             type="button"
                             size="sm"
                             variant={extraWorkType === "assigned" ? "default" : "outline"}
                             onClick={() => setExtraWorkType("assigned")}
-                            className="flex-1"
+                            className="w-full text-xs"
                           >
                             New Work Assigned
                           </Button>
@@ -980,7 +980,7 @@ export function HourlyReportPage({ embedded = false }: HourlyReportPageProps) {
                             size="sm"
                             variant={extraWorkType === "done" ? "default" : "outline"}
                             onClick={() => setExtraWorkType("done")}
-                            className="flex-1"
+                            className="w-full text-xs"
                           >
                             Extra Work Done
                           </Button>
