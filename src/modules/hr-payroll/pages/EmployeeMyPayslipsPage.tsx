@@ -675,6 +675,7 @@ export default function EmployeeMyPayslipsPage() {
   useEffect(() => { fetchMyPayslips(); }, [user]);
 
   async function fetchMyPayslips() {
+    toast.info(`fetchMyPayslips called. user=${user?.id ?? 'NULL'}`);
     if (!user) return;
     try {
       setLoading(true);
@@ -804,5 +805,4 @@ export default function EmployeeMyPayslipsPage() {
                       tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
                     <Tooltip formatter={(v: any) => [fmtFull(v)]}
                       contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #E5E7EB' }} />
-                    <Bar dataKey="Net Pay" fill="#16A34A" radius={[4, 4, 0, 0]} />
-                    <Bar 
+                    <Bar dataKey="Net 
