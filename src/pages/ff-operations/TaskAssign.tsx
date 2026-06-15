@@ -118,13 +118,14 @@ export default function TaskAssign() {
 
   // Fetch all active staff — exclude pure admin/finance roles
   const { data: salesTeam = [], isLoading: teamLoading } = useQuery({
-    queryKey: ['sales-team-members'],
+    queryKey: ['sales-team-members', user?.id],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('profiles')
         .select('id, name, role, email, hub_id, hubs(name)')
-        .eq('is_active', true)
+        .neq('is_active', false)              // include active + null (seeded profiles)
         .not('role', 'in', '("admin","hr","ceo","director","gm","gmo","auditor","accounts")')
+        .neq('id', user?.id)                  // exclude the logged-in ops manager
         .order('name');
       if (error) throw error;
       return data || [];
