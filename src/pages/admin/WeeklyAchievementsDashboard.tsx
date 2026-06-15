@@ -25,9 +25,9 @@ function useMonitorData() {
         queryKey: ['monitor-core-heads'],
         queryFn: async () => {
             const { data: ch, error } = await (supabase.from('core_heads') as any)
-                .select('id, user_id, is_active, tagged_at, target_date, achievement_date, profiles:profiles!core_heads_user_id_fkey(id, name, email, department, role)')
+                .select('id, user_id, is_active, target_date, achievement_date, profiles:profiles!core_heads_user_id_fkey(id, name, email, department, role)')
                 .eq('is_active', true)
-                .order('tagged_at', { ascending: false });
+                .order('created_at', { ascending: false });
             if (error) {
                 // core_heads is an IGO-Chain table — silently return empty in FFERPv2
                 const isMissing = error?.code === 'PGRST205' || error?.message?.includes('schema cache');

@@ -27,7 +27,7 @@ export function useCoreHeads() {
             // 2. Fetch all core_heads records (ignore error — table may be empty)
             const { data: coreHeads, error: coreHeadsError } = await supabase
                 .from('core_heads')
-                .select('id, user_id, is_active, tagged_at, tagged_by');
+                .select('id, user_id, is_active, created_at');
 
             if (coreHeadsError) {
                 console.warn('[useCoreHeads] core_heads fetch error (non-fatal):', coreHeadsError);

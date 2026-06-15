@@ -293,7 +293,7 @@ export function parseBatchRejectionReasons(row: { rejection_reason?: string | nu
 }
 
 const BATCH_SELECT = `
-  id, batch_code, department, status, total_employees, total_salary, total_net_pay, total_lop_amount, total_tds,
+  id, department, status, total_employees, total_salary, total_net_pay, total_lop_amount, total_tds,
   created_at, updated_at, created_by, prepared_by, hr_verified_by, hr_verified_at,
   auditor_approved_by, auditor_approved_at, ceo_approved_by, ceo_approved_at,
   accounts_processed_by, accounts_processed_at, paid_by, paid_at, paid_date, released_by, released_at,
@@ -500,8 +500,8 @@ function toBatchCard(row: any, employeeDepartments?: string[]): SalaryBatchCard 
   
   return {
     id: row.id,
-    batch_code: row.batch_code ?? '',
-    batch_name: row.batch_code ?? undefined,
+    batch_code: row.batch_code ?? `BATCH-${row.month ?? '??'}-${row.year ?? '??'}-${String(row.id ?? '').slice(0,6).toUpperCase()}`,
+    batch_name: row.batch_code ?? `BATCH-${row.month ?? '??'}-${row.year ?? '??'}-${String(row.id ?? '').slice(0,6).toUpperCase()}`,
     department: departments[0] || null,
     departments_display: departmentsDisplay,
     total_employees: row.total_employees ?? 0,
