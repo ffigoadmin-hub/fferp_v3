@@ -116,14 +116,15 @@ export default function TaskAssign() {
   const [taskDate, setTaskDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [modalMember, setModalMember] = useState<any>(null);
 
-  // Fetch all field_executive, bde, tele_caller profiles
+  // Fetch all active staff — exclude pure admin/finance roles
   const { data: salesTeam = [], isLoading: teamLoading } = useQuery({
     queryKey: ['sales-team-members'],
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from('profiles')
         .select('id, name, role, email, hub_id, hubs(name)')
-        .in('role', ['field_executive', 'bde', 'tele_caller', 'nsm', 'rsh'])
+        .eq('is_active', true)
+        .not('role', 'in', '("admin","hr","ceo","director","gm","gmo","auditor","accounts")')
         .order('name');
       if (error) throw error;
       return data || [];
@@ -192,8 +193,6 @@ export default function TaskAssign() {
     field_executive: 'bg-blue-100 text-blue-700',
     bde:             'bg-purple-100 text-purple-700',
     tele_caller:     'bg-teal-100 text-teal-700',
-    nsm:             'bg-orange-100 text-orange-700',
-    rsh:             'bg-pink-100 text-pink-700',
   };
 
   return (
