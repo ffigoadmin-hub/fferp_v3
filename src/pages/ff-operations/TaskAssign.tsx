@@ -123,9 +123,9 @@ export default function TaskAssign() {
       const { data, error } = await (supabase as any)
         .from('profiles')
         .select('id, name, role, email, hub_id, hubs(name)')
-        .neq('is_active', false)              // include active + null (seeded profiles)
-        .not('role', 'in', '("admin","hr","ceo","director","gm","gmo","auditor","accounts")')
-        .neq('id', user?.id)                  // exclude the logged-in ops manager
+        .or('is_active.is.null,is_active.eq.true')
+        .not('role', 'in', '(admin,hr,ceo,director,gm,gmo,auditor,accounts)')
+        .neq('id', user?.id ?? '')
         .order('name');
       if (error) throw error;
       return data || [];
