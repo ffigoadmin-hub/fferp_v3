@@ -123,7 +123,7 @@ export default function TaskAssign() {
       const { data, error } = await (supabase as any)
         .from('profiles')
         .select('id, name, role, email, hub_id, hubs(name)')
-        .in('role', ['field_executive', 'bde', 'tele_caller'])
+        .in('role', ['field_executive', 'bde', 'tele_caller', 'nsm', 'rsh'])
         .order('name');
       if (error) throw error;
       return data || [];
@@ -192,6 +192,8 @@ export default function TaskAssign() {
     field_executive: 'bg-blue-100 text-blue-700',
     bde:             'bg-purple-100 text-purple-700',
     tele_caller:     'bg-teal-100 text-teal-700',
+    nsm:             'bg-orange-100 text-orange-700',
+    rsh:             'bg-pink-100 text-pink-700',
   };
 
   return (
