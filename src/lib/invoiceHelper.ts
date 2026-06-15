@@ -99,10 +99,10 @@ export async function backfillMissingInvoices(): Promise<{ created: number; fail
   let created = 0;
   let failed  = 0;
 
-  // Fetch orders that have no matching invoice
+  // Fetch orders — join customers table for name/phone/address
   const { data: orders } = await supabase
     .from('sales_orders')
-    .select('id, customer_id, customer_name, net_amount, total_amount, subtotal, payment_mode, notes')
+    .select('id, customer_id, customer_name, net_amount, total_amount, subtotal, payment_mode, notes, customer:customers(name, phone, address)')
     .order('created_at', { ascending: true });
 
   if (!orders?.length) return { created, failed };
@@ -118,18 +118,110 @@ export async function backfillMissingInvoices(): Promise<{ created: number; fail
   const missing = orders.filter(o => !existingOrderIds.has(o.id));
 
   for (const order of missing) {
+    // Calculate total from order_items when order total is 0/null (e.g. APK orders)
+    let total = Number((order as any).total_amount ?? (order as any).net_amount ?? 0);
+    if (!total) {
+      const { data: items } = await supabase
+        .from('sales_order_items')
+        .select('total_price, unit_price, quantity')
+        .eq('order_id', order.id);
+      if (items?.length) {
+        total = items.reduce((sum, item: any) =>
+          sum + Number(item.total_price ?? (Number(item.unit_price) * Number(item.quantity)) ?? 0), 0);
+      }
+    }
+
+    const cust       = (order as any).customer as any;
+    const custName   = (order as any).customer_name ?? cust?.name   ?? null;
+    const custPhone  = cust?.phone   ?? null;
+    const custAddr   = cust?.address ?? null;
+
     const result = await createInvoiceForOrder({
-      orderId:      order.id,
-      customerId:   order.customer_id,
-      customerName: order.customer_name,
-      subtotal:     Number(order.subtotal ?? order.net_amount ?? order.total_amount ?? 0),
-      totalAmount:  Number(order.total_amount ?? order.net_amount ?? 0),
-      paymentMode:  order.payment_mode ?? 'cod',
-      notes:        order.notes,
+      orderId:         order.id,
+      customerId:      (order as any).customer_id,
+      customerName:    custName,
+      customerPhone:   custPhone,
+      customerAddress: custAddr,
+      subtotal:        Number((order as any).subtotal ?? total),
+      totalAmount:     total,
+      paymentMode:     (order as any).payment_mode ?? 'cod',
+      notes:           (order as any).notes,
     });
     if (result) created++;
     else failed++;
   }
 
   return { created, failed };
+}
+
+/**
+ * Fix existing invoices that have total_amount = 0 or missing customer_name.
+ * Recalculates totals from sales_order_items and looks up customer from customers table.
+ * Call this after backfillMissingInvoices to repair already-created empty invoices.
+ */
+export async function fixZeroAmountInvoices(): Promise<{ fixed: number; failed: number }> {
+  let fixed  = 0;
+  let failed = 0;
+
+  // Get invoices that are empty (₹0 or no customer name)
+  const { data: emptyInvoices } = await supabase
+    .from('invoices')
+    .select('id, order_id, total_amount, customer_name, customer_id')
+    .or('total_amount.eq.0,customer_name.is.null')
+    .not('order_id', 'is', null);
+
+  if (!emptyInvoices?.length) return { fixed, failed };
+
+  for (const inv of emptyInvoices) {
+    if (!inv.order_id) continue;
+
+    // Get order + customer join
+    const { data: order } = await supabase
+      .from('sales_orders')
+      .select('id, customer_id, customer_name, net_amount, total_amount, subtotal, customer:customers(name, phone, address)')
+      .eq('id', inv.order_id)
+      .maybeSingle();
+
+    if (!order) continue;
+
+    // Calculate total from order_items when 0
+    let total = Number((order as any).total_amount ?? (order as any).net_amount ?? 0);
+    if (!total) {
+      const { data: items } = await supabase
+        .from('sales_order_items')
+        .select('total_price, unit_price, quantity')
+        .eq('order_id', inv.order_id);
+      if (items?.length) {
+        total = items.reduce((sum, item: any) =>
+          sum + Number(item.total_price ?? (Number(item.unit_price) * Number(item.quantity)) ?? 0), 0);
+      }
+    }
+
+    const cust      = (order as any).customer as any;
+    const custName  = (order as any).customer_name ?? cust?.name   ?? inv.customer_name ?? null;
+    const custPhone = cust?.phone   ?? null;
+    const custAddr  = cust?.address ?? null;
+
+    // Skip if we still have nothing new
+    if (!total && !custName) continue;
+
+    const patch: any = {};
+    if (total > 0) {
+      patch.total_amount   = total;
+      patch.subtotal       = Number((order as any).subtotal ?? total);
+    }
+    if (custName)  patch.customer_name    = custName;
+    if (custPhone) patch.customer_phone   = custPhone;
+    if (custAddr)  patch.customer_address = custAddr;
+
+    const { error } = await supabase
+      .from('invoices')
+      .update(patch)
+      .eq('id', inv.id);
+
+    if (error) failed++;
+    else fixed++;
+  }
+
+  return { fixed, failed };
 }

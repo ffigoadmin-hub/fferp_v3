@@ -10,7 +10,7 @@ import {
   ArrowLeft, Download, MessageCircle, Loader2,
   Package, ChevronRight, Building2, RefreshCw, Zap,
 } from 'lucide-react';
-import { backfillMissingInvoices } from '@/lib/invoiceHelper';
+import { backfillMissingInvoices, fixZeroAmountInvoices } from '@/lib/invoiceHelper';
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 interface Invoice {
@@ -526,14 +526,22 @@ export default function SalesInvoicesPage() {
   const handleSync = async () => {
     setSyncing(true);
     try {
+      // Step 1: create invoices for orders that have none
       const { created, failed } = await backfillMissingInvoices();
-      if (created > 0) {
-        toast.success(`✅ ${created} missing invoice${created > 1 ? 's' : ''} generated`);
+      // Step 2: fix existing invoices that have ₹0 or missing customer (e.g. from APK orders)
+      const { fixed, failed: fixFailed } = await fixZeroAmountInvoices();
+
+      const totalIssues = failed + fixFailed;
+      if (created > 0 || fixed > 0) {
+        const parts = [];
+        if (created > 0) parts.push(`${created} new invoice${created > 1 ? 's' : ''} created`);
+        if (fixed > 0)   parts.push(`${fixed} empty invoice${fixed > 1 ? 's' : ''} fixed`);
+        toast.success(`✅ ${parts.join(' · ')}`);
         queryClient.invalidateQueries({ queryKey: ['invoices'] });
       } else {
-        toast.success('All orders already have invoices');
+        toast.success('All invoices are up to date');
       }
-      if (failed > 0) toast.error(`${failed} invoice(s) failed — check console`);
+      if (totalIssues > 0) toast.error(`${totalIssues} invoice(s) could not be updated — check console`);
     } catch (e: any) {
       toast.error(e.message);
     } finally {
