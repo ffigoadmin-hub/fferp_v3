@@ -221,6 +221,7 @@ export default function OrderListPage() {
         .select(`
           id, order_number, status, net_amount, total_amount,
           payment_mode, payment_status, order_date, created_at, source,
+          customer_name, customer_phone,
           customer:customers(shop_name, name, first_name, last_name, phone, mobile, area)
         `)
         .order('created_at', { ascending: false })
@@ -506,11 +507,13 @@ export default function OrderListPage() {
                         <div className="font-semibold text-slate-800 text-sm">
                           {order.customer?.shop_name ||
                            `${order.customer?.first_name ?? ''} ${order.customer?.last_name ?? ''}`.trim() ||
-                           order.customer?.name || 'Walk-in'}
+                           order.customer?.name ||
+                           (order as any).customer_name ||
+                           'Walk-in'}
                         </div>
                         {order.customer?.area && <div className="text-[11px] text-slate-400">{order.customer.area}</div>}
-                        {(order.customer?.mobile || order.customer?.phone) && (
-                          <div className="text-[10px] text-slate-400">{order.customer.mobile || order.customer.phone}</div>
+                        {(order.customer?.mobile || order.customer?.phone || (order as any).customer_phone) && (
+                          <div className="text-[10px] text-slate-400">{order.customer?.mobile || order.customer?.phone || (order as any).customer_phone}</div>
                         )}
                       </td>
 
