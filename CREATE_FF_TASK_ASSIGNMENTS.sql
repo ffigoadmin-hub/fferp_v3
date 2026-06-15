@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS public.ff_task_assignments (
 ALTER TABLE public.ff_task_assignments ENABLE ROW LEVEL SECURITY;
 
 -- FF Ops Manager / Admin can read & write all
-CREATE POLICY IF NOT EXISTS "ff_task_all_ops"
+DROP POLICY IF EXISTS "ff_task_all_ops" ON public.ff_task_assignments;
+CREATE POLICY "ff_task_all_ops"
 ON public.ff_task_assignments FOR ALL
 USING (
   EXISTS (
@@ -34,12 +35,11 @@ USING (
 );
 
 -- Employees can read their own
-CREATE POLICY IF NOT EXISTS "ff_task_own_read"
+DROP POLICY IF EXISTS "ff_task_own_read" ON public.ff_task_assignments;
+CREATE POLICY "ff_task_own_read"
 ON public.ff_task_assignments FOR SELECT
 USING (assigned_to = auth.uid());
 
 -- Index for fast lookup
 CREATE INDEX IF NOT EXISTS ff_task_date_idx ON public.ff_task_assignments (task_date);
-CREATE INDEX IF NOT EXISTS ff_task_assignee_idx ON public.ff_task_assignments (assigned_to, task_date);
-
-RAISE NOTICE 'ff_task_assignments table ready';
+CREATE INDEX IF NOT EXISTS ff_task_ass
