@@ -134,38 +134,37 @@ export function CEODashboardPage() {
             />
 
             {/* Daily Spend Chart */}
-            <div className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-xl p-5 shadow-lg">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4 flex items-center gap-2">
+            <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-4 flex items-center gap-2">
                 <IndianRupee className="w-3.5 h-3.5 text-primary" />
                 Daily Paid Spend
               </h3>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={dailySpend}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff" opacity={0.1} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" opacity={1} />
                     <XAxis
                       dataKey="day"
-                      stroke="rgba(255,255,255,0.4)"
+                      stroke="#9CA3AF"
                       fontSize={10}
                       tickLine={false}
                       axisLine={false}
                     />
                     <YAxis
-                      stroke="rgba(255,255,255,0.4)"
+                      stroke="#9CA3AF"
                       fontSize={10}
                       tickLine={false}
                       axisLine={false}
                       tickFormatter={(v) => `₹${v / 1000}k`}
                     />
                     <Tooltip
-                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                      cursor={{ fill: 'rgba(124,58,237,0.05)' }}
                       contentStyle={{
-                        backgroundColor: 'rgba(0,0,0,0.8)',
-                        border: '1px solid rgba(255,255,255,0.1)',
+                        backgroundColor: '#ffffff',
+                        border: '1px solid #E5E7EB',
                         borderRadius: '12px',
-                        backdropFilter: 'blur(10px)',
                         fontSize: '11px',
-                        color: '#fff'
+                        color: '#111827'
                       }}
                     />
                     <Bar dataKey="amount" fill="#7c3aed" radius={[4, 4, 0, 0]} barSize={30} />
@@ -193,3 +192,4 @@ export function CEODashboardPage() {
     </motion.div>
   );
 }
+                                                                                                                                    

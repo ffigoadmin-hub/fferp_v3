@@ -26,19 +26,19 @@ export function CEOPulseCard({ title, icon: Icon, metrics, onClick, variant }: C
       onClick={onClick}
       className={cn(
         "relative overflow-hidden rounded-2xl p-5 cursor-pointer transition-all duration-300",
-        "bg-black/40 backdrop-blur-xl border shadow-lg hover:shadow-2xl",
+        "bg-white border shadow-sm hover:shadow-lg",
         "group hover:scale-[1.01]",
         isDestructive
-          ? "border-destructive/20 hover:border-destructive/50 hover:shadow-[0_0_30px_rgba(239,68,68,0.15)]"
-          : "border-primary/20 hover:border-primary/50 hover:shadow-[0_0_30px_rgba(124,58,237,0.15)]"
+          ? "border-red-100 hover:border-red-300"
+          : "border-violet-100 hover:border-violet-300"
       )}
     >
       {/* Gradient Overlay */}
       <div className={cn(
         "absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300",
         isDestructive
-          ? "bg-gradient-to-br from-destructive/5 to-transparent"
-          : "bg-gradient-to-br from-primary/5 to-transparent"
+          ? "bg-gradient-to-br from-red-50 to-transparent"
+          : "bg-gradient-to-br from-violet-50 to-transparent"
       )} />
 
       {/* Header */}

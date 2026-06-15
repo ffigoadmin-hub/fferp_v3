@@ -7,7 +7,7 @@ interface CEOOperationalPulseProps {
 
 export function CEOOperationalPulse({ isLoading }: CEOOperationalPulseProps) {
   return (
-    <div className="flex items-center justify-between bg-black/40 backdrop-blur-xl border border-white/10 p-4 rounded-xl hover:shadow-[0_0_20px_rgba(255,255,255,0.05)] transition-all duration-300">
+    <div className="flex items-center justify-between bg-white border border-gray-200 p-4 rounded-xl shadow-sm hover:shadow-md hover:border-violet-200 transition-all duration-300">
       <div className="flex items-center gap-3">
         <div className="p-2 rounded-lg bg-primary/10">
           <TrendingUp className="w-4 h-4 text-primary" />

@@ -50,11 +50,11 @@ export function CEOStatsGrid({ weeklySpend, adminRejections, activeProjects, pen
       {stats.map((stat, idx) => (
         <div
           key={idx}
-          className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-xl p-4 hover:border-violet-500/30 hover:shadow-[0_0_15px_rgba(124,58,237,0.1)] transition-all duration-300 group"
+          className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:border-violet-300 hover:shadow-md transition-all duration-300 group"
         >
           <div className="flex items-center gap-2 mb-2">
             <stat.icon className={cn("w-3.5 h-3.5", stat.iconClass)} />
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
               {stat.label}
             </p>
           </div>
