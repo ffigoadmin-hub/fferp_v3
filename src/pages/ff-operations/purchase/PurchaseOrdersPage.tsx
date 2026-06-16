@@ -170,6 +170,11 @@ function PORow({ po }: { po: PurchaseOrder }) {
   );
 }
 
+// ── Hub name normaliser — handles spelling variants (e.g. Palikarani vs Pallikarani)
+// Lowercases, strips "hub", strips non-alpha, collapses consecutive repeated chars (ll→l)
+const normHub = (s: string) =>
+  (s ?? '').toLowerCase().replace(/\s*hub\s*/gi, '').replace(/[^a-z]/g, '').replace(/(.)\1+/g, '$1');
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function PurchaseOrdersPage() {
   const { user } = useAuth();
@@ -180,19 +185,33 @@ export default function PurchaseOrdersPage() {
   const { data: orders = [], isLoading, refetch } = useQuery({
     queryKey: ['purchase-orders-exec', hubId],
     queryFn: async () => {
-      let q = (supabase as any)
+      // Fetch all POs — filter client-side so spelling variants of hub names still match
+      // (DB may have duplicate hub records: "Palikarani Hub" vs "Pallikarani Hub" with different UUIDs)
+      const { data, error } = await (supabase as any)
         .from('purchase_orders')
         .select('id, po_number, hub_id, hub_name, status, total_amount, sub_total, vendor_name, delivery_date, order_date, created_at, notes, items')
         .order('created_at', { ascending: false });
 
-      if (!isManagement && hubId) q = q.eq('hub_id', hubId);
-
-      const { data, error } = await q;
       if (error) throw error;
-      return (data ?? []).map((po: any) => ({
+      let result = (data ?? []).map((po: any) => ({
         ...po,
         items: Array.isArray(po.items) ? po.items : [],
       })) as PurchaseOrder[];
+
+      // Non-management: keep only this exec's hub POs
+      if (!isManagement && hubId) {
+        // Fetch exec's canonical hub name for fuzzy fallback matching
+        const { data: hubRow } = await (supabase as any)
+          .from('hubs').select('name').eq('id', hubId).maybeSingle();
+        const execNorm = normHub(hubRow?.name ?? '');
+
+        result = result.filter(po =>
+          po.hub_id === hubId ||                                          // exact UUID match (fast path)
+          (execNorm.length > 3 && normHub(po.hub_name ?? '') === execNorm) // normalised name fallback
+        );
+      }
+
+      return result;
     },
     enabled: !!user,
   });
