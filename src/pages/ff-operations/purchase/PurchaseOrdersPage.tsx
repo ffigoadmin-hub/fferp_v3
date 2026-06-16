@@ -170,10 +170,17 @@ function PORow({ po }: { po: PurchaseOrder }) {
   );
 }
 
-// ── Hub name normaliser — handles spelling variants (e.g. Palikarani vs Pallikarani)
-// Lowercases, strips "hub", strips non-alpha, collapses consecutive repeated chars (ll→l)
+// ── Hub name helpers — handle spelling variants (Palikarani vs Pallikaranai)
 const normHub = (s: string) =>
   (s ?? '').toLowerCase().replace(/\s*hub\s*/gi, '').replace(/[^a-z]/g, '').replace(/(.)\1+/g, '$1');
+// Two hub names match if normalised forms share ≥8 char prefix
+// e.g. "palikarani" vs "palikaranai" → share "palikaran" (9) → same hub
+const hubNormMatch = (a: string, b: string) => {
+  if (!a || !b || a.length < 5 || b.length < 5) return false;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  return i >= 8;
+};
 
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function PurchaseOrdersPage() {
@@ -207,7 +214,7 @@ export default function PurchaseOrdersPage() {
 
         result = result.filter(po =>
           po.hub_id === hubId ||                                          // exact UUID match (fast path)
-          (execNorm.length > 3 && normHub(po.hub_name ?? '') === execNorm) // normalised name fallback
+          (execNorm.length >= 5 && hubNormMatch(normHub(po.hub_name ?? ''), execNorm)) // fuzzy name fallback
         );
       }
 

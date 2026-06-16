@@ -401,6 +401,47 @@ export default function EODPOEngine() {
         hubStock.get(hId)!.set(key, cur + Number(row.quantity ?? 0));
       });
 
+      // ── Step 2b: Resolve 'unassigned' hub_ids to real UUIDs ─────────────
+      // Orders with hub_id=null get grouped under 'unassigned'; resolve them
+      // now so POs carry real UUIDs that match exec profiles.
+      {
+        const { data: hubRows } = await (supabase as any)
+          .from('hubs').select('id, name');
+
+        const normH = (s: string) =>
+          (s ?? '').toLowerCase().replace(/\s*hub\s*/gi, '').replace(/[^a-z]/g, '').replace(/(.)+/g, '$1');
+
+        const hubList: { id: string; name: string; norm: string }[] =
+          (hubRows ?? []).map((h: any) => ({ id: h.id, name: h.name, norm: normH(h.name) }));
+
+        for (const [key, hubData] of hubDemand) {
+          if (hubData.hubId !== 'unassigned') continue;
+          if (hubData.hubName === 'Unassigned Hub') continue;
+
+          const orderNorm = normH(hubData.hubName);
+          let bestId = ''; let bestName = ''; let bestPrefix = 0;
+          for (const h of hubList) {
+            let p = 0;
+            while (p < orderNorm.length && p < h.norm.length && orderNorm[p] === h.norm[p]) p++;
+            if (p > bestPrefix) { bestPrefix = p; bestId = h.id; bestName = h.name; }
+          }
+          if (bestPrefix >= 5) {
+            // Remap from 'unassigned' key to real UUID key
+            hubDemand.delete(key);
+            const existing = hubDemand.get(bestId);
+            if (existing) {
+              // Merge items into existing hub entry
+              for (const [k, v] of hubData.items) {
+                if (existing.items.has(k)) existing.items.get(k)!.qty += v.qty;
+                else existing.items.set(k, v);
+              }
+            } else {
+              hubDemand.set(bestId, { hubId: bestId, hubName: bestName, items: hubData.items });
+            }
+          }
+        }
+      }
+
       const newPOs: GeneratedPO[] = [];
       let serial = (await fetchMaxPOSerial()) + 1;
 
