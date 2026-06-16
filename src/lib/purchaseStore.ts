@@ -138,7 +138,7 @@ export async function savePOToStore(po: StoredPO): Promise<string | null> {
     await supabase.from('purchase_order_items').delete().eq('po_id', poId);
     const itemRows = po.items.map(item => ({
       po_id:          poId,
-      hub_id:         po.hub_id ?? null,
+      hub_id:         (po.hub_id && po.hub_id !== 'unassigned') ? po.hub_id : null,
       product_name:   item.itemName,
       item_name:      item.itemName,
       required_qty:   item.quantity,
