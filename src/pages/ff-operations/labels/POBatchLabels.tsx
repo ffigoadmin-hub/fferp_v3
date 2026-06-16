@@ -101,7 +101,20 @@ export default function POBatchLabels({ hubs }: { hubs: any[] }) {
   const hubPrefix = hub ? getHubPrefix(hub) : 'HUB';
   const hubName = hub?.name ?? '';
 
+  // ── Hub name helpers (handles Palikarani vs Pallikaranai spelling variants) ──
+  const normHub = (s: string) =>
+    (s ?? '').toLowerCase().replace(/\s*hub\s*/gi, '').replace(/[^a-z]/g, '').replace(/(.)+/g, '$1');
+  const hubNormMatch = (a: string, b: string) => {
+    if (!a || !b || a.length < 5 || b.length < 5) return false;
+    let i = 0;
+    while (i < a.length && i < b.length && a[i] === b[i]) i++;
+    return i >= 8;
+  };
+  const selectedHubNorm = normHub(hubName); // hubName derived from selectedHubId
+
   // ── Fetch this hub's sales orders for the target date ─────────────────────
+  // Fetches all orders for the date then filters client-side — handles the case
+  // where orders have hub_id = null but hub_name spelling differs (routing gap)
   const { data: orderItems = [], isLoading } = useQuery({
     queryKey: ['po-batch-orders', selectedHubId, targetDate],
     enabled: !!selectedHubId,
@@ -109,15 +122,20 @@ export default function POBatchLabels({ hubs }: { hubs: any[] }) {
       const { data, error } = await supabase
         .from('sales_orders')
         .select(`
-          id, order_number, status,
+          id, order_number, status, hub_id, hub_name,
           items:sales_order_items(product_name, qty_kg, unit)
         `)
-        .eq('hub_id', selectedHubId)
         .eq('order_date', targetDate)
         .in('status', ['pending', 'confirmed', 'draft']);
 
       if (error) throw error;
-      return data ?? [];
+
+      // Client-side hub filter: exact UUID match OR normalised hub name prefix match
+      return (data ?? []).filter((order: any) =>
+        order.hub_id === selectedHubId ||
+        (selectedHubNorm.length >= 5 &&
+          hubNormMatch(normHub(order.hub_name ?? ''), selectedHubNorm))
+      );
     },
   });
 
