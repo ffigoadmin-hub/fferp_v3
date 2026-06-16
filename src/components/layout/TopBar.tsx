@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { LogOut, Search, Leaf, Command, Bell } from 'lucide-react';
 import { format } from 'date-fns';
 import { NotificationBell } from '@/components/NotificationBell';
@@ -42,6 +43,7 @@ export function TopBar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const [hubName, setHubName] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -55,6 +57,14 @@ export function TopBar() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  useEffect(() => {
+    const hubRoles = ['shift_employee', 'hub_manager', 'warehouse_manager', 'qc_manager'];
+    if (user && hubRoles.includes(user.role) && (user as any).hub_id) {
+      supabase.from('hubs').select('name').eq('id', (user as any).hub_id).maybeSingle()
+        .then(({ data }) => { if (data?.name) setHubName(data.name); });
+    }
+  }, [user]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,13 +106,20 @@ export function TopBar() {
           </div>
         </Link>
 
-        {/* Dept badge */}
-        {user.department && (
+        {/* Hub badge (shift_employee / hub_manager) or dept badge */}
+        {(hubName || user.department) && (
           <div className="hidden lg:flex items-center gap-2 ml-1 pl-3" style={{ borderLeft: '1px solid #E5E7EB' }}>
-            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full"
-              style={{ background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE' }}>
-              {user.department}
-            </span>
+            {hubName ? (
+              <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1"
+                style={{ background: '#F0FDF4', color: '#15803D', border: '1px solid #BBF7D0' }}>
+                <span style={{ fontSize: 9 }}>📦</span> {hubName}
+              </span>
+            ) : (
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full"
+                style={{ background: '#EFF6FF', color: '#2563EB', border: '1px solid #BFDBFE' }}>
+                {user.department}
+              </span>
+            )}
           </div>
         )}
       </div>
