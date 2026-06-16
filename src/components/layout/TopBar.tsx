@@ -59,8 +59,7 @@ export function TopBar() {
   }, []);
 
   useEffect(() => {
-    const hubRoles = ['shift_employee', 'hub_manager', 'warehouse_manager', 'qc_manager'];
-    if (user && hubRoles.includes(user.role) && (user as any).hub_id) {
+    if (user && (user as any).hub_id) {
       supabase.from('hubs').select('name').eq('id', (user as any).hub_id).maybeSingle()
         .then(({ data }) => { if (data?.name) setHubName(data.name); });
     }
