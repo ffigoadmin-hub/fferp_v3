@@ -286,6 +286,28 @@ export default function POBatchLabels({ hubs }: { hubs: any[] }) {
         }
       }
 
+      // ── Insert boxes into Supabase so scanner can find them by box_code ──
+      try {
+        const uniqueNames = [...new Set(labels.map(l => l.product_name))];
+        const { data: productData } = await supabase
+          .from('products')
+          .select('id, name')
+          .in('name', uniqueNames);
+        const productIdMap = Object.fromEntries(
+          (productData ?? []).map((p: any) => [p.name, p.id])
+        );
+        const boxRecords = labels.map(lbl => ({
+          box_code: lbl.box_code,
+          product_id: productIdMap[lbl.product_name] ?? null,
+          hub_id: selectedHubId,
+          weight_kg: lbl.weight_kg,
+          status: 'created',
+        }));
+        await supabase.from('boxes').insert(boxRecords);
+      } catch (dbErr) {
+        console.warn('[POBatchLabels] box insert skipped:', dbErr);
+      }
+
       pdf.save(`FF-${hubPrefix}-Labels-${targetDate}-${labels.length}pcs.pdf`);
       setTotalPrinted(labels.length);
       setDone(true);
