@@ -101,22 +101,14 @@ export default function POBatchLabels({ hubs }: { hubs: any[] }) {
   const hubPrefix = hub ? getHubPrefix(hub) : 'HUB';
   const hubName = hub?.name ?? '';
 
-  // ── Hub name helpers (handles Palikarani vs Pallikaranai spelling variants) ──
-  const normHub = (s: string) =>
-    (s ?? '').toLowerCase().replace(/\s*hub\s*/gi, '').replace(/[^a-z]/g, '').replace(/(.)+/g, '$1');
-  const hubNormMatch = (a: string, b: string) => {
-    if (!a || !b || a.length < 5 || b.length < 5) return false;
-    let i = 0;
-    while (i < a.length && i < b.length && a[i] === b[i]) i++;
-    return i >= 8;
-  };
-  const selectedHubNorm = normHub(hubName); // hubName derived from selectedHubId
-
   // ── Fetch this hub's sales orders for the target date ─────────────────────
-  // Fetches all orders for the date then filters client-side — handles the case
-  // where orders have hub_id = null but hub_name spelling differs (routing gap)
+  // queryKey includes hubName so the query re-fires once hub metadata loads.
+  // Client-side filter covers:
+  //   1. Exact hub_id UUID match (normal case)
+  //   2. Fuzzy hub_name match — handles spelling variants like "Palikarani" vs "Pallikaranai"
+  //   3. Null-hub_id fallback — completely unrouted orders (last resort, same date)
   const { data: orderItems = [], isLoading } = useQuery({
-    queryKey: ['po-batch-orders', selectedHubId, targetDate],
+    queryKey: ['po-batch-orders', selectedHubId, targetDate, hubName],
     enabled: !!selectedHubId,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -129,13 +121,33 @@ export default function POBatchLabels({ hubs }: { hubs: any[] }) {
         .in('status', ['pending', 'confirmed', 'draft']);
 
       if (error) throw error;
+      const all = data ?? [];
 
-      // Client-side hub filter: exact UUID match OR normalised hub name prefix match
-      return (data ?? []).filter((order: any) =>
-        order.hub_id === selectedHubId ||
-        (selectedHubNorm.length >= 5 &&
-          hubNormMatch(normHub(order.hub_name ?? ''), selectedHubNorm))
-      );
+      // Normaliser: lowercase, strip "hub", strip non-alpha, collapse repeated chars (ll→l)
+      const normH = (s: string) =>
+        (s ?? '').toLowerCase().replace(/\s*hub\s*/gi, '').replace(/[^a-z]/g, '').replace(/(.)+/g, '$1');
+      const normMatch = (a: string, b: string) => {
+        if (!a || !b || a.length < 4 || b.length < 4) return false;
+        let i = 0;
+        while (i < a.length && i < b.length && a[i] === b[i]) i++;
+        return i >= 6; // ≥6 chars common prefix (e.g. "palika" for both Palikarani/Pallikaranai)
+      };
+
+      // hubName captured from component scope — correctly set once hubs prop loads
+      const selNorm = normH(hubName);
+
+      // Pass 1: exact UUID match
+      const byId = all.filter((o: any) => o.hub_id === selectedHubId);
+      if (byId.length > 0) return byId;
+
+      // Pass 2: fuzzy hub_name match (covers spelling variants + hub_id = null)
+      if (selNorm.length >= 4) {
+        const byName = all.filter((o: any) => normMatch(normH(o.hub_name ?? ''), selNorm));
+        if (byName.length > 0) return byName;
+      }
+
+      // Pass 3: fully unrouted orders (hub_id = null, hub_name = null) — last resort
+      return all.filter((o: any) => !o.hub_id && !o.hub_name);
     },
   });
 
