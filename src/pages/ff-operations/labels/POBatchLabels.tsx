@@ -87,7 +87,13 @@ export default function POBatchLabels({ hubs }: { hubs: any[] }) {
   const { user } = useAuth();
   const userHubId = (user as any)?.hub_id ?? null;
   const [selectedHubId, setSelectedHubId] = useState(userHubId ?? '');
-  const [targetDate, setTargetDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  // Default to yesterday — EOD runs at 23:50 each night processing that day's orders,
+  // so the exec prints labels the NEXT morning for the previous day's sales orders.
+  const [targetDate, setTargetDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return format(d, 'yyyy-MM-dd');
+  });
 
   useEffect(() => {
     if (userHubId && !selectedHubId) setSelectedHubId(userHubId);
