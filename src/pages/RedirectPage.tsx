@@ -145,17 +145,26 @@ export function RedirectPage() {
     }
 
     if (user) {
+      // ff_ops_access: these specific users always land on ops manager dashboard
+      if ((user as any).ff_ops_access) {
+        navigate('/ff-operations', { replace: true });
+        return;
+      }
       performRedirect(user.id, user.role);
     } else if (session) {
       const fetchProfileAndRedirect = async () => {
         try {
           const { data: profile } = await (supabase as any)
             .from('profiles')
-            .select('role')
+            .select('role, ff_ops_access')
             .eq('id', session.user.id)
             .maybeSingle();
 
           if (profile?.role) {
+            if (profile.ff_ops_access) {
+              navigate('/ff-operations', { replace: true });
+              return;
+            }
             performRedirect(session.user.id, profile.role);
           } else {
             setTimeout(() => {

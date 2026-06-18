@@ -461,8 +461,13 @@ const ProtectedRoute = ({
     }
   }
 
+  // ff_ops_access: field_executive members granted ops-manager view without role change
+  const hasFFOpsAccess = (user as any).ff_ops_access === true;
   if (allowedRoles && !allowedRoles.some(r => r.toLowerCase() === user.role?.toLowerCase())) {
-    return <Navigate to="/redirect" replace />;
+    // Allow if the user has ff_ops_access AND the route permits ff_operations_manager
+    if (!(hasFFOpsAccess && allowedRoles.includes('ff_operations_manager'))) {
+      return <Navigate to="/redirect" replace />;
+    }
   }
 
   return <>{children}</>;

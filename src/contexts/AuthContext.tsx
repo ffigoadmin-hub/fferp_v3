@@ -190,6 +190,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: p.email,
           role: mapRole(p.role),
           department: p.department,
+          ff_ops_access: p.ff_ops_access ?? false,
           ...(p.hub_id ? { hub_id: p.hub_id } : {}),
         } as any;
         return mappedUser;
