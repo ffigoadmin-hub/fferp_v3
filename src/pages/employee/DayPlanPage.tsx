@@ -445,17 +445,20 @@ export function DayPlanPage({ embedded = false }: DayPlanPageProps) {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <ClipboardList className="w-5 h-5 text-primary" />
-      {managerTask.area_assigned && (
-            <p className="text-xs text-amber-600 mt-1">📍 Area: {managerTask.area_assigned}</p>
-          )}
-          {managerTask.order_target && (
-            <p className="text-xs text-amber-600">🎯 Target: {managerTask.order_target} orders · ₹{Number(managerTask.amount_target).toLocaleString('en-IN')}</p>
-          )}
-        </div>
-      )}
               <Label className="text-base font-medium">Planned Tasks *</Label>
             </div>
           </div>
+
+          {hasManagerPlan && (
+            <div className="p-3 rounded-lg border border-amber-100 bg-amber-50/50 mb-3 space-y-1">
+              {managerTask!.area_assigned && (
+                <p className="text-xs text-amber-600">📍 Area: {managerTask!.area_assigned}</p>
+              )}
+              {managerTask!.order_target && (
+                <p className="text-xs text-amber-600">🎯 Target: {managerTask!.order_target} orders · ₹{Number(managerTask!.amount_target).toLocaleString('en-IN')}</p>
+              )}
+            </div>
+          )}
 
           <div className="space-y-3">
             {tasks.map((task, index) => (
