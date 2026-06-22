@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
-  Timer,
+  ListChecks, Lock, Timer,
   Clock,
   Check,
   Lock,
@@ -26,6 +26,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { TIME_SLOTS, SlotStatus, TimeSlot } from "@/types/igo-chain";
 import { cn } from "@/lib/utils";
 import { format, parse, isAfter, isBefore, addMinutes, differenceInSeconds } from "date-fns";
+import { useQuery } from '@tanstack/react-query';
 import { useHourlyReports } from "@/hooks/useHourlyReports";
 import { useHourlyPlans } from "@/hooks/useHourlyPlans";
 import { useDayPlan } from "@/hooks/useDayPlan";
@@ -201,6 +202,23 @@ export function HourlyReportPage({ embedded = false }: HourlyReportPageProps) {
   const { reports, isSaving: isReportSaving, submitReport, getReportForSlot } = useHourlyReports(new Date());
   const { plans, isSaving: isPlanSaving, submitPlan, getPlanForSlot, getParsedPlan } = useHourlyPlans(new Date());
   const { dayPlan, hasPlan: hasDayPlan, isLoading: isDayPlanLoading } = useDayPlan(new Date());
+
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const { data: managerTask } = useQuery({
+    queryKey: ['ff-manager-task-hourly', user?.id, todayStr],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data } = await (supabase as any)
+        .from('ff_task_assignments')
+        .select('daily_plan, plan_locked, order_target, amount_target, area_assigned')
+        .eq('assigned_to', user.id)
+        .eq('task_date', todayStr)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+  const hasManagerPlan = managerTask?.plan_locked && Array.isArray(managerTask?.daily_plan) && managerTask.daily_plan.length > 0;
   const { isWeekOffDay } = useWeekOffAssignments();
   const [isWeekOff, setIsWeekOff] = useState(false);
 
@@ -1085,6 +1103,30 @@ export function HourlyReportPage({ embedded = false }: HourlyReportPageProps) {
               )}
             </AnimatePresence>
 
+
+            {/* Manager's Plan — always visible reference */}
+            {hasManagerPlan && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 space-y-2">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-bold text-amber-700 uppercase tracking-wide flex items-center gap-1.5">
+                    <ListChecks className="w-3.5 h-3.5" /> Manager's Plan for Today
+                  </p>
+                  <span className="flex items-center gap-1 text-[10px] text-amber-600 font-medium">
+                    <Lock className="w-3 h-3" /> Locked
+                  </span>
+                </div>
+                {(managerTask.daily_plan as string[]).map((item: string, i: number) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-800 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                    <span className="text-sm text-amber-900">{item}</span>
+                  </div>
+                ))}
+                <div className="pt-1 flex flex-wrap gap-3 text-[11px] text-amber-700 font-medium">
+                  {managerTask.order_target && <span>🎯 {managerTask.order_target} orders · ₹{Number(managerTask.amount_target).toLocaleString('en-IN')}</span>}
+                  {managerTask.area_assigned && <span>📍 {managerTask.area_assigned}</span>}
+                </div>
+              </motion.div>
+            )}
             {completedSlots >= 5 && (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-4">
                 <Button variant="outline" onClick={() => navigate("/eod-summary")} className="w-full">
