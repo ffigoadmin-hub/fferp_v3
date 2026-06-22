@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardList, Plus, Trash2, Lock, CheckCircle2, Check, Camera, AlertTriangle, Clock } from 'lucide-react';
+import { ClipboardList, Plus, Trash2, Lock, CheckCircle2, Check, Camera, AlertTriangle, Clock, ListChecks } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +30,24 @@ export function DayPlanPage({ embedded = false }: DayPlanPageProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
 
   const { dayPlan, hasPlan, isSaving, submitDayPlan } = useDayPlan(new Date());
+
+  // Fetch ops manager's assigned FF plan for today
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const { data: managerTask } = useQuery({
+    queryKey: ['ff-manager-task', user?.id, today],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data } = await (supabase as any)
+        .from('ff_task_assignments')
+        .select('daily_plan, plan_locked, order_target, amount_target, area_assigned, task_notes')
+        .eq('assigned_to', user.id)
+        .eq('task_date', today)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+  const hasManagerPlan = managerTask?.plan_locked && Array.isArray(managerTask?.daily_plan) && managerTask.daily_plan.length > 0;
   const { isWeekOffDay } = useWeekOffAssignments();
   const [isWeekOff, setIsWeekOff] = useState(false);
 
@@ -368,6 +387,26 @@ export function DayPlanPage({ embedded = false }: DayPlanPageProps) {
             )}
           </div>
 
+
+          {/* Manager's Assigned Plan */}
+          {hasManagerPlan && (
+            <div className="p-4 rounded-lg border border-amber-200 bg-amber-50 space-y-2">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs font-bold text-amber-700 uppercase tracking-wide flex items-center gap-1">
+                  <ListChecks className="w-3.5 h-3.5" /> Manager's Plan for Today
+                </p>
+                <span className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
+                  <Lock className="w-3 h-3" /> Locked
+                </span>
+              </div>
+              {(managerTask.daily_plan as string[]).map((item: string, i: number) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-800 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                  <span className="text-sm text-amber-900">{item}</span>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="p-3 rounded-lg bg-muted/20 flex items-center gap-2 text-sm text-muted-foreground mb-6">
             <Lock className="w-4 h-4" />
             <span>Plan vs Actual will be calculated at EOD</span>
@@ -399,6 +438,31 @@ export function DayPlanPage({ embedded = false }: DayPlanPageProps) {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <ClipboardList className="w-5 h-5 text-primary" />
+      {/* Manager's Assigned Plan — shown before and during form entry */}
+      {hasManagerPlan && (
+        <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 space-y-2 mb-6">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs font-bold text-amber-700 uppercase tracking-wide flex items-center gap-1.5">
+              <ListChecks className="w-3.5 h-3.5" /> Manager's Plan for Today
+            </p>
+            <span className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
+              <Lock className="w-3 h-3" /> Locked by Manager
+            </span>
+          </div>
+          {(managerTask.daily_plan as string[]).map((item: string, i: number) => (
+            <div key={i} className="flex items-start gap-2">
+              <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-800 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+              <span className="text-sm text-amber-900">{item}</span>
+            </div>
+          ))}
+          {managerTask.area_assigned && (
+            <p className="text-xs text-amber-600 mt-1">📍 Area: {managerTask.area_assigned}</p>
+          )}
+          {managerTask.order_target && (
+            <p className="text-xs text-amber-600">🎯 Target: {managerTask.order_target} orders · ₹{Number(managerTask.amount_target).toLocaleString('en-IN')}</p>
+          )}
+        </div>
+      )}
               <Label className="text-base font-medium">Planned Tasks *</Label>
             </div>
           </div>
