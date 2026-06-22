@@ -469,7 +469,7 @@ function SetupRequired() {
 function GenerateInvoiceModal({ invoice, onClose, onDone }: {
   invoice: Invoice;
   onClose: () => void;
-  onDone:  () => void;
+  onDone:  (updated: Invoice) => void;
 }) {
   const [deliveryAmt, setDeliveryAmt] = useState('');
   const [submitting, setSubmitting]  = useState(false);
@@ -480,11 +480,20 @@ function GenerateInvoiceModal({ invoice, onClose, onDone }: {
   const handleGenerate = async () => {
     setSubmitting(true);
     const { error } = await finalizeInvoice(invoice.id, dc);
+    if (error) { setSubmitting(false); toast.error('Failed: ' + error); return; }
+    // Fetch the updated invoice so print view shows delivery charges
+    const { data: updated } = await supabase
+      .from('invoices')
+      .select(`*, sales_orders(order_number, sales_order_items(
+        id, product_name, quantity, qty_kg, unit_price, total_price, subtotal, unit, qc_grade, grade,
+        products(name, category)
+      ))`)
+      .eq('id', invoice.id)
+      .single();
     setSubmitting(false);
-    if (error) { toast.error('Failed: ' + error); return; }
     toast.success('Invoice generated!');
-    onDone();
     onClose();
+    if (updated) onDone(updated as Invoice);
   };
 
   return (
@@ -844,7 +853,7 @@ export default function SalesInvoicesPage() {
                     <GenerateInvoiceModal
                       invoice={generateFor}
                       onClose={() => setGenerateFor(null)}
-                      onDone={() => queryClient.invalidateQueries({ queryKey: ['invoices'] })}
+                      onDone={(updated) => { queryClient.invalidateQueries({ queryKey: ['invoices'] }); setSelectedInvoice(updated); }}
                     />
                   )}
                   <button
