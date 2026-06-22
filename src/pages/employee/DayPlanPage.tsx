@@ -110,6 +110,13 @@ export function DayPlanPage({ embedded = false }: DayPlanPageProps) {
     return () => clearInterval(timer);
   }, []);
 
+  // Auto-fill tasks from manager's locked plan when form is empty
+  useEffect(() => {
+    if (hasManagerPlan && !hasDayPlan && Array.isArray(managerTask?.daily_plan) && managerTask.daily_plan.length > 0) {
+      setTasks(managerTask.daily_plan as string[]);
+    }
+  }, [hasManagerPlan, hasDayPlan, managerTask]);
+
   // Calculate countdown to selfie window end
   const getSelfieWindowInfo = () => {
     const hours = currentTime.getHours();
@@ -438,24 +445,7 @@ export function DayPlanPage({ embedded = false }: DayPlanPageProps) {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <ClipboardList className="w-5 h-5 text-primary" />
-      {/* Manager's Assigned Plan — shown before and during form entry */}
-      {hasManagerPlan && (
-        <div className="p-4 rounded-xl border border-amber-200 bg-amber-50 space-y-2 mb-6">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-bold text-amber-700 uppercase tracking-wide flex items-center gap-1.5">
-              <ListChecks className="w-3.5 h-3.5" /> Manager's Plan for Today
-            </p>
-            <span className="text-[10px] text-amber-600 font-medium flex items-center gap-1">
-              <Lock className="w-3 h-3" /> Locked by Manager
-            </span>
-          </div>
-          {(managerTask.daily_plan as string[]).map((item: string, i: number) => (
-            <div key={i} className="flex items-start gap-2">
-              <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-800 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
-              <span className="text-sm text-amber-900">{item}</span>
-            </div>
-          ))}
-          {managerTask.area_assigned && (
+      {managerTask.area_assigned && (
             <p className="text-xs text-amber-600 mt-1">📍 Area: {managerTask.area_assigned}</p>
           )}
           {managerTask.order_target && (
@@ -479,9 +469,10 @@ export function DayPlanPage({ embedded = false }: DayPlanPageProps) {
                 <span className="text-muted-foreground text-sm w-6">{index + 1}.</span>
                 <Input
                   value={task}
+                  readOnly={hasManagerPlan && !hasDayPlan && index < (managerTask?.daily_plan?.length ?? 0)}
                   onChange={(e) => updateTask(index, e.target.value)}
                   placeholder={`Task ${index + 1}`}
-                  className="flex-1"
+                  className={`flex-1 ${hasManagerPlan && !hasDayPlan && index < (managerTask?.daily_plan?.length ?? 0) ? 'bg-amber-50 border-amber-200 text-amber-900 font-medium' : ''}`}
                 />
                 {tasks.length > 1 && (
                   <Button
