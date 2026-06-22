@@ -54,6 +54,7 @@ interface Invoice {
 /* ─── Status config ──────────────────────────────────────────────────────────── */
 const STATUS_CFG: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
   draft:      { label: 'Draft',     cls: 'bg-gray-100 text-gray-500',    icon: <FileText className="h-3 w-3" /> },
+  issued:     { label: 'Issued',    cls: 'bg-blue-100 text-blue-700',    icon: <FileText className="h-3 w-3" /> },
   unpaid:     { label: 'Unpaid',     cls: 'bg-amber-100 text-amber-700',   icon: <Clock className="h-3 w-3" /> },
   paid:       { label: 'Paid',       cls: 'bg-green-100 text-green-700',   icon: <CheckCircle2 className="h-3 w-3" /> },
   processing: { label: 'Processing', cls: 'bg-blue-100 text-blue-700',     icon: <RefreshCw className="h-3 w-3" /> },
@@ -713,7 +714,7 @@ export default function SalesInvoicesPage() {
           />
         </div>
         <div className="flex gap-1.5">
-          {['all', 'draft', 'unpaid', 'paid', 'processing', 'partial', 'cancelled'].map(s => (
+          {['all', 'draft', 'issued', 'unpaid', 'paid', 'processing', 'partial', 'cancelled'].map(s => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={cn(
                 'px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-colors',
