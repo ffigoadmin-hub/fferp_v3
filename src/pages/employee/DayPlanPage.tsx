@@ -112,10 +112,10 @@ export function DayPlanPage({ embedded = false }: DayPlanPageProps) {
 
   // Auto-fill tasks from manager's locked plan when form is empty
   useEffect(() => {
-    if (hasManagerPlan && !hasDayPlan && Array.isArray(managerTask?.daily_plan) && managerTask.daily_plan.length > 0) {
+    if (hasManagerPlan && !hasPlan && Array.isArray(managerTask?.daily_plan) && managerTask.daily_plan.length > 0) {
       setTasks(managerTask.daily_plan as string[]);
     }
-  }, [hasManagerPlan, hasDayPlan, managerTask]);
+  }, [hasManagerPlan, hasPlan, managerTask]);
 
   // Calculate countdown to selfie window end
   const getSelfieWindowInfo = () => {
@@ -469,10 +469,10 @@ export function DayPlanPage({ embedded = false }: DayPlanPageProps) {
                 <span className="text-muted-foreground text-sm w-6">{index + 1}.</span>
                 <Input
                   value={task}
-                  readOnly={hasManagerPlan && !hasDayPlan && index < (managerTask?.daily_plan?.length ?? 0)}
+                  readOnly={hasManagerPlan && !hasPlan && index < (managerTask?.daily_plan?.length ?? 0)}
                   onChange={(e) => updateTask(index, e.target.value)}
                   placeholder={`Task ${index + 1}`}
-                  className={`flex-1 ${hasManagerPlan && !hasDayPlan && index < (managerTask?.daily_plan?.length ?? 0) ? 'bg-amber-50 border-amber-200 text-amber-900 font-medium' : ''}`}
+                  className={`flex-1 ${hasManagerPlan && !hasPlan && index < (managerTask?.daily_plan?.length ?? 0) ? 'bg-amber-50 border-amber-200 text-amber-900 font-medium' : ''}`}
                 />
                 {tasks.length > 1 && (
                   <Button
