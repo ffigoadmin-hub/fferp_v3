@@ -8,9 +8,9 @@ import {
   FileText, Search, Eye, Printer, X, CheckCircle2,
   Clock, XCircle, IndianRupee, Phone, MapPin,
   ArrowLeft, Download, MessageCircle, Loader2,
-  Package, ChevronRight, Building2, RefreshCw, Zap,
+  Package, ChevronRight, Building2, RefreshCw, Zap, Truck,
 } from 'lucide-react';
-import { backfillMissingInvoices, fixZeroAmountInvoices } from '@/lib/invoiceHelper';
+import { backfillMissingInvoices, fixZeroAmountInvoices, finalizeInvoice } from '@/lib/invoiceHelper';
 
 /* ─── Types ─────────────────────────────────────────────────────────────────── */
 interface Invoice {
@@ -29,6 +29,7 @@ interface Invoice {
   total_amount: number;
   payment_mode: string | null;
   status: string;
+  delivery_charges: number;
   notes: string | null;
   created_at: string;
   // joined
@@ -52,6 +53,7 @@ interface Invoice {
 
 /* ─── Status config ──────────────────────────────────────────────────────────── */
 const STATUS_CFG: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
+  draft:      { label: 'Draft',     cls: 'bg-gray-100 text-gray-500',    icon: <FileText className="h-3 w-3" /> },
   unpaid:     { label: 'Unpaid',     cls: 'bg-amber-100 text-amber-700',   icon: <Clock className="h-3 w-3" /> },
   paid:       { label: 'Paid',       cls: 'bg-green-100 text-green-700',   icon: <CheckCircle2 className="h-3 w-3" /> },
   processing: { label: 'Processing', cls: 'bg-blue-100 text-blue-700',     icon: <RefreshCw className="h-3 w-3" /> },
@@ -325,6 +327,14 @@ function InvoicePrintView({ invoice, onClose }: { invoice: Invoice; onClose: () 
                     <span style={{ fontWeight: 600, color: '#374151' }}>₹{invoice.tax_amount.toLocaleString('en-IN')}</span>
                   </div>
                 )}
+                {invoice.delivery_charges > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 16px', borderBottom: '1px solid #f3f4f6', fontSize: 13 }}>
+                    <span style={{ color: '#6b7280', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 12 }}>🚚</span> Delivery Charges
+                    </span>
+                    <span style={{ fontWeight: 600, color: '#374151' }}>₹{invoice.delivery_charges.toLocaleString('en-IN')}</span>
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 16px', background: '#111827' }}>
                   <span style={{ color: '#fff', fontWeight: 700, fontSize: 14, letterSpacing: 0.5 }}>TOTAL</span>
                   <span style={{ color: '#fff', fontWeight: 900, fontSize: 20 }}>₹{invoice.total_amount.toLocaleString('en-IN')}</span>
@@ -452,6 +462,114 @@ function SetupRequired() {
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════════
+   GENERATE INVOICE MODAL
+   ═══════════════════════════════════════════════════════════════════════════════ */
+function GenerateInvoiceModal({ invoice, onClose, onDone }: {
+  invoice: Invoice;
+  onClose: () => void;
+  onDone:  () => void;
+}) {
+  const [deliveryAmt, setDeliveryAmt] = useState('');
+  const [submitting, setSubmitting]  = useState(false);
+  const items = invoice.sales_orders?.sales_order_items ?? [];
+  const dc    = parseFloat(deliveryAmt) || 0;
+  const projected = invoice.subtotal - invoice.discount_amount + invoice.tax_amount + dc;
+
+  const handleGenerate = async () => {
+    setSubmitting(true);
+    const { error } = await finalizeInvoice(invoice.id, dc);
+    setSubmitting(false);
+    if (error) { toast.error('Failed: ' + error); return; }
+    toast.success('Invoice generated!');
+    onDone();
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+          <div>
+            <h3 className="text-base font-bold text-slate-800">Generate Invoice</h3>
+            <p className="text-xs text-slate-400 mt-0.5">{invoice.invoice_number}</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+            <X className="h-4 w-4 text-gray-400" />
+          </button>
+        </div>
+        <div className="px-5 py-4 max-h-60 overflow-y-auto border-b border-gray-50">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Order Items</p>
+          {items.length === 0 ? (
+            <p className="text-sm text-slate-400 py-3 text-center">No items</p>
+          ) : items.map((item) => (
+            <div key={item.id} className="flex justify-between items-center py-2 border-b border-gray-50 last:border-0">
+              <div>
+                <p className="text-sm font-semibold text-slate-700">{item.products?.name || item.product_name || '—'}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">{item.qty_kg ?? item.quantity ?? 0} {item.unit || 'kg'} × ₹{item.unit_price ?? 0}</p>
+              </div>
+              <p className="text-sm font-bold text-slate-800">₹{(item.total_price ?? item.subtotal ?? 0).toLocaleString('en-IN')}</p>
+            </div>
+          ))}
+        </div>
+        <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 text-sm">
+          <div className="flex justify-between py-1">
+            <span className="text-slate-500">Subtotal</span>
+            <span className="font-semibold text-slate-700">₹{invoice.subtotal.toLocaleString('en-IN')}</span>
+          </div>
+          {invoice.discount_amount > 0 && (
+            <div className="flex justify-between py-1">
+              <span className="text-slate-500">Discount</span>
+              <span className="font-semibold text-green-600">-₹{invoice.discount_amount.toLocaleString('en-IN')}</span>
+            </div>
+          )}
+          {invoice.tax_amount > 0 && (
+            <div className="flex justify-between py-1">
+              <span className="text-slate-500">Tax</span>
+              <span className="font-semibold text-slate-700">₹{invoice.tax_amount.toLocaleString('en-IN')}</span>
+            </div>
+          )}
+        </div>
+        <div className="px-5 py-4 border-b border-gray-100">
+          <label className="block text-xs font-bold text-slate-600 mb-2">
+            <Truck className="h-3.5 w-3.5 inline mr-1.5 text-slate-400" />
+            Delivery Charges (optional)
+          </label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-semibold">₹</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              value={deliveryAmt}
+              onChange={e => setDeliveryAmt(e.target.value)}
+              className="w-full pl-7 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+          </div>
+        </div>
+        <div className="px-5 py-3 bg-slate-800 flex justify-between items-center">
+          <span className="text-white font-bold text-sm">Total Amount</span>
+          <span className="text-white font-black text-lg">₹{Math.max(0, projected).toLocaleString('en-IN')}</span>
+        </div>
+        <div className="px-5 py-4 flex gap-2 justify-end">
+          <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-slate-500 hover:bg-gray-100 rounded-xl">
+            Cancel
+          </button>
+          <button
+            onClick={handleGenerate}
+            disabled={submitting}
+            className="flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-xl transition-colors disabled:opacity-50"
+          >
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            Generate Invoice
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function SalesInvoicesPage() {
   const [search, setSearch]             = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -459,6 +577,7 @@ export default function SalesInvoicesPage() {
   const [needsSetup, setNeedsSetup]     = useState(false);
   const [syncing, setSyncing]           = useState(false);
   const [payModeFor, setPayModeFor]     = useState<string | null>(null);
+  const [generateFor, setGenerateFor]   = useState<Invoice | null>(null);
   const queryClient = useQueryClient();
 
   const PAYMENT_MODES = [
@@ -594,7 +713,7 @@ export default function SalesInvoicesPage() {
           />
         </div>
         <div className="flex gap-1.5">
-          {['all', 'unpaid', 'paid', 'processing', 'partial', 'cancelled'].map(s => (
+          {['all', 'draft', 'unpaid', 'paid', 'processing', 'partial', 'cancelled'].map(s => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={cn(
                 'px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-colors',
@@ -669,8 +788,18 @@ export default function SalesInvoicesPage() {
                   <StatusBadge status={inv.status} />
                 </div>
                 <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                  {/* Quick status actions */}
-                  {inv.status !== 'paid' && (
+                  {/* Draft → generate invoice */}
+                  {inv.status === 'draft' && (
+                    <button
+                      onClick={() => setGenerateFor(inv)}
+                      className="flex items-center gap-1 px-2 py-1 text-[10px] font-bold rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+                      title="Add delivery charges and generate invoice"
+                    >
+                      <Truck className="h-3 w-3" /> Generate
+                    </button>
+                  )}
+                  {/* Quick status actions (non-draft only) */}
+                  {inv.status !== 'paid' && inv.status !== 'draft' && (
                     <div className="relative">
                       <button
                         onClick={() => setPayModeFor(payModeFor === inv.id ? null : inv.id)}
@@ -708,6 +837,14 @@ export default function SalesInvoicesPage() {
                     >
                       Unpaid
                     </button>
+                  )}
+                  {/* Render modal */}
+                  {generateFor?.id === inv.id && (
+                    <GenerateInvoiceModal
+                      invoice={generateFor}
+                      onClose={() => setGenerateFor(null)}
+                      onDone={() => queryClient.invalidateQueries({ queryKey: ['invoices'] })}
+                    />
                   )}
                   <button
                     onClick={e => { e.stopPropagation(); setSelectedInvoice(inv); }}

@@ -74,7 +74,7 @@ export async function createInvoiceForOrder(params: CreateInvoiceParams): Promis
       tax_amount:       params.taxAmount ?? 0,
       total_amount:     params.totalAmount,
       payment_mode:     params.paymentMode ?? 'cod',
-      status:           'unpaid',
+      status:           'draft',
       notes:            params.notes ?? null,
     }).select('id').single();
 
@@ -224,4 +224,44 @@ export async function fixZeroAmountInvoices(): Promise<{ fixed: number; failed: 
   }
 
   return { fixed, failed };
+}
+
+
+/**
+ * Finalize a draft invoice: add delivery charges, recalculate total, set status to 'unpaid'.
+ * Called from SalesInvoicesPage when the user clicks "Generate Invoice".
+ */
+export async function finalizeInvoice(
+  invoiceId: string,
+  deliveryCharges: number
+): Promise<{ error: string | null }> {
+  try {
+    // Fetch current invoice to get subtotal + existing fields
+    const { data: inv, error: fetchErr } = await supabase
+      .from('invoices')
+      .select('subtotal, discount_amount, tax_amount')
+      .eq('id', invoiceId)
+      .single();
+
+    if (fetchErr || !inv) return { error: fetchErr?.message ?? 'Invoice not found' };
+
+    const newTotal =
+      Number(inv.subtotal) +
+      Number(deliveryCharges) -
+      Number(inv.discount_amount ?? 0) +
+      Number(inv.tax_amount ?? 0);
+
+    const { error } = await supabase
+      .from('invoices')
+      .update({
+        delivery_charges: deliveryCharges,
+        total_amount:     Math.max(0, newTotal),
+        status:           'unpaid',
+      })
+      .eq('id', invoiceId);
+
+    return { error: error?.message ?? null };
+  } catch (e: any) {
+    return { error: e?.message ?? 'Unknown error' };
+  }
 }
