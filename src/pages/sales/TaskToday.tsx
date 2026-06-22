@@ -7,7 +7,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import {
   Target, CheckCircle2, Clock, TrendingUp,
-  MapPin, FileText, Save, AlertCircle, Package,
+  MapPin, FileText, Save, AlertCircle, Package, Lock, ListChecks,
 } from 'lucide-react';
 
 function ProgressRing({ value, max, size = 80 }: { value: number; max: number; size?: number }) {
@@ -177,6 +177,30 @@ export default function TaskToday() {
               </div>
             )}
           </div>
+
+
+          {/* Daily Plan */}
+          {task.plan_locked && Array.isArray(task.daily_plan) && task.daily_plan.length > 0 && (
+            <div className="bg-white rounded-xl border border-amber-100 shadow-sm p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+                  <ListChecks className="w-4 h-4 text-amber-500" />
+                  Today's Plan
+                </h2>
+                <span className="flex items-center gap-1 text-[10px] text-amber-600 font-medium bg-amber-50 px-2 py-1 rounded-full">
+                  <Lock className="w-3 h-3" /> Locked by Manager
+                </span>
+              </div>
+              <div className="space-y-2">
+                {(task.daily_plan as string[]).map((item: string, i: number) => (
+                  <div key={i} className="flex items-start gap-2.5 p-2.5 bg-gray-50 rounded-lg">
+                    <span className="mt-0.5 w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                    <span className="text-sm text-gray-700">{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Update actuals */}
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">

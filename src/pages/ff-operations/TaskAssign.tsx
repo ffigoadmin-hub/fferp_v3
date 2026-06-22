@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import {
   ClipboardList, Plus, Save, RefreshCw, CheckCircle2,
   Clock, AlertCircle, User, Target, MapPin, FileText,
-  ChevronDown, ChevronUp, Calendar,
+  ChevronDown, ChevronUp, Calendar, Lock, Trash2, ListChecks,
 } from 'lucide-react';
 
 const STATUS_COLORS = {
@@ -31,6 +31,19 @@ function AssignModal({
     area_assigned: existing?.area_assigned ?? '',
     task_notes:    existing?.task_notes    ?? '',
   });
+  const [planItems, setPlanItems] = useState<string[]>(
+    Array.isArray(existing?.daily_plan) ? existing.daily_plan : []
+  );
+  const [newItem, setNewItem] = useState('');
+  const MAX_PLAN = 20;
+
+  const addItem = () => {
+    const t = newItem.trim();
+    if (!t || planItems.length >= MAX_PLAN) return;
+    setPlanItems(p => [...p, t]);
+    setNewItem('');
+  };
+  const removeItem = (i: number) => setPlanItems(p => p.filter((_, idx) => idx !== i));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
@@ -94,12 +107,58 @@ function AssignModal({
           />
         </div>
 
+        {/* Daily Plan */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+              <ListChecks className="w-3.5 h-3.5" />
+              Daily Plan
+              <span className="text-gray-400 font-normal">({planItems.length}/{MAX_PLAN})</span>
+            </label>
+            {planItems.length > 0 && (
+              <span className="flex items-center gap-1 text-[10px] text-amber-600 font-medium">
+                <Lock className="w-3 h-3" /> Auto-locks on save
+              </span>
+            )}
+          </div>
+          {/* Existing items */}
+          <div className="space-y-1 max-h-36 overflow-y-auto">
+            {planItems.map((item, i) => (
+              <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-1.5 group">
+                <span className="text-[10px] text-gray-400 font-bold w-4">{i + 1}.</span>
+                <span className="text-xs text-gray-700 flex-1">{item}</span>
+                <button onClick={() => removeItem(i)}
+                  className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+          {/* Add new item */}
+          {planItems.length < MAX_PLAN && (
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={newItem}
+                onChange={e => setNewItem(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && addItem()}
+                placeholder="Add plan item… (press Enter)"
+                className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-200"
+              />
+              <button onClick={addItem} disabled={!newItem.trim()}
+                className="px-2.5 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 disabled:opacity-40 transition">
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
             Cancel
           </button>
           <button
-            onClick={() => onSave({ ...form, assigned_to: member.id })}
+            onClick={() => onSave({ ...form, assigned_to: member.id, daily_plan: planItems, plan_locked: planItems.length > 0 })}
             className="flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700"
           >
             <Save className="w-4 h-4" /> Save Assignment
@@ -157,6 +216,8 @@ export default function TaskAssign() {
             amount_target: payload.amount_target,
             area_assigned: payload.area_assigned,
             task_notes:    payload.task_notes,
+            daily_plan:    payload.daily_plan  ?? [],
+            plan_locked:   payload.plan_locked ?? false,
           })
           .eq('id', existing.id);
         if (error) throw error;
@@ -171,6 +232,8 @@ export default function TaskAssign() {
             amount_target: payload.amount_target,
             area_assigned: payload.area_assigned,
             task_notes:    payload.task_notes,
+            daily_plan:    payload.daily_plan  ?? [],
+            plan_locked:   payload.plan_locked ?? false,
             status:        'pending',
           });
         if (error) throw error;
@@ -281,6 +344,9 @@ export default function TaskAssign() {
                           <span>·</span>
                           <span>₹<b>{Number(assignment.amount_target).toLocaleString('en-IN', { maximumFractionDigits: 0 })}</b></span>
                           {assignment.area_assigned && <span className="text-gray-400">· {assignment.area_assigned}</span>}
+                          {assignment.plan_locked && Array.isArray(assignment.daily_plan) && assignment.daily_plan.length > 0 && (
+                            <span className="flex items-center gap-0.5 text-amber-600 text-[10px] font-medium"><Lock className="w-2.5 h-2.5" />{assignment.daily_plan.length} plan items</span>
+                          )}
                         </div>
                         <div className="mt-1 text-xs text-gray-400">
                           Done: {assignment.completed_orders || 0}/{assignment.order_target} orders
