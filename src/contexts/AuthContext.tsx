@@ -62,11 +62,33 @@ const mapRole = (dbRole: string): UserRole => {
     'shiftemployee':             'shift_employee',
     'ffoperationsmanager':       'ff_operations_manager',
     'ffopsmanager':              'ff_operations_manager',
-    'collection_executive':      'collection_executive',
     'collectionexecutive':       'collection_executive',
+    // ── Explicit underscore variants — DB may store roles with underscores ──────
+    'ff_operations_manager':     'ff_operations_manager',
+    'field_executive':           'field_executive',
+    'tele_caller':               'tele_caller',
+    'shift_employee':            'shift_employee',
+    'warehouse_manager':         'warehouse_manager',
+    'qc_manager':                'qc_manager',
+    'purchase_manager':          'purchase_manager',
+    'purchase_head':             'purchase_head',
+    'back_office':               'back_office',
+    'l1_manager':                'l1_manager',
+    'hub_manager':               'hub_manager',
+    'bd_data':                   'bd_data',
+    'data_team':                 'data_team',
+    'collection_executive':      'collection_executive',
+    'site_visit_farm_manager':   'site_visit_farm_manager',
+    'cafe_manager':              'cafe_manager',
+    'palm_cafe_manager':         'palm_cafe_manager',
+    'vendor_head':               'vendor_head',
   };
 
-  return roleMap[normalized] || 'employee';
+  const mapped = roleMap[normalized];
+  if (!mapped) {
+    console.error(`[AuthContext] UNKNOWN ROLE: "${dbRole}" (normalized: "${normalized}") — check profiles table. Defaulting to employee.`);
+  }
+  return mapped || 'employee';
 };
 
 // ── Demo session key ──────────────────────────────────────────────────────────

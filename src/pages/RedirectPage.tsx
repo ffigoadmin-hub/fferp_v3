@@ -93,10 +93,11 @@ export function RedirectPage() {
           return;
         }
 
+        // ONLY purchase-side / hub roles check shift_user_assignments.
+        // FF sales roles (field_executive, tele_caller, bde, driver, back_office)
+        // have fixed destinations and must NEVER be redirected to /shift/dashboard.
         const SHIFT_ELIGIBLE_ROLES = new Set([
-          'hub_manager', 'purchase_manager', 'purchase_head',
-          'field_executive', 'tele_caller', 'bde', 'driver',
-          'back_office', 'farmmanager',
+          'hub_manager', 'purchase_manager', 'purchase_head', 'farmmanager',
         ]);
 
         if (SHIFT_ELIGIBLE_ROLES.has(normalizedRole)) {
