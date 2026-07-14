@@ -64,8 +64,8 @@ export default function ManagementIntelligenceDashboard() {
         const excludedRoles = ['ceo', 'auditor'];
         if (excludedRoles.includes(a.role?.toLowerCase())) return false;
 
-        const matchesSearch = a.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            a.userEmail.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesSearch = (a.userName?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
+            (a.userEmail?.toLowerCase().includes(searchQuery.toLowerCase()) || false);
         const matchesDept = deptFilter === 'all' || a.department === deptFilter;
         const matchesType = typeFilter === 'all' || a.type === typeFilter;
         return matchesSearch && matchesDept && matchesType;

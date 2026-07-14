@@ -649,11 +649,11 @@ Bob Wilson,bob.wilson@example.com,,Admin,Admin,EMP003`;
   const filteredUsers = users?.filter(user => {
     const query = searchQuery.toLowerCase();
     const matchesSearch = (
-      user.name.toLowerCase().includes(query) ||
-      user.email.toLowerCase().includes(query) ||
+      (user.name?.toLowerCase().includes(query) || false) ||
+      (user.email?.toLowerCase().includes(query) || false) ||
       (user.office_number?.toLowerCase().includes(query) || false) ||
-      user.role.toLowerCase().includes(query) ||
-      user.department.toLowerCase().includes(query)
+      (user.role?.toLowerCase().includes(query) || false) ||
+      (user.department?.toLowerCase().includes(query) || false)
     );
     const matchesDepartment = departmentFilter === 'all' || user.department === departmentFilter;
     return matchesSearch && matchesDepartment;
