@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Shield, UserPlus, Users, Loader2, Eye, EyeOff, Trash2, Edit, Key, Activity, Calendar, Clock, FileText, AlertCircle, Download, RotateCcw, AlertTriangle, Upload, CheckCircle2, XCircle, Search, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ROLES } from '@/constants/departments';
+import { ROLES, DEPARTMENTS } from '@/constants/departments';
 import { format } from 'date-fns';
 import { exportToCSV } from '@/lib/exportUtils';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -38,10 +38,21 @@ export function UserManagementPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  // Auto-fill a fresh Employee ID whenever the create-user dialog opens
+  useEffect(() => {
+    if (isDialogOpen) {
+      const digits = Math.floor(100000 + Math.random() * 900000);
+      setEmployeeId(`EMP-${digits}`);
+    }
+  }, [isDialogOpen]);
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
   const [deletingUser, setDeletingUser] = useState<Profile | null>(null);
   const [viewingUser, setViewingUser] = useState<Profile | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [resettingUser, setResettingUser] = useState<Profile | null>(null);
+  const [newPassword, setNewPassword] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
@@ -52,7 +63,7 @@ export function UserManagementPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('Employee');
-  const [department, setDepartment] = useState('Engineering');
+  const [department, setDepartment] = useState('Farmers Factory');
   const [employeeId, setEmployeeId] = useState('');
 
   // Edit form state
@@ -115,7 +126,9 @@ export function UserManagementPage() {
     },
   });
 
-  const availableDepartments = dbDepartments?.map(d => ({ value: d.name, label: d.name })) || [];
+  const availableDepartments = dbDepartments?.length
+    ? dbDepartments.map(d => ({ value: d.name, label: d.name }))
+    : DEPARTMENTS.map(d => ({ value: d.value, label: d.label }));
 
   // Fetch employee activity data
   const { data: employeeActivity, isLoading: isLoadingActivity } = useQuery({
@@ -141,6 +154,11 @@ export function UserManagementPage() {
     },
     enabled: !!viewingUser,
   });
+
+  const generateEmployeeId = () => {
+    const digits = Math.floor(100000 + Math.random() * 900000); // 6 digits
+    setEmployeeId(`EMP-${digits}`);
+  };
 
   const generateSecurePassword = () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
@@ -195,7 +213,7 @@ export function UserManagementPage() {
       setEmail('');
       setPassword('');
       setRole('Employee');
-      setDepartment('Engineering');
+      setDepartment('Farmers Factory');
       setEmployeeId('');
       setIsDialogOpen(false);
 
@@ -274,6 +292,33 @@ export function UserManagementPage() {
       toast.error(error.message || 'Failed to delete user.');
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!resettingUser) return;
+    if (newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('reset-user-password', {
+        body: { userId: resettingUser.id, newPassword }
+      });
+
+      if (error) throw new Error(error.message || 'Failed to reset password');
+      if (data?.error) throw new Error(data.error);
+
+      toast.success(`Password updated for ${resettingUser.name}`);
+      setResettingUser(null);
+      setNewPassword('');
+    } catch (error: any) {
+      console.error('Reset password error:', error);
+      toast.error(error.message || 'Failed to reset password.');
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -440,13 +485,13 @@ export function UserManagementPage() {
 
   const validateDepartment = (dept: string): string => {
     const normalizedDept = dept.trim();
-    if (!availableDepartments.length) return 'Engineering';
+    if (!availableDepartments.length) return 'Farmers Factory';
 
     const matchedDept = availableDepartments.find(d =>
       d.value.toLowerCase() === normalizedDept.toLowerCase() ||
       d.label.toLowerCase() === normalizedDept.toLowerCase()
     );
-    return matchedDept ? matchedDept.value : 'Engineering';
+    return matchedDept ? matchedDept.value : 'Farmers Factory';
   };
 
   const validateEmail = (email: string): boolean => {
@@ -506,7 +551,7 @@ export function UserManagementPage() {
       const name = values[nameIdx] || '';
       const email = values[emailIdx] || '';
       const role = roleIdx !== -1 ? validateRole(values[roleIdx] || '') : 'Employee';
-      const department = deptIdx !== -1 ? validateDepartment(values[deptIdx] || '') : 'Engineering';
+      const department = deptIdx !== -1 ? validateDepartment(values[deptIdx] || '') : 'Farmers Factory';
       const employee_id = empIdIdx !== -1 ? (values[empIdIdx] || '') : '';
       const password = passwordIdx !== -1 && values[passwordIdx] ? values[passwordIdx] : generateRandomPassword();
 
@@ -967,14 +1012,19 @@ Bob Wilson,bob.wilson@example.com,,Admin,Admin,EMP003`;
 
                 <div>
                   <Label htmlFor="employeeId">Employee ID</Label>
-                  <Input
-                    id="employeeId"
-                    value={employeeId}
-                    onChange={(e) => setEmployeeId(e.target.value)}
-                    placeholder="e.g., EMP001"
-                    className="mt-1"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">Manual entry. Leave blank if not applicable.</p>
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      id="employeeId"
+                      value={employeeId}
+                      onChange={(e) => setEmployeeId(e.target.value)}
+                      placeholder="e.g., EMP-123456"
+                      className="flex-1"
+                    />
+                    <Button type="button" variant="outline" size="icon" onClick={generateEmployeeId}>
+                      <Key className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Auto-generated. Click key icon for a new one, or edit manually.</p>
                 </div>
 
                 <Button type="submit" className="w-full" disabled={isCreating}>
@@ -1156,6 +1206,14 @@ Bob Wilson,bob.wilson@example.com,,Admin,Admin,EMP003`;
                         <Button
                           variant="ghost"
                           size="icon"
+                          onClick={() => { setResettingUser(user); setNewPassword(''); }}
+                          title="Reset Password"
+                        >
+                          <Key className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
                           className="text-destructive hover:text-destructive"
                           onClick={() => setDeletingUser(user)}
                           title="Delete User"
@@ -1317,6 +1375,39 @@ Bob Wilson,bob.wilson@example.com,,Admin,Admin,EMP003`;
             <Button variant="destructive" onClick={handleDeleteUser} disabled={isDeleting}>
               {isDeleting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
               Delete User
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={!!resettingUser} onOpenChange={(open) => { if (!open) { setResettingUser(null); setNewPassword(''); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="w-5 h-5" />
+              Reset Password
+            </DialogTitle>
+            <DialogDescription>
+              Set a new password for <strong>{resettingUser?.name}</strong> ({resettingUser?.email}).
+              This takes effect immediately — no email is sent.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2">
+            <Input
+              type="text"
+              placeholder="New password (min 8 characters)"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+          </div>
+
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => { setResettingUser(null); setNewPassword(''); }}>Cancel</Button>
+            <Button onClick={handleResetPassword} disabled={isResetting || newPassword.length < 8}>
+              {isResetting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              Set Password
             </Button>
           </DialogFooter>
         </DialogContent>

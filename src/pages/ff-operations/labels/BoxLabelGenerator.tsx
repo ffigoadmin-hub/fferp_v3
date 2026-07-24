@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { ComingSoonOverlay } from '@/components/ComingSoonOverlay';
 import { jsPDF } from 'jspdf';
 import QRCode from 'qrcode';
 import JsBarcode from 'jsbarcode';
@@ -331,6 +332,7 @@ export default function BoxLabelGenerator() {
 
   // ─────────────────────────────────────────────────────────────────────────────
   return (
+    <ComingSoonOverlay>
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px 48px' }}>
 
       {/* Page Header */}
@@ -741,5 +743,6 @@ export default function BoxLabelGenerator() {
       )}
 
     </div>
+    </ComingSoonOverlay>
   );
 }

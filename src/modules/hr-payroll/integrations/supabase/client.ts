@@ -1,3 +1,7 @@
+// DEPRECATED — unused duplicate Supabase client. Nothing in the codebase imports
+// this file (verified via full-repo grep). Violates the project rule "never create
+// a second Supabase client" — use '@/integrations/supabase/client' instead.
+// Safe to delete; kept only because file deletion needs your explicit go-ahead.
 import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;

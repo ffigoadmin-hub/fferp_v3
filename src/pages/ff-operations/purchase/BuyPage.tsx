@@ -32,6 +32,7 @@ interface PurchaseOrder {
   eod_date: string;
   status: string;
   hub_id: string;
+  hub_name: string | null;
   items: POItem[];
 }
 
@@ -619,6 +620,12 @@ function POCard({
             <p className="text-[11px] text-gray-400 uppercase tracking-wide">PO</p>
             <p className="text-sm font-bold text-blue-700">{po.po_number}</p>
           </div>
+          {po.hub_name && (
+            <div>
+              <p className="text-[11px] text-gray-400 uppercase tracking-wide">Hub</p>
+              <p className="text-sm font-semibold text-gray-700">{po.hub_name}</p>
+            </div>
+          )}
           <div>
             <p className="text-[11px] text-gray-400 uppercase tracking-wide">EOD Date</p>
             <p className="text-sm font-semibold text-gray-700 flex items-center gap-1">
@@ -738,7 +745,13 @@ export default function BuyPage() {
         .in('status', ['pending', 'approved', 'ordered'])
         .order('eod_date', { ascending: false });
 
-      if (!isManagement && hubId) q = q.eq('hub_id', hubId);
+      // Purchase Executives only see/can-buy POs actually assigned to them by
+      // their hub manager — not every PO for their hub.
+      if (user?.role === 'shift_employee') {
+        q = q.eq('assigned_executive_id', user.id);
+      } else if (!isManagement && hubId) {
+        q = q.eq('hub_id', hubId);
+      }
       if (!showAll) q = q.limit(10);
 
       const { data, error } = await q;

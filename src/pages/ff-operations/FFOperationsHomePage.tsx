@@ -1,30 +1,13 @@
 // @ts-nocheck
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { formatDistanceToNow } from 'date-fns';
+import { supabase } from '@/integrations/supabase/client';
 import {
   ArrowUpRight, ArrowDownRight, Wallet, TrendingUp, ShoppingCart,
   Warehouse, PhoneCall, Truck, Store, FileBarChart, Package,
-  ChevronRight, AlertCircle, CheckCircle2, Clock, BarChart3,
+  ChevronRight, AlertCircle, CheckCircle2, Clock, BarChart3, Loader2,
 } from 'lucide-react';
-import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  ResponsiveContainer, Tooltip, Legend,
-} from 'recharts';
-
-const cashFlowData = [
-  { month: 'Apr', income: 0, expense: 0, cash: 0 },
-  { month: 'May', income: 0, expense: 0, cash: 0 },
-  { month: 'Jun', income: 0, expense: 0, cash: 0 },
-  { month: 'Jul', income: 0, expense: 0, cash: 0 },
-  { month: 'Aug', income: 0, expense: 0, cash: 0 },
-  { month: 'Sep', income: 0, expense: 0, cash: 0 },
-];
-
-const kpis = [
-  { label: 'Total Receivables',  value: '₹0.00', sub: 'Unpaid invoices',  icon: ArrowUpRight,   iconBg: '#DCFCE7', iconColor: '#16A34A' },
-  { label: 'Total Payables',     value: '₹0.00', sub: 'Unpaid bills',     icon: ArrowDownRight, iconBg: '#FEE2E2', iconColor: '#DC2626' },
-  { label: 'Cash on Hand',       value: '₹0.00', sub: 'Current balance',  icon: Wallet,         iconBg: '#EFF6FF', iconColor: '#2563EB' },
-  { label: 'Net Profit (MTD)',   value: '₹0.00', sub: 'Month to date',    icon: TrendingUp,     iconBg: '#FEF3C7', iconColor: '#D97706' },
-];
 
 const modules = [
   { label: 'Purchase',        icon: ShoppingCart, path: '/purchase',      color: '#2563EB', bg: '#EFF6FF',  status: 'Active' },
@@ -37,15 +20,68 @@ const modules = [
   { label: 'Reports',         icon: FileBarChart, path: '/reports',       color: '#475569', bg: '#F1F5F9',  status: 'Active' },
 ];
 
-const recentActivity = [
-  { type: 'info',    text: 'No recent purchase orders',       time: 'Now' },
-  { type: 'info',    text: 'No pending QC inspections',       time: 'Now' },
-  { type: 'info',    text: 'No open sales orders',            time: 'Now' },
-  { type: 'info',    text: 'No logistics trips scheduled',    time: 'Now' },
-];
+const money = (n: number) => `₹${Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+// Receivables/Payables come from real tables (invoices, ff_vendor_payments,
+// ff_transport_payments). Cash on Hand / Net Profit / Cash Flow trend have no
+// backing ledger table anywhere in the schema — no invoice has ever been
+// marked 'paid' — so we don't fabricate those; the UI says so honestly.
+function useFinanceSummary() {
+  return useQuery({
+    queryKey: ['ff-ops-home-finance'],
+    queryFn: async () => {
+      const [{ data: unpaidInvoices }, { data: vendorPayments }, { data: transportPayments }] = await Promise.all([
+        supabase.from('invoices').select('total_amount, due_date').eq('payment_status', 'unpaid'),
+        supabase.from('ff_vendor_payments').select('gross_amount, deduction_amount, created_at').neq('payment_status', 'rejected'),
+        supabase.from('ff_transport_payments').select('base_amount, toll_charges, other_charges, created_at').neq('payment_status', 'rejected'),
+      ]);
+
+      const today = new Date();
+      const receivablesCurrent = (unpaidInvoices ?? []).filter(i => !i.due_date || new Date(i.due_date) >= today)
+        .reduce((s, i) => s + Number(i.total_amount || 0), 0);
+      const receivablesOverdue = (unpaidInvoices ?? []).filter(i => i.due_date && new Date(i.due_date) < today)
+        .reduce((s, i) => s + Number(i.total_amount || 0), 0);
+
+      const payablesVendor = (vendorPayments ?? []).reduce((s, p) => s + (Number(p.gross_amount || 0) - Number(p.deduction_amount || 0)), 0);
+      const payablesTransport = (transportPayments ?? []).reduce((s, p) => s + Number(p.base_amount || 0) + Number(p.toll_charges || 0) + Number(p.other_charges || 0), 0);
+
+      return {
+        receivablesTotal: receivablesCurrent + receivablesOverdue,
+        receivablesCurrent,
+        receivablesOverdue,
+        payablesTotal: payablesVendor + payablesTransport,
+      };
+    },
+  });
+}
+
+function useRecentActivity() {
+  return useQuery({
+    queryKey: ['ff-ops-home-activity'],
+    queryFn: async () => {
+      const [{ data: pos }, { data: orders }] = await Promise.all([
+        supabase.from('purchase_orders').select('po_number, status, created_at').order('created_at', { ascending: false }).limit(3),
+        supabase.from('sales_orders').select('order_number, status, created_at').order('created_at', { ascending: false }).limit(3),
+      ]);
+      const items = [
+        ...(pos ?? []).map(p => ({ text: `PO ${p.po_number} — ${p.status}`, time: p.created_at })),
+        ...(orders ?? []).map(o => ({ text: `Order ${o.order_number} — ${o.status}`, time: o.created_at })),
+      ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 5);
+      return items;
+    },
+  });
+}
 
 export default function FFOperationsHomePage() {
-  const [cashView, setCashView] = useState<'flow' | 'income'>('flow');
+  const { data: finance, isLoading: financeLoading } = useFinanceSummary();
+  const { data: activity = [], isLoading: activityLoading } = useRecentActivity();
+
+  const kpis = [
+    { label: 'Total Receivables',  value: financeLoading ? null : money(finance?.receivablesTotal), sub: 'Unpaid invoices',  icon: ArrowUpRight,   iconBg: '#DCFCE7', iconColor: '#16A34A' },
+    { label: 'Total Payables',     value: financeLoading ? null : money(finance?.payablesTotal),     sub: 'Approved, unpaid FF payments', icon: ArrowDownRight, iconBg: '#FEE2E2', iconColor: '#DC2626' },
+    { label: 'Cash on Hand',       value: '—', sub: 'No ledger source configured',  icon: Wallet,         iconBg: '#EFF6FF', iconColor: '#2563EB' },
+    { label: 'Net Profit (MTD)',   value: '—', sub: 'No ledger source configured',  icon: TrendingUp,     iconBg: '#FEF3C7', iconColor: '#D97706' },
+  ];
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12 pt-2">
@@ -84,7 +120,9 @@ export default function FFOperationsHomePage() {
               </div>
               <div>
                 <p className="text-[12px] font-medium" style={{ color: '#6B7280' }}>{k.label}</p>
-                <p className="text-[22px] font-bold mt-0.5" style={{ color: '#111827' }}>{k.value}</p>
+                <p className="text-[22px] font-bold mt-0.5" style={{ color: '#111827' }}>
+                  {k.value === null ? <Loader2 className="w-4 h-4 animate-spin" style={{ color: '#9CA3AF' }} /> : k.value}
+                </p>
                 <p className="text-[11px] mt-0.5" style={{ color: '#9CA3AF' }}>{k.sub}</p>
               </div>
             </div>
@@ -95,64 +133,21 @@ export default function FFOperationsHomePage() {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
-        {/* Cash Flow */}
+        {/* Cash Flow — no ledger table exists yet (no invoice has ever been
+            marked 'paid'), so there's no real cash-movement data to chart.
+            Showing a placeholder instead of a fabricated trend line. */}
         <div className="rounded-2xl overflow-hidden"
           style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <div className="flex items-center justify-between px-5 py-4"
             style={{ borderBottom: '1px solid #F3F4F6' }}>
             <span className="text-[14px] font-bold" style={{ color: '#111827' }}>Cash Flow</span>
-            <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid #E5E7EB' }}>
-              {(['flow', 'income'] as const).map(v => (
-                <button key={v} onClick={() => setCashView(v)}
-                  className="px-3 py-1 text-[11px] font-semibold transition-all"
-                  style={{
-                    background: cashView === v ? '#2563EB' : '#FFFFFF',
-                    color: cashView === v ? '#FFFFFF' : '#6B7280',
-                  }}>
-                  {v === 'flow' ? 'Cash Flow' : 'Income/Exp'}
-                </button>
-              ))}
-            </div>
           </div>
-          <div className="p-5">
-            <div className="h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
-                {cashView === 'flow' ? (
-                  <LineChart data={cashFlowData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
-                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#9CA3AF' }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#9CA3AF' }} tickFormatter={v => v === 0 ? '0' : `${v/1000}K`} />
-                    <Tooltip formatter={(v) => `₹${Number(v).toLocaleString('en-IN')}`} contentStyle={{ borderRadius: 10, border: '1px solid #E5E7EB', fontSize: 12 }} />
-                    <Line type="monotone" dataKey="cash" stroke="#2563EB" strokeWidth={2} dot={false} name="Cash" />
-                  </LineChart>
-                ) : (
-                  <BarChart data={cashFlowData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F3F4F6" />
-                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#9CA3AF' }} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#9CA3AF' }} tickFormatter={v => v === 0 ? '0' : `${v/1000}K`} />
-                    <Tooltip formatter={(v) => `₹${Number(v).toLocaleString('en-IN')}`} contentStyle={{ borderRadius: 10, border: '1px solid #E5E7EB', fontSize: 12 }} />
-                    <Bar dataKey="income" fill="#2563EB" radius={[4,4,0,0]} name="Income" />
-                    <Bar dataKey="expense" fill="#FCA5A5" radius={[4,4,0,0]} name="Expense" />
-                    <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                  </BarChart>
-                )}
-              </ResponsiveContainer>
-            </div>
-            <div className="grid grid-cols-3 gap-3 mt-4">
-              {[
-                { label: 'Opening Cash', value: '₹0.00', dot: '#9CA3AF' },
-                { label: 'Total Income',  value: '₹0.00', dot: '#2DD482' },
-                { label: 'Total Expense', value: '₹0.00', dot: '#F46A6A' },
-              ].map(s => (
-                <div key={s.label} className="text-center">
-                  <div className="flex items-center justify-center gap-1.5 mb-0.5">
-                    <div className="w-2 h-2 rounded-full" style={{ background: s.dot }} />
-                    <span className="text-[10px]" style={{ color: '#9CA3AF' }}>{s.label}</span>
-                  </div>
-                  <p className="text-[13px] font-semibold" style={{ color: '#111827' }}>{s.value}</p>
-                </div>
-              ))}
-            </div>
+          <div className="p-5 flex flex-col items-center justify-center text-center" style={{ minHeight: 260 }}>
+            <BarChart3 className="w-8 h-8 mb-2" style={{ color: '#D1D5DB' }} />
+            <p className="text-[13px] font-medium" style={{ color: '#6B7280' }}>No cash-flow data available</p>
+            <p className="text-[11px] mt-1 max-w-[240px]" style={{ color: '#9CA3AF' }}>
+              This needs a payments-received/cash-ledger table, which doesn't exist in the schema yet.
+            </p>
           </div>
         </div>
 
@@ -196,33 +191,46 @@ export default function FFOperationsHomePage() {
       {/* Receivables + Payables Summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {[
-          { label: 'Total Receivables', sub: 'Amounts owed to us', current: '₹0.00', overdue: '₹0.00', color: '#16A34A', bg: '#DCFCE7', border: '#BBF7D0' },
-          { label: 'Total Payables',    sub: 'Amounts we owe',     current: '₹0.00', overdue: '₹0.00', color: '#DC2626', bg: '#FEE2E2', border: '#FECACA' },
-        ].map(card => (
-          <div key={card.label} className="rounded-2xl p-5"
-            style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <p className="text-[13px] font-semibold" style={{ color: '#374151' }}>{card.label}</p>
-                <p className="text-[11px] mt-0.5" style={{ color: '#9CA3AF' }}>{card.sub}</p>
+          {
+            label: 'Total Receivables', sub: 'Amounts owed to us',
+            total: finance?.receivablesTotal, current: finance?.receivablesCurrent, overdue: finance?.receivablesOverdue,
+            color: '#16A34A',
+          },
+          {
+            label: 'Total Payables', sub: 'Approved FF vendor + transport payments, not yet paid',
+            total: finance?.payablesTotal, current: finance?.payablesTotal, overdue: 0,
+            color: '#DC2626',
+          },
+        ].map(card => {
+          const pct = card.total ? Math.min(100, Math.round(((card.overdue || 0) / card.total) * 100)) : 0;
+          return (
+            <div key={card.label} className="rounded-2xl p-5"
+              style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <p className="text-[13px] font-semibold" style={{ color: '#374151' }}>{card.label}</p>
+                  <p className="text-[11px] mt-0.5" style={{ color: '#9CA3AF' }}>{card.sub}</p>
+                </div>
+                <span className="text-[22px] font-bold" style={{ color: '#111827' }}>
+                  {financeLoading ? <Loader2 className="w-4 h-4 animate-spin inline" style={{ color: '#9CA3AF' }} /> : money(card.total)}
+                </span>
               </div>
-              <span className="text-[22px] font-bold" style={{ color: '#111827' }}>₹0.00</span>
-            </div>
-            <div className="w-full rounded-full h-1.5 mb-4" style={{ background: '#F3F4F6' }}>
-              <div className="h-1.5 rounded-full w-0" style={{ background: card.color }} />
-            </div>
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ background: '#2563EB' }} />
-                <span className="text-[11px]" style={{ color: '#6B7280' }}>Current: <span className="font-semibold text-gray-800">{card.current}</span></span>
+              <div className="w-full rounded-full h-1.5 mb-4" style={{ background: '#F3F4F6' }}>
+                <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: card.color }} />
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full" style={{ background: '#F97316' }} />
-                <span className="text-[11px]" style={{ color: '#6B7280' }}>Overdue: <span className="font-semibold text-gray-800">{card.overdue}</span></span>
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full" style={{ background: '#2563EB' }} />
+                  <span className="text-[11px]" style={{ color: '#6B7280' }}>Current: <span className="font-semibold text-gray-800">{money(card.current)}</span></span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full" style={{ background: '#F97316' }} />
+                  <span className="text-[11px]" style={{ color: '#6B7280' }}>Overdue: <span className="font-semibold text-gray-800">{money(card.overdue)}</span></span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Recent Activity */}
@@ -237,14 +245,25 @@ export default function FFOperationsHomePage() {
           </div>
         </div>
         <div className="divide-y" style={{ borderColor: '#F9FAFB' }}>
-          {recentActivity.map((a, i) => (
+          {activityLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#9CA3AF' }} />
+            </div>
+          ) : activity.length === 0 ? (
+            <div className="flex items-center gap-3 px-5 py-3.5">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0" style={{ background: '#F1F5F9' }}>
+                <AlertCircle className="w-3.5 h-3.5" style={{ color: '#94A3B8' }} />
+              </div>
+              <p className="flex-1 text-[13px]" style={{ color: '#374151' }}>No recent purchase orders or sales orders</p>
+            </div>
+          ) : activity.map((a, i) => (
             <div key={i} className="flex items-center gap-3 px-5 py-3.5">
               <div className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
                 style={{ background: '#F1F5F9' }}>
                 <AlertCircle className="w-3.5 h-3.5" style={{ color: '#94A3B8' }} />
               </div>
               <p className="flex-1 text-[13px]" style={{ color: '#374151' }}>{a.text}</p>
-              <span className="text-[11px]" style={{ color: '#9CA3AF' }}>{a.time}</span>
+              <span className="text-[11px]" style={{ color: '#9CA3AF' }}>{formatDistanceToNow(new Date(a.time), { addSuffix: true })}</span>
             </div>
           ))}
         </div>

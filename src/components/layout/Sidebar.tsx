@@ -109,11 +109,13 @@ const navigationConfig: NavGroup[] = [
       'employee', 'director', 'Director', 'vendor_head',
       'nsm', 'datateam', 'data_team', 'data', 'boi', 'gmo', 'smo',
       'accounts', 'farmmanager', 'bd_data', 'rsh', 'RSH', 'site_visit_farm_manager',
-      'cafe_manager', 'palm_cafe_manager', 'ff_operations_manager',
-      'bde', 'field_executive', 'back_office', 'tele_caller', 'driver',
+      'cafe_manager', 'palm_cafe_manager',
+      'back_office', 'driver',
       // gm, l1_manager, auditor intentionally excluded — payment-only roles
       // purchase_manager, purchase_head, shift_employee → trimmed section below
       // hub_manager → trimmed section below
+      // field_executive, tele_caller, bde, ff_operations_manager excluded —
+      // matches DAILY_WORKFLOW_EXCLUDED_ROLES in App.tsx (routes already bounce them)
     ],
     items: [
       { icon: Home,          label: 'My Dashboard',          path: '/employee-dashboard' },
@@ -452,7 +454,7 @@ const navigationConfig: NavGroup[] = [
     roles: ['admin'],
     items: [
       { icon: LayoutDashboard, label: 'All Hubs Overview',   path: '/admin/hubs' },
-      { icon: MapPin,          label: 'Palikarani Hub',      path: '/admin/hubs/palikarani' },
+      { icon: MapPin,          label: 'Pallikaranai Hub',    path: '/admin/hubs/palikarani' },
       { icon: MapPin,          label: 'Vanagaram Hub',       path: '/admin/hubs/vanagaram' },
       { icon: MapPin,          label: 'Hyderabad Hub',       path: '/admin/hubs/hyderabad' },
     ],
@@ -704,6 +706,7 @@ const navigationConfig: NavGroup[] = [
           { label: '⚡ EOD PO Engine',    path: '/ff-operations/eod-po-engine' },
           { label: 'Vendors',             path: '/purchase/vendors' },
           { label: 'Payment Approvals',   path: '/ff-operations/payment-approvals', action: false },
+          { label: 'PO Buys',             path: '/purchase/po-buys' },
           { label: '🏷️ Box Labels',       path: '/ff-operations/labels', action: true },
         ],
       },
@@ -1023,11 +1026,15 @@ const navigationConfig: NavGroup[] = [
     ],
   },
   {
+    // Purchase Executives (shift_employee) raise vendor/transport payments for
+    // their hub's buys — Ops Manager and Anusiya's payment-access flag are
+    // approve-only now, so raising lives here and with hub_manager instead.
     title: 'Payments',
     icon: CreditCard,
     roles: ['shift_employee', 'purchase_manager', 'purchase_head'],
     items: [
       { icon: Plus,        label: 'New FF Vendor Payment',    path: '/ff/vendor-payment/new' },
+      { icon: Truck,       label: 'New Transport Payment',    path: '/ff/transport-payment/new' },
       { icon: History,     label: 'My Submitted Payments',    path: '/my-submitted-payments' },
       { icon: History,     label: 'Payments Made',            path: '/purchase/payments-made' },
     ],
@@ -1050,6 +1057,7 @@ const navigationConfig: NavGroup[] = [
     roles: ['hub_manager'],
     items: [
       { icon: LayoutDashboard, label: 'Warehouse Dashboard', path: '/warehouse' },
+      { icon: ClipboardCheck,  label: 'PO Assignment',       path: '/warehouse/po-assignment' },
       { icon: PackageCheck,    label: 'QC Inspection',       path: '/warehouse/qc' },
       { icon: FileText,        label: 'QC Rejections',       path: '/warehouse/qc-rejections' },
       { icon: RotateCcw,       label: 'Returns',             path: '/warehouse/returns' },
@@ -1213,6 +1221,34 @@ export function Sidebar() {
 
     return true;
   });
+
+  // ff_payment_access: specific individuals with approve-only payment access
+  // (raising is now hub_manager/shift_employee only) — see matching bypass in
+  // App.tsx's ProtectedRoute.
+  if ((user as any)?.ff_payment_access) {
+    filteredGroups.push({
+      title: 'Payments',
+      icon: Banknote,
+      roles: [],
+      items: [
+        { icon: History,        label: 'My Submitted Payments',  path: '/my-submitted-payments' },
+        { icon: ClipboardCheck, label: 'Payment Approvals',      path: '/ff-operations/payment-approvals' },
+      ],
+    });
+
+    filteredGroups.push({
+      title: 'Warehouse & QC',
+      icon: Warehouse,
+      roles: [],
+      items: [
+        { icon: Warehouse,   label: 'Warehouse Dashboard', path: '/warehouse' },
+        { icon: ClipboardCheck, label: 'QC Inspection',    path: '/warehouse/qc' },
+        { icon: ClipboardCheck, label: 'QC Rejections',    path: '/warehouse/qc-rejections' },
+        { icon: Boxes,       label: 'Inventory',           path: '/warehouse/inventory' },
+        { icon: History,     label: 'Returns',             path: '/warehouse/returns' },
+      ],
+    });
+  }
 
   return (
     <aside className="flex flex-col w-[240px] h-full shrink-0"

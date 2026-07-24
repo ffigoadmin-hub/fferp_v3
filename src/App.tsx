@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { AlertProvider } from "@/components/AlertProvider";
 import { ChatOverlayProvider } from "@/contexts/ChatOverlayContext";
@@ -36,6 +36,7 @@ const QCInspection = lazy(() => import('./pages/warehouse/QCInspection'));
 const InventoryDashboard = lazy(() => import('./pages/warehouse/InventoryDashboard'));
 const ReturnsDashboard = lazy(() => import('./pages/warehouse/ReturnsDashboard'));
 const QCRejections = lazy(() => import('./pages/warehouse/QCRejections'));
+const POAssignment = lazy(() => import('./pages/warehouse/POAssignment'));
 
 // Transit / Gate Entry Module
 const TransitDashboard = lazy(() => import('./pages/transit/TransitDashboard'));
@@ -121,6 +122,7 @@ const VendorCreditsPage        = lazy(() => import('./pages/ff-operations/purcha
 const AutoPOPage               = lazy(() => import('./pages/ff-operations/purchase/AutoPOPage'));
 const AutoBillPage             = lazy(() => import('./pages/ff-operations/purchase/AutoBillPage'));
 const BuyPage                  = lazy(() => import('./pages/ff-operations/purchase/BuyPage'));
+const POBuysReview             = lazy(() => import('./pages/ff-operations/purchase/POBuysReview'));
 
 // FF Operations — Sales sub-pages
 const SalesCustomersPage       = lazy(() => import('./pages/ff-operations/sales/SalesCustomersPage'));
@@ -370,6 +372,14 @@ const ALL_STAFF_ROLES = [
   'hub_manager', 'l1_manager',
 ];
 
+// ── Daily Workflow (Day Start / Day Plan / Hourly / EOD): IGO Chain only ───────
+// Per refinement plan Milestone 1.1: Sales Team (field_executive, tele_caller, bde)
+// and FF Ops Manager (ff_operations_manager) do not use this — their daily
+// reporting stays on the FF Shift workflow (/shift/dashboard, /purchase).
+// hub_manager and shift_employee are untouched — they were never on this list.
+const DAILY_WORKFLOW_EXCLUDED_ROLES = ['field_executive', 'tele_caller', 'bde', 'ff_operations_manager'];
+const DAILY_WORKFLOW_ROLES = ALL_STAFF_ROLES.filter((r) => !DAILY_WORKFLOW_EXCLUDED_ROLES.includes(r));
+
 // Operations + management roles (no pure field/driver roles)
 const OPS_ROLES = [
   'ceo', 'director', 'Director', 'gm', 'gmo', 'smo', 'boi', 'nsm', 'admin',
@@ -381,6 +391,15 @@ const OPS_ROLES = [
   'hub_manager', 'l1_manager', 'shift_employee',
 ];
 
+// ff_payment_access: specific individuals with approve-only payment access
+// (raising a new payment is hub_manager/shift_employee only) — routes this
+// bypass applies to.
+const FF_PAYMENT_ACCESS_ROUTES = [
+  '/my-submitted-payments', '/ff-operations/payment-approvals',
+  // Warehouse & QC — same flag holders also granted warehouse access
+  '/warehouse', '/warehouse/qc', '/warehouse/inventory', '/warehouse/returns', '/warehouse/qc-rejections',
+];
+
 const ProtectedRoute = ({
   children,
   allowedRoles
@@ -389,6 +408,7 @@ const ProtectedRoute = ({
   allowedRoles?: string[];
 }) => {
   const { user, isLoading } = useAuth();
+  const location = useLocation();
   const { data: guardStatus, isLoading: isGuardLoading, isError: isGuardError } = useRouteGuardStatus();
 
 
@@ -463,9 +483,13 @@ const ProtectedRoute = ({
 
   // ff_ops_access: field_executive members granted ops-manager view without role change
   const hasFFOpsAccess = (user as any).ff_ops_access === true;
+  const hasFFPaymentAccess = (user as any).ff_payment_access === true;
   if (allowedRoles && !allowedRoles.some(r => r.toLowerCase() === user.role?.toLowerCase())) {
     // Allow if the user has ff_ops_access AND the route permits ff_operations_manager
-    if (!(hasFFOpsAccess && allowedRoles.includes('ff_operations_manager'))) {
+    const opsAccessBypass = hasFFOpsAccess && allowedRoles.includes('ff_operations_manager');
+    // Allow if the user has ff_payment_access AND this is one of the payment-raising routes
+    const paymentAccessBypass = hasFFPaymentAccess && FF_PAYMENT_ACCESS_ROUTES.includes(location.pathname);
+    if (!opsAccessBypass && !paymentAccessBypass) {
       return <Navigate to="/redirect" replace />;
     }
   }
@@ -490,12 +514,12 @@ const AppRoutes = () => {
       <Route path="/redirect" element={<ProtectedRoute><RedirectPage /></ProtectedRoute>} />
       <Route path="/sandbox" element={<ProtectedRoute><SandboxPage /></ProtectedRoute>} />
 
-      {/* Daily Workflow Routes - Accessible to ALL authenticated users */}
-      <Route path="/employee-dashboard" element={<ProtectedRoute><EmployeeDashboardPage /></ProtectedRoute>} />
-      <Route path="/day-start" element={<ProtectedRoute><DayStartPage /></ProtectedRoute>} />
-      <Route path="/day-plan" element={<ProtectedRoute><DayPlanPage /></ProtectedRoute>} />
-      <Route path="/hourly-report" element={<ProtectedRoute><HourlyReportPage /></ProtectedRoute>} />
-      <Route path="/eod-summary" element={<ProtectedRoute><EODSummaryPage /></ProtectedRoute>} />
+      {/* Daily Workflow Routes - IGO Chain only (Sales Team + FF Ops Manager excluded, see DAILY_WORKFLOW_ROLES) */}
+      <Route path="/employee-dashboard" element={<ProtectedRoute allowedRoles={DAILY_WORKFLOW_ROLES}><EmployeeDashboardPage /></ProtectedRoute>} />
+      <Route path="/day-start" element={<ProtectedRoute allowedRoles={DAILY_WORKFLOW_ROLES}><DayStartPage /></ProtectedRoute>} />
+      <Route path="/day-plan" element={<ProtectedRoute allowedRoles={DAILY_WORKFLOW_ROLES}><DayPlanPage /></ProtectedRoute>} />
+      <Route path="/hourly-report" element={<ProtectedRoute allowedRoles={DAILY_WORKFLOW_ROLES}><HourlyReportPage /></ProtectedRoute>} />
+      <Route path="/eod-summary" element={<ProtectedRoute allowedRoles={DAILY_WORKFLOW_ROLES}><EODSummaryPage /></ProtectedRoute>} />
       <Route path="/company-calendar" element={<ProtectedRoute><CompanyCalendarPage /></ProtectedRoute>} />
       <Route path="/my-lop" element={<ProtectedRoute><LOPReversalPage /></ProtectedRoute>} />
 
@@ -782,6 +806,7 @@ const AppRoutes = () => {
       <Route path="/warehouse/inventory" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager', 'qc_manager', 'warehouse_manager']}><InventoryDashboard /></ProtectedRoute>} />
       <Route path="/warehouse/returns" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager', 'qc_manager', 'warehouse_manager']}><ReturnsDashboard /></ProtectedRoute>} />
       <Route path="/warehouse/qc-rejections" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager', 'qc_manager', 'warehouse_manager']}><QCRejections /></ProtectedRoute>} />
+      <Route path="/warehouse/po-assignment" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager']}><POAssignment /></ProtectedRoute>} />
 
       {/* Transit / Gate Entry Module */}
       <Route path="/transit" element={<ProtectedRoute allowedRoles={OPS_ROLES}><TransitDashboard /></ProtectedRoute>} />
@@ -850,8 +875,8 @@ const AppRoutes = () => {
       <Route path="/ff-operations/task-assign"        element={<ProtectedRoute allowedRoles={['ff_operations_manager','admin']}><TaskAssign /></ProtectedRoute>} />
       <Route path="/ff-operations/payment-approvals"  element={<ProtectedRoute allowedRoles={['ff_operations_manager','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
       {/* Phase 4: Payment submission forms */}
-      <Route path="/ff/vendor-payment/new"    element={<ProtectedRoute allowedRoles={['hub_manager','purchase_manager','purchase_head','shift_employee','ff_operations_manager','admin']}><FFVendorPaymentForm /></ProtectedRoute>} />
-      <Route path="/ff/transport-payment/new" element={<ProtectedRoute allowedRoles={['hub_manager','ff_operations_manager','admin']}><FFTransportPaymentForm /></ProtectedRoute>} />
+      <Route path="/ff/vendor-payment/new"    element={<ProtectedRoute allowedRoles={['hub_manager','shift_employee','purchase_manager','purchase_head','admin']}><FFVendorPaymentForm /></ProtectedRoute>} />
+      <Route path="/ff/transport-payment/new" element={<ProtectedRoute allowedRoles={['hub_manager','shift_employee','purchase_manager','purchase_head','admin']}><FFTransportPaymentForm /></ProtectedRoute>} />
       {/* Phase 5: FF Payments Report */}
       <Route path="/reports/ff-payments" element={<ProtectedRoute allowedRoles={['admin','ceo','gm','l1_manager','auditor','ff_operations_manager','accounts']}><FFPaymentsReport /></ProtectedRoute>} />
       {/* GM FF payments (shared component, role-aware) */}
@@ -870,8 +895,8 @@ const AppRoutes = () => {
       {/* Accounts — FF payments (mark-as-paid) */}
       <Route path="/accounts/ff-payments"           element={<ProtectedRoute allowedRoles={['accounts','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
       <Route path="/accounts/ff-transport-payments" element={<ProtectedRoute allowedRoles={['accounts','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
-      {/* My Submitted Payments — hub_manager, purchase_manager, shift_employee */}
-      <Route path="/my-submitted-payments" element={<ProtectedRoute allowedRoles={['hub_manager','purchase_manager','purchase_head','shift_employee','ff_operations_manager','admin']}><MySubmittedPayments /></ProtectedRoute>} />
+      {/* My Submitted Payments — raisers only (hub_manager, shift_employee, purchase_manager/head) */}
+      <Route path="/my-submitted-payments" element={<ProtectedRoute allowedRoles={['hub_manager','shift_employee','purchase_manager','purchase_head','admin']}><MySubmittedPayments /></ProtectedRoute>} />
 
       {/* FF Operations — Purchase sub-pages */}
       <Route path="/purchase/expenses"           element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><PurchaseExpensesPage /></ProtectedRoute>} />
@@ -881,6 +906,7 @@ const AppRoutes = () => {
       <Route path="/purchase/bills"              element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><PurchaseBillsPage /></ProtectedRoute>} />
       <Route path="/purchase/auto-bill"          element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><AutoBillPage /></ProtectedRoute>} />
       <Route path="/purchase/buy"               element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'shift_employee', 'ff_operations_manager']}><BuyPage /></ProtectedRoute>} />
+      <Route path="/purchase/po-buys"            element={<ProtectedRoute allowedRoles={['admin', 'ff_operations_manager']}><POBuysReview /></ProtectedRoute>} />
       <Route path="/purchase/recurring-bills"    element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><RecurringBillsPage /></ProtectedRoute>} />
       <Route path="/purchase/payments-made"      element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><PaymentsMadePage /></ProtectedRoute>} />
       <Route path="/purchase/vendor-credits"     element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><VendorCreditsPage /></ProtectedRoute>} />

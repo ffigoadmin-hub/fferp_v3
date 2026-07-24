@@ -144,7 +144,7 @@ export default function BulkOrderPage() {
         }).select().single();
         if (oErr) throw oErr;
 
-        await supabase.from('sales_order_items').insert({
+        const { error: itemErr } = await supabase.from('sales_order_items').insert({
           order_id:     order.id,
           product_id:   row.product_id || null,
           product_name: row.product_name,
@@ -158,6 +158,7 @@ export default function BulkOrderPage() {
           qc_grade:     row.grade,
           grade:        row.grade,
         });
+        if (itemErr) throw itemErr;
 
         // Auto-create invoice
         await createInvoiceForOrder({
@@ -292,7 +293,13 @@ export default function BulkOrderPage() {
           qc_grade:     'A', grade: 'A',
         };
       });
-      if (itemRows.length) await supabase.from('sales_order_items').insert(itemRows);
+      if (itemRows.length) {
+        const { error: itemsErr } = await supabase.from('sales_order_items').insert(itemRows);
+        if (itemsErr) {
+          console.warn('[BulkOrder] item insert failed:', itemsErr.message);
+          toast.error(`Orders created, but product line items failed to save: ${itemsErr.message}`);
+        }
+      }
 
       // ── STEP 6: Batch-insert ALL invoices in one call ───────────────────
       const invoiceRows = (createdOrders ?? []).map((order, i) => {

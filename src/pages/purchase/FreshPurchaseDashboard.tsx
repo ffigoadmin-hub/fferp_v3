@@ -103,9 +103,6 @@ export default function FreshPurchaseDashboard() {
           <button onClick={() => refetch()} className="btn-zoho-secondary px-3">
             <RefreshCw className="h-4 w-4" />
           </button>
-          <Link to="/purchase/new-po" className="btn-zoho-primary">
-            <Plus className="h-4 w-4" /> New PO
-          </Link>
         </div>
       </div>
 
@@ -132,7 +129,6 @@ export default function FreshPurchaseDashboard() {
         <div className="lg:col-span-2 zoho-card">
           <div className="px-5 py-4 border-b border-[#E2E8F0] flex items-center justify-between">
             <h2 className="font-semibold text-slate-800">Today's Purchase Orders</h2>
-            <Link to="/purchase/new-po" className="text-xs text-blue-600 hover:underline">+ New PO</Link>
           </div>
           {isLoading ? (
             <div className="p-8 text-center text-sm text-gray-400">Loading...</div>

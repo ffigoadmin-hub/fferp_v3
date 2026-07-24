@@ -68,4 +68,8 @@ test-supabase.ts
 docs/
 
 .vercel
-bun.lock 
+bun.lock
+
+# Bulk user-import CSVs contain plaintext employee passwords — never commit
+BULK_IMPORT_*.csv
+TEST_BULK_ORDERS_*.csv

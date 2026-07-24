@@ -73,10 +73,7 @@ const mapRole = (dbRole: string): UserRole => {
     'purchase_manager':          'purchase_manager',
     'purchase_head':             'purchase_head',
     'back_office':               'back_office',
-    'l1_manager':                'l1_manager',
-    'hub_manager':               'hub_manager',
     'bd_data':                   'bd_data',
-    'data_team':                 'data_team',
     'collection_executive':      'collection_executive',
     'site_visit_farm_manager':   'site_visit_farm_manager',
     'cafe_manager':              'cafe_manager',
@@ -213,6 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: mapRole(p.role),
           department: p.department,
           ff_ops_access: p.ff_ops_access ?? false,
+          ff_payment_access: p.ff_payment_access ?? false,
           ...(p.hub_id ? { hub_id: p.hub_id } : {}),
         } as any;
         return mappedUser;

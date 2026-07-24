@@ -49,6 +49,17 @@ export const ROLES = [
   { value: 'BD_Data', label: 'BD Data (Business Development)' },
   { value: 'RSH', label: 'RSH (Rental Sourcing Head)' },
   { value: 'palm_cafe_manager', label: 'Palm Cafe Manager' },
+  { value: 'field_executive', label: 'Field Executive (Sales Team)' },
+  { value: 'hub_manager', label: 'Hub Manager (Warehouse)' },
+  { value: 'shift_employee', label: 'Purchase Executive' },
+  { value: 'l1_manager', label: 'L1 Manager' },
+  { value: 'ff_operations_manager', label: 'FF Operations Manager' },
+  { value: 'qc_manager', label: 'QC Manager' },
+  { value: 'warehouse_manager', label: 'Warehouse Manager' },
+  { value: 'tele_caller', label: 'Tele Caller' },
+  { value: 'driver', label: 'Driver' },
+  { value: 'back_office', label: 'Back Office' },
+  { value: 'bde', label: 'BDE (Business Development Executive)' },
 ] as const;
 
 export type Department = typeof DEPARTMENTS[number]['value'];

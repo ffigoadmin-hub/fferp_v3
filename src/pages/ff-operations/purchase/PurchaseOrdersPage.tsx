@@ -73,7 +73,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // ── PO Row (expandable) ────────────────────────────────────────────────────────
-function PORow({ po }: { po: PurchaseOrder }) {
+function PORow({ po, showBuy }: { po: PurchaseOrder; showBuy: boolean }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const items = Array.isArray(po.items) ? po.items : [];
@@ -121,16 +121,18 @@ function PORow({ po }: { po: PurchaseOrder }) {
           </div>
         </div>
 
-        <button
-          onClick={e => {
-            e.stopPropagation();
-            navigate('/purchase/buy', { state: { poId: po.id, poNumber: po.po_number } });
-          }}
-          className="shrink-0 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
-        >
-          <ShoppingBag className="h-3.5 w-3.5" />
-          Buy
-        </button>
+        {showBuy && (
+          <button
+            onClick={e => {
+              e.stopPropagation();
+              navigate('/purchase/buy', { state: { poId: po.id, poNumber: po.po_number } });
+            }}
+            className="shrink-0 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
+          >
+            <ShoppingBag className="h-3.5 w-3.5" />
+            Buy
+          </button>
+        )}
       </button>
 
       {open && (
@@ -187,6 +189,7 @@ export default function PurchaseOrdersPage() {
   const { user } = useAuth();
   const hubId = (user as any)?.hub_id ?? null;
   const isManagement = ['ceo', 'gm', 'admin', 'director', 'ff_operations_manager'].includes(user?.role ?? '');
+  const showBuy = user?.role === 'shift_employee';
   const [filter, setFilter] = useState<'all' | 'pending' | 'ordered' | 'received'>('all');
 
   const { data: orders = [], isLoading, refetch } = useQuery({
@@ -196,7 +199,7 @@ export default function PurchaseOrdersPage() {
       // (DB may have duplicate hub records: "Palikarani Hub" vs "Pallikarani Hub" with different UUIDs)
       const { data, error } = await (supabase as any)
         .from('purchase_orders')
-        .select('id, po_number, hub_id, hub_name, status, total_amount, sub_total, vendor_name, delivery_date, order_date, created_at, notes, items')
+        .select('id, po_number, hub_id, hub_name, status, total_amount, sub_total, vendor_name, delivery_date, order_date, created_at, notes, items, assigned_executive_id')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -205,8 +208,12 @@ export default function PurchaseOrdersPage() {
         items: Array.isArray(po.items) ? po.items : [],
       })) as PurchaseOrder[];
 
-      // Non-management: keep only this exec's hub POs
-      if (!isManagement && hubId) {
+      // Purchase Executives only see POs actually assigned to them by their hub
+      // manager (via the PO Assignment page) — not every PO for their hub.
+      if (user?.role === 'shift_employee') {
+        result = result.filter(po => po.assigned_executive_id === user.id);
+      } else if (!isManagement && hubId) {
+        // Non-management, non-exec roles (e.g. hub_manager): keep only this hub's POs
         // Fetch exec's canonical hub name for fuzzy fallback matching
         const { data: hubRow } = await (supabase as any)
           .from('hubs').select('name').eq('id', hubId).maybeSingle();
@@ -325,7 +332,7 @@ export default function PurchaseOrdersPage() {
                   <span className="text-xs text-gray-400">({pos.length} PO{pos.length !== 1 ? 's' : ''})</span>
                 </div>
                 <div className="space-y-2">
-                  {pos.map(po => <PORow key={po.id} po={po} />)}
+                  {pos.map(po => <PORow key={po.id} po={po} showBuy={showBuy} />)}
                 </div>
               </div>
             ))}

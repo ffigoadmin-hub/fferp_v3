@@ -392,7 +392,11 @@ export default function FFPaymentApprovals() {
   const [statusFilter, setStatusFilter] = useState<string>('pending');
 
   const role = user?.role || '';
-  const col = APPROVED_BY_COL[role];
+  // ff_payment_access: specific individuals granted the FF Ops approval step
+  // without a role change (mirrors the payment-raising bypass already in App.tsx).
+  // Only applies when their real role has no approval-chain step of its own.
+  const approvalRole = ((user as any)?.ff_payment_access && !(role in NEXT_STATUS)) ? 'ff_operations_manager' : role;
+  const col = APPROVED_BY_COL[approvalRole];
 
   // Determine which status to filter for "my queue"
   const myPendingStatus: Record<string, string> = {
@@ -415,7 +419,7 @@ export default function FFPaymentApprovals() {
       if (statusFilter === 'pending') {
         q = q.in('payment_status', ['pending_ff_ops','pending_gm','pending_l1','pending_auditor','pending_ceo']);
       } else if (statusFilter === 'my_queue') {
-        const s = myPendingStatus[role];
+        const s = myPendingStatus[approvalRole];
         if (s) q = q.eq('payment_status', s);
       } else if (statusFilter !== 'all') {
         q = q.eq('payment_status', statusFilter);
@@ -440,7 +444,7 @@ export default function FFPaymentApprovals() {
       if (statusFilter === 'pending') {
         q = q.in('payment_status', ['pending_ff_ops','pending_gm','pending_l1','pending_auditor','pending_ceo']);
       } else if (statusFilter === 'my_queue') {
-        const s = myPendingStatus[role];
+        const s = myPendingStatus[approvalRole];
         if (s) q = q.eq('payment_status', s);
       } else if (statusFilter !== 'all') {
         q = q.eq('payment_status', statusFilter);
@@ -456,7 +460,7 @@ export default function FFPaymentApprovals() {
   // Approve mutation
   const approveMutation = useMutation({
     mutationFn: async ({ id, type }: { id: string; type: 'vendor' | 'transport' }) => {
-      const nextStatus = NEXT_STATUS[role];
+      const nextStatus = NEXT_STATUS[approvalRole];
       if (!nextStatus || !col) throw new Error('Role cannot approve');
       const table = type === 'vendor' ? 'ff_vendor_payments' : 'ff_transport_payments';
       const update: any = {
@@ -503,7 +507,7 @@ export default function FFPaymentApprovals() {
       const { error } = await (supabase as any).from(table).update({
         payment_status: 'rejected',
         rejection_reason: reason,
-        rejection_level: role,
+        rejection_level: approvalRole,
         rejected_by: user?.id,
         rejected_at: new Date().toISOString(),
       }).eq('id', id);
@@ -522,8 +526,8 @@ export default function FFPaymentApprovals() {
   const refetch = tab === 'vendor' ? vRefetch : tRefetch;
 
   const myQueueCount = tab === 'vendor'
-    ? vendorPayments.filter(p => p.payment_status === myPendingStatus[role]).length
-    : transportPayments.filter(p => p.payment_status === myPendingStatus[role]).length;
+    ? vendorPayments.filter(p => p.payment_status === myPendingStatus[approvalRole]).length
+    : transportPayments.filter(p => p.payment_status === myPendingStatus[approvalRole]).length;
 
   // Role-aware title
   const roleTitles: Record<string, string> = {
@@ -534,7 +538,7 @@ export default function FFPaymentApprovals() {
     ceo:        'CEO — Final Payment Approvals',
     admin:      'Admin — All FF Payments',
   };
-  const title = roleTitles[role] || 'FF Payment Approvals';
+  const title = roleTitles[approvalRole] || 'FF Payment Approvals';
 
   return (
     <div className="space-y-5 max-w-5xl mx-auto pb-12 pt-2">
@@ -621,7 +625,7 @@ export default function FFPaymentApprovals() {
               key={p.id}
               payment={p}
               type={tab}
-              userRole={role}
+              userRole={approvalRole}
               isApproving={approveMutation.isPending || markPaidMutation.isPending}
               onApprove={(id: string) => approveMutation.mutate({ id, type: tab })}
               onReject={(id: string, reason: string) => rejectMutation.mutate({ id, reason, type: tab })}

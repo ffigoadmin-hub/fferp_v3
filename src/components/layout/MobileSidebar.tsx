@@ -94,11 +94,14 @@ const navigationConfig: NavGroup[] = [
       'employee', 'director', 'Director', 'vendor_head',
       'nsm', 'datateam', 'data_team', 'data', 'boi', 'gmo', 'smo', 'hr', 'gm', 'admin',
       'accounts', 'farmmanager', 'bd_data', 'rsh', 'RSH', 'site_visit_farm_manager',
-      'cafe_manager', 'palm_cafe_manager', 'ff_operations_manager',
-      'bde', 'field_executive', 'back_office', 'tele_caller', 'driver',
+      'cafe_manager', 'palm_cafe_manager',
+      'back_office', 'driver',
       'warehouse_manager', 'qc_manager',
       // purchase_manager, purchase_head, shift_employee → trimmed section below
       // hub_manager → trimmed section below
+      // field_executive, tele_caller, bde, ff_operations_manager excluded —
+      // matches DAILY_WORKFLOW_EXCLUDED_ROLES in App.tsx (routes already bounce them);
+      // trimmed section below keeps what they still have route access to
     ],
     defaultOpen: true,
     items: [
@@ -136,6 +139,7 @@ const navigationConfig: NavGroup[] = [
       { icon: History,       label: 'My Requests',         path: '/my-requests' },
     ],
   },
+
   {
     title: 'PALM CAFE ',
     icon: ChefHat,
@@ -658,7 +662,7 @@ const navigationConfig: NavGroup[] = [
     defaultOpen: true,
     items: [
       { icon: LayoutDashboard, label: 'All Hubs Overview',  path: '/admin/hubs' },
-      { icon: MapPin,          label: 'Palikarani Hub',    path: '/admin/hubs/palikarani' },
+      { icon: MapPin,          label: 'Pallikaranai Hub',  path: '/admin/hubs/palikarani' },
       { icon: MapPin,          label: 'Vanagaram Hub',     path: '/admin/hubs/vanagaram' },
       { icon: MapPin,          label: 'Hyderabad Hub',     path: '/admin/hubs/hyderabad' },
     ],
@@ -672,6 +676,8 @@ const navigationConfig: NavGroup[] = [
       { icon: LayoutDashboard, label: 'Home',              path: '/ff-operations' },
       { icon: Package,         label: 'Items',             path: '/ff-operations/items' },
       { icon: FileText,        label: 'Auto Bill',         path: '/purchase/auto-bill' },
+      { icon: Plus,            label: 'New Vendor Payment',    path: '/ff/vendor-payment/new' },
+      { icon: Truck,           label: 'New Transport Payment', path: '/ff/transport-payment/new' },
       { icon: Truck,           label: 'Transit',           path: '/transit' },
       { icon: LayoutDashboard, label: 'Sales Dashboard',   path: '/sales' },
       { icon: Users,           label: 'Customers',         path: '/sales/customers' },
@@ -928,6 +934,21 @@ export function MobileSidebar({ onClose }: MobileSidebarProps) {
 
     return true;
   });
+
+  // ff_payment_access: specific individuals granted vendor/transport payment-raising
+  // without a role change — see matching bypass in App.tsx's ProtectedRoute.
+  if ((user as any)?.ff_payment_access) {
+    filteredGroups.push({
+      title: 'Payments',
+      icon: Banknote,
+      roles: [],
+      items: [
+        { icon: Plus,    label: 'New Vendor Payment',     path: '/ff/vendor-payment/new' },
+        { icon: Truck,   label: 'New Transport Payment',  path: '/ff/transport-payment/new' },
+        { icon: History, label: 'My Submitted Payments',  path: '/my-submitted-payments' },
+      ],
+    });
+  }
 
   const toggleGroup = (groupTitle: string) => {
     setOpenGroups(prev => ({

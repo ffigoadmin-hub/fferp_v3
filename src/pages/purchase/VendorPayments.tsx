@@ -40,13 +40,13 @@ export default function VendorPayments() {
       if (!form.vendor_id || !form.amount) throw new Error('Vendor and amount required');
       const { error } = await supabase.from('vendor_payments').insert({
         vendor_id: form.vendor_id,
-        purchase_order_id: form.purchase_order_id || null,
+        po_id: form.purchase_order_id || null,
         amount: parseFloat(form.amount),
-        payment_mode: form.payment_mode,
+        payment_method: form.payment_mode,
         payment_date: form.payment_date,
-        utr_number: form.utr_number || null,
+        reference_no: form.utr_number || null,
         notes: form.notes || null,
-        status: 'completed',
+        status: 'paid',
       });
       if (error) throw error;
     },
@@ -174,7 +174,7 @@ export default function VendorPayments() {
                     <td className="font-semibold text-green-700">₹{Number(p.amount).toLocaleString('en-IN')}</td>
                     <td>
                       <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded capitalize">
-                        {p.payment_mode?.replace('_', ' ')}
+                        {p.payment_method?.replace('_', ' ')}
                       </span>
                     </td>
                     <td className="text-gray-400 text-xs">{p.utr_number ?? '—'}</td>

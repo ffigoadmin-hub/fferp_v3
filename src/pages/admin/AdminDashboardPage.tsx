@@ -447,7 +447,7 @@ export function AdminDashboardPage() {
             </div>
             <div style={{ borderTop: 'none' }}>
               {[
-                { name: 'Palikarani', code: 'HUB-1', manager: 'Arun Karthick', routes: 3, channels: ['FF', 'DMART'], color: '#38BDF8', path: '/admin/hubs/palikarani' },
+                { name: 'Pallikaranai', code: 'HUB-1', manager: 'Arun Karthick', routes: 3, channels: ['FF', 'DMART'], color: '#38BDF8', path: '/admin/hubs/palikarani' },
                 { name: 'Vanagaram',  code: 'HUB-2', manager: 'Prakash',        routes: 6, channels: ['FF', 'DMART', 'BLINKIT', 'ZEPTO'], color: '#2563EB', path: '/admin/hubs/vanagaram' },
                 { name: 'Hyderabad', code: 'HUB-3', manager: 'Hari',           routes: 4, channels: ['FF', 'DMART', 'ZEPTO'], color: '#A78BFA', path: '/admin/hubs/hyderabad' },
               ].map(hub => (

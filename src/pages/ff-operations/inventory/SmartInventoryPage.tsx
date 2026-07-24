@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { ComingSoonOverlay } from '@/components/ComingSoonOverlay';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import {
@@ -175,6 +176,7 @@ export default function SmartInventoryPage() {
 
   // ─────────────────────────────────────────────────────────────────────────────
   return (
+    <ComingSoonOverlay>
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '20px 20px 48px' }}>
 
       {/* Header */}
@@ -573,5 +575,6 @@ export default function SmartInventoryPage() {
         </div>
       )}
     </div>
+    </ComingSoonOverlay>
   );
 }
