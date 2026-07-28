@@ -182,7 +182,7 @@ export default function TaskAssign() {
       const { data, error } = await (supabase as any)
         .from('profiles')
         .select('id, name, role, email, hub_id, hubs(name)')
-        .in('role', ['field_executive', 'tele_caller', 'bde', 'nsm', 'rsh'])
+        .in('role', ['field_executive', 'tele_caller', 'bde', 'nsm', 'rsh', 'shift_employee', 'warehouse_manager', 'qc_manager'])
         .neq('id', user?.id ?? '')
         .order('name');
       if (error) throw error;
@@ -253,9 +253,12 @@ export default function TaskAssign() {
   const totalTarget = assignments.reduce((s, a) => s + (a.order_target || 0), 0);
 
   const roleColor: Record<string, string> = {
-    field_executive: 'bg-blue-100 text-blue-700',
-    bde:             'bg-purple-100 text-purple-700',
-    tele_caller:     'bg-teal-100 text-teal-700',
+    field_executive:   'bg-blue-100 text-blue-700',
+    bde:               'bg-purple-100 text-purple-700',
+    tele_caller:       'bg-teal-100 text-teal-700',
+    shift_employee:    'bg-orange-100 text-orange-700',
+    warehouse_manager: 'bg-emerald-100 text-emerald-700',
+    qc_manager:        'bg-indigo-100 text-indigo-700',
   };
 
   return (
@@ -264,7 +267,7 @@ export default function TaskAssign() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Task Assignment</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Assign daily targets to the sales & tele-caller team</p>
+          <p className="text-xs text-gray-500 mt-0.5">Assign daily targets to sales, tele-caller, purchase & warehouse teams</p>
         </div>
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-gray-400" />
@@ -300,7 +303,7 @@ export default function TaskAssign() {
       {/* Team table */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-700">Sales Team</h2>
+          <h2 className="text-sm font-semibold text-gray-700">Team</h2>
           <button
             onClick={() => refetchAssignments()}
             className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600"
