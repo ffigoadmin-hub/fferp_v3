@@ -6,6 +6,13 @@ import { Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 
+// ff_ops_access is a delegated-view flag meant only for sales-side staff
+// (field_executive / bde / tele_caller) who get loaned ops-manager visibility
+// without a role change. It must NEVER hijack the login landing page for
+// operational roles that already have their own dashboard (warehouse_manager,
+// qc_manager, hub_manager, purchase_manager, etc.) — see App.tsx line ~484.
+const FF_OPS_ACCESS_ELIGIBLE_ROLES = new Set(['field_executive', 'bde', 'tele_caller']);
+
 export function RedirectPage() {
   const { user, isLoading, session, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -146,8 +153,10 @@ export function RedirectPage() {
     }
 
     if (user) {
-      // ff_ops_access: these specific users always land on ops manager dashboard
-      if ((user as any).ff_ops_access) {
+      // ff_ops_access: only sales-side roles get the delegated ops-manager landing.
+      // Operational roles (warehouse_manager, qc_manager, hub_manager, etc.) always
+      // land on their own dashboard even if this flag is set on their profile.
+      if ((user as any).ff_ops_access && FF_OPS_ACCESS_ELIGIBLE_ROLES.has((user.role || '').toLowerCase())) {
         navigate('/ff-operations', { replace: true });
         return;
       }
@@ -162,7 +171,7 @@ export function RedirectPage() {
             .maybeSingle();
 
           if (profile?.role) {
-            if (profile.ff_ops_access) {
+            if (profile.ff_ops_access && FF_OPS_ACCESS_ELIGIBLE_ROLES.has((profile.role || '').toLowerCase())) {
               navigate('/ff-operations', { replace: true });
               return;
             }
