@@ -108,10 +108,11 @@ const navigationConfig: NavGroup[] = [
     roles: [
       'employee', 'director', 'Director', 'vendor_head',
       'nsm', 'datateam', 'data_team', 'data', 'boi', 'gmo', 'smo',
-      'accounts', 'farmmanager', 'bd_data', 'rsh', 'RSH', 'site_visit_farm_manager',
+      'farmmanager', 'bd_data', 'rsh', 'RSH', 'site_visit_farm_manager',
       'cafe_manager', 'palm_cafe_manager',
       'back_office', 'driver',
       // gm, l1_manager, auditor intentionally excluded — payment-only roles
+      // accounts intentionally excluded — approve-only via FF Payments below
       // purchase_manager, purchase_head, shift_employee → trimmed section below
       // hub_manager → trimmed section below
       // field_executive, tele_caller, bde, ff_operations_manager excluded —
@@ -402,8 +403,8 @@ const navigationConfig: NavGroup[] = [
     icon: Banknote,
     roles: ['gm'],
     items: [
-      { icon: Banknote,     label: 'Vendor Payments',    path: '/gm/ff-payments',           badgeKey: 'gm' },
-      { icon: Truck,        label: 'Transport Payments', path: '/gm/ff-transport-payments', badgeKey: 'gm' },
+      { icon: Banknote,     label: 'Vendor Payments',    path: '/gm/ff-payments',           badgeKey: 'gm_vendor' },
+      { icon: Truck,        label: 'Transport Payments', path: '/gm/ff-transport-payments', badgeKey: 'gm_transport' },
       { icon: FileBarChart, label: 'FF Payments Report', path: '/reports/ff-payments' },
     ],
   },
@@ -706,7 +707,6 @@ const navigationConfig: NavGroup[] = [
           { label: '⚡ EOD PO Engine',    path: '/ff-operations/eod-po-engine' },
           { label: 'Vendors',             path: '/purchase/vendors' },
           { label: 'Payment Approvals',   path: '/ff-operations/payment-approvals', action: false },
-          { label: 'PO Buys',             path: '/purchase/po-buys' },
           { label: '🏷️ Box Labels',       path: '/ff-operations/labels', action: true },
         ],
       },
@@ -826,17 +826,7 @@ const navigationConfig: NavGroup[] = [
     ],
   },
 
-  // ── Accounts ────────────────────────────────────────────────────────────────
-  {
-    title: 'Accounts Board',
-    icon: Shield,
-    roles: ['accounts'],
-    items: [
-      { icon: Layers,       label: 'Accounts Execution',    path: '/accounts-execution' },
-      { icon: Banknote,     label: 'Salary Sheet',          path: '/accounts/salary-sheet' },
-      { icon: Search,       label: 'Payment Search',        path: '/payment-search' },
-    ],
-  },
+  // ── Accounts — approve-only for the FF payment chain, no other tooling ───────
   {
     title: 'FF Payments',
     icon: Banknote,
@@ -887,8 +877,8 @@ const navigationConfig: NavGroup[] = [
     icon: ShieldCheck,
     roles: ['auditor'],
     items: [
-      { icon: Banknote,     label: 'Vendor Payments',    path: '/auditor/ff-payments',           badgeKey: 'auditor' },
-      { icon: Truck,        label: 'Transport Payments', path: '/auditor/ff-transport-payments', badgeKey: 'auditor' },
+      { icon: Banknote,     label: 'Vendor Payments',    path: '/auditor/ff-payments',           badgeKey: 'auditor_vendor' },
+      { icon: Truck,        label: 'Transport Payments', path: '/auditor/ff-transport-payments', badgeKey: 'auditor_transport' },
       { icon: FileBarChart, label: 'FF Payments Report', path: '/reports/ff-payments' },
     ],
   },
@@ -1058,6 +1048,7 @@ const navigationConfig: NavGroup[] = [
     items: [
       { icon: LayoutDashboard, label: 'Warehouse Dashboard', path: '/warehouse' },
       { icon: ClipboardCheck,  label: 'PO Assignment',       path: '/warehouse/po-assignment' },
+      { icon: History,         label: 'PO History',          path: '/warehouse/po-history' },
       { icon: PackageCheck,    label: 'QC Inspection',       path: '/warehouse/qc' },
       { icon: FileText,        label: 'QC Rejections',       path: '/warehouse/qc-rejections' },
       { icon: RotateCcw,       label: 'Returns',             path: '/warehouse/returns' },
@@ -1097,8 +1088,8 @@ const navigationConfig: NavGroup[] = [
     icon: CheckSquare,
     roles: ['l1_manager'],
     items: [
-      { icon: Banknote,     label: 'Vendor Payments',    path: '/l1/payments',           badgeKey: 'l1' },
-      { icon: Truck,        label: 'Transport Payments', path: '/l1/transport-payments', badgeKey: 'l1' },
+      { icon: Banknote,     label: 'Vendor Payments',    path: '/l1/payments',           badgeKey: 'l1_vendor' },
+      { icon: Truck,        label: 'Transport Payments', path: '/l1/transport-payments', badgeKey: 'l1_transport' },
       { icon: FileBarChart, label: 'FF Payments Report', path: '/reports/ff-payments' },
     ],
   },

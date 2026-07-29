@@ -37,6 +37,7 @@ const InventoryDashboard = lazy(() => import('./pages/warehouse/InventoryDashboa
 const ReturnsDashboard = lazy(() => import('./pages/warehouse/ReturnsDashboard'));
 const QCRejections = lazy(() => import('./pages/warehouse/QCRejections'));
 const POAssignment = lazy(() => import('./pages/warehouse/POAssignment'));
+const POAssignmentHistory = lazy(() => import('./pages/warehouse/POAssignmentHistory'));
 
 // Transit / Gate Entry Module
 const TransitDashboard = lazy(() => import('./pages/transit/TransitDashboard'));
@@ -391,6 +392,10 @@ const OPS_ROLES = [
   'hub_manager', 'l1_manager', 'shift_employee',
 ];
 
+// ff_ops_access: roles eligible for the "loaned" ops-manager dashboard view.
+// Mirrors RedirectPage.tsx's FF_OPS_ACCESS_ELIGIBLE_ROLES — keep both in sync.
+const FF_OPS_ACCESS_ELIGIBLE_ROLES = new Set(['field_executive', 'bde', 'tele_caller']);
+
 // ff_payment_access: specific individuals with approve-only payment access
 // (raising a new payment is hub_manager/shift_employee only) — routes this
 // bypass applies to.
@@ -482,7 +487,12 @@ const ProtectedRoute = ({
   }
 
   // ff_ops_access: field_executive members granted ops-manager view without role change
-  const hasFFOpsAccess = (user as any).ff_ops_access === true;
+  // Scoped to the same eligible roles as RedirectPage.tsx's FF_OPS_ACCESS_ELIGIBLE_ROLES —
+  // without this check, ANY role with the flag set would bypass every route that
+  // allows ff_operations_manager (task assignment, payment approvals, etc), not
+  // just the intended dashboard-visibility routes.
+  const hasFFOpsAccess = (user as any).ff_ops_access === true
+    && FF_OPS_ACCESS_ELIGIBLE_ROLES.has((user.role || '').toLowerCase());
   const hasFFPaymentAccess = (user as any).ff_payment_access === true;
   if (allowedRoles && !allowedRoles.some(r => r.toLowerCase() === user.role?.toLowerCase())) {
     // Allow if the user has ff_ops_access AND the route permits ff_operations_manager
@@ -807,6 +817,7 @@ const AppRoutes = () => {
       <Route path="/warehouse/returns" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager', 'qc_manager', 'warehouse_manager']}><ReturnsDashboard /></ProtectedRoute>} />
       <Route path="/warehouse/qc-rejections" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager', 'qc_manager', 'warehouse_manager']}><QCRejections /></ProtectedRoute>} />
       <Route path="/warehouse/po-assignment" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager']}><POAssignment /></ProtectedRoute>} />
+      <Route path="/warehouse/po-history" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager']}><POAssignmentHistory /></ProtectedRoute>} />
 
       {/* Transit / Gate Entry Module */}
       <Route path="/transit" element={<ProtectedRoute allowedRoles={OPS_ROLES}><TransitDashboard /></ProtectedRoute>} />
@@ -906,7 +917,7 @@ const AppRoutes = () => {
       <Route path="/purchase/bills"              element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><PurchaseBillsPage /></ProtectedRoute>} />
       <Route path="/purchase/auto-bill"          element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><AutoBillPage /></ProtectedRoute>} />
       <Route path="/purchase/buy"               element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'shift_employee', 'ff_operations_manager']}><BuyPage /></ProtectedRoute>} />
-      <Route path="/purchase/po-buys"            element={<ProtectedRoute allowedRoles={['admin', 'ff_operations_manager']}><POBuysReview /></ProtectedRoute>} />
+      <Route path="/purchase/po-buys"            element={<ProtectedRoute allowedRoles={['admin']}><POBuysReview /></ProtectedRoute>} />
       <Route path="/purchase/recurring-bills"    element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><RecurringBillsPage /></ProtectedRoute>} />
       <Route path="/purchase/payments-made"      element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><PaymentsMadePage /></ProtectedRoute>} />
       <Route path="/purchase/vendor-credits"     element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><VendorCreditsPage /></ProtectedRoute>} />

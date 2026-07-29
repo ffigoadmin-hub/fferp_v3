@@ -25,7 +25,9 @@ const BADGE_KEY_STATUS: Record<string, string> = {
 };
 
 export interface FFPaymentCounts {
-  // Total pending for this role's queue across vendor + transport
+  // Split per role AND per payment type — e.g. `l1_vendor`, `l1_transport`,
+  // so the Vendor Payments and Transport Payments nav items each show their
+  // own real count instead of the same combined total on both.
   [badgeKey: string]: number;
 }
 
@@ -52,15 +54,21 @@ export function useFFPaymentCount(): FFPaymentCounts {
           .eq('payment_status', targetStatus),
       ]);
 
-      const total = (vendorRes.count || 0) + (transportRes.count || 0);
+      const vendorCount    = vendorRes.count || 0;
+      const transportCount = transportRes.count || 0;
 
-      // Find the badge key for this role
-      const badgeKey = Object.entries(BADGE_KEY_STATUS).find(
+      // Find the base badge key for this role
+      const baseKey = Object.entries(BADGE_KEY_STATUS).find(
         ([, status]) => status === targetStatus
       )?.[0];
 
-      if (!badgeKey || total === 0) return {};
-      return { [badgeKey]: total };
+      if (!baseKey) return {};
+      const result: FFPaymentCounts = {};
+      if (vendorCount > 0)    result[`${baseKey}_vendor`]    = vendorCount;
+      if (transportCount > 0) result[`${baseKey}_transport`] = transportCount;
+      // Combined total kept too, for any nav item that still wants "both".
+      if (vendorCount + transportCount > 0) result[baseKey] = vendorCount + transportCount;
+      return result;
     },
     enabled: !!targetStatus,
     staleTime: 30_000,        // refresh every 30 s

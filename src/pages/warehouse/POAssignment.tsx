@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { ClipboardCheck, Package, RefreshCw, UserCheck } from 'lucide-react';
+import { ClipboardCheck, Package, RefreshCw, UserCheck, ChevronDown, ChevronRight } from 'lucide-react';
 
 // Pallikaranai + Vanagaram hub UUIDs, confirmed live in this session.
 // Anto (Chennai's shared hub manager) covers both hubs even though his own
@@ -23,41 +23,65 @@ function fmt(n: number) {
 
 function AssignRow({ po, executives, onAssign, isAssigning }: any) {
   const [selectedExec, setSelectedExec] = useState('');
+  const [showItems, setShowItems] = useState(false);
+  const items = po.items ?? [];
 
   return (
-    <div className="bg-white border border-gray-100 rounded-xl p-4 flex items-center justify-between gap-4">
-      <div className="flex items-start gap-3">
-        <div className="p-2 rounded-lg shrink-0 bg-amber-50">
-          <Package className="w-4 h-4 text-amber-600" />
+    <div className="bg-white border border-gray-100 rounded-xl p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="p-2 rounded-lg shrink-0 bg-amber-50">
+            <Package className="w-4 h-4 text-amber-600" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-gray-800">{po.po_number || `PO-${po.id.slice(0, 8)}`}</p>
+            <button
+              onClick={() => setShowItems(v => !v)}
+              disabled={items.length === 0}
+              className="flex items-center gap-1 text-xs text-gray-500 mt-0.5 hover:text-blue-600 disabled:hover:text-gray-500 disabled:cursor-default transition"
+            >
+              {items.length > 0 && (showItems ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />)}
+              {po.hub_name || '—'} · {po.items_count ?? items.length ?? 0} item{(po.items_count ?? items.length ?? 0) !== 1 ? 's' : ''}
+            </button>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              {po.eod_date ? format(new Date(po.eod_date), 'dd MMM yyyy') : '—'}
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="text-sm font-semibold text-gray-800">{po.po_number || `PO-${po.id.slice(0, 8)}`}</p>
-          <p className="text-xs text-gray-500 mt-0.5">{po.hub_name || '—'} · {po.items_count ?? 0} item{(po.items_count ?? 0) !== 1 ? 's' : ''}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5">
-            {po.eod_date ? format(new Date(po.eod_date), 'dd MMM yyyy') : '—'}
-          </p>
+        <div className="flex items-center gap-2 shrink-0">
+          <p className="text-sm font-bold text-gray-800 mr-2">₹{fmt(po.total_estimated)}</p>
+          <select
+            value={selectedExec}
+            onChange={(e) => setSelectedExec(e.target.value)}
+            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          >
+            <option value="">Assign to...</option>
+            {executives.map((ex: any) => (
+              <option key={ex.id} value={ex.id}>{ex.name || ex.email}</option>
+            ))}
+          </select>
+          <button
+            disabled={!selectedExec || isAssigning}
+            onClick={() => onAssign(po, selectedExec)}
+            className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
+          >
+            <UserCheck className="w-3.5 h-3.5" /> Assign
+          </button>
         </div>
       </div>
-      <div className="flex items-center gap-2 shrink-0">
-        <p className="text-sm font-bold text-gray-800 mr-2">₹{fmt(po.total_estimated)}</p>
-        <select
-          value={selectedExec}
-          onChange={(e) => setSelectedExec(e.target.value)}
-          className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-200"
-        >
-          <option value="">Assign to...</option>
-          {executives.map((ex: any) => (
-            <option key={ex.id} value={ex.id}>{ex.name || ex.email}</option>
+
+      {showItems && items.length > 0 && (
+        <div className="mt-3 ml-11 border-t border-gray-100 pt-3 space-y-1.5">
+          {items.map((item: any) => (
+            <div key={item.id} className="flex items-center justify-between text-xs">
+              <span className="text-gray-700 font-medium">{item.product_name || item.item_name || '—'}</span>
+              <span className="text-gray-500">
+                {fmt(item.required_qty)} {item.unit || 'kg'} · ₹{fmt(item.estimated_price)}/{item.unit || 'kg'}
+              </span>
+            </div>
           ))}
-        </select>
-        <button
-          disabled={!selectedExec || isAssigning}
-          onClick={() => onAssign(po, selectedExec)}
-          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition"
-        >
-          <UserCheck className="w-3.5 h-3.5" /> Assign
-        </button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -82,7 +106,7 @@ export default function POAssignment() {
       if (!poHubIds.length) return [];
       const { data, error } = await supabase
         .from('purchase_orders')
-        .select('id, po_number, hub_id, hub_name, eod_date, total_estimated, items_count, status')
+        .select('id, po_number, hub_id, hub_name, eod_date, total_estimated, items_count, status, items:purchase_order_items(id, product_name, item_name, required_qty, unit, estimated_price)')
         .in('hub_id', poHubIds)
         .is('assigned_executive_id', null)
         .neq('status', 'cancelled')

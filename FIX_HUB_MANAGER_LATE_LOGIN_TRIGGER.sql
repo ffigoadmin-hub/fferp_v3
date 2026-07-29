@@ -1,11 +1,12 @@
 -- ============================================================
---  FIX — Hub Manager late-login auto-LOP (0.10, grace till 7:30 AM IST)
+--  FIX — Hub Manager late-login auto-LOP (0.10, grace till 7:15 AM IST)
 --  Run on: qwiumswrbddwmlraktvy → Supabase SQL Editor
 --
 --  Management rule: Hub Manager workday starts 7:00 AM, grace period
---  until 7:30 AM. Starting a shift after 7:30 AM IST auto-raises a
---  0.10 LOP entry (status: pending — reviewable by HR/admin before it
---  counts, same as a manually-raised LOP, before it ever reaches payroll).
+--  until 7:15 AM (tightened from the original 7:30 AM). Starting a
+--  shift after 7:15 AM IST auto-raises a 0.10 LOP entry (status:
+--  pending — reviewable by HR/admin before it counts, same as a
+--  manually-raised LOP, before it ever reaches payroll).
 --
 --  This is a DB trigger on shift_sessions, so it fires automatically
 --  the instant any hub_manager clicks "Start Shift" in the app
@@ -50,7 +51,7 @@ BEGIN
 
   v_ist_time := (COALESCE(NEW.created_at, now()) AT TIME ZONE 'Asia/Kolkata')::time;
 
-  IF v_ist_time > TIME '07:30:00' THEN
+  IF v_ist_time > TIME '07:15:00' THEN
     IF NOT EXISTS (
       SELECT 1 FROM lop_entries
       WHERE employee_id = NEW.user_id
@@ -61,7 +62,7 @@ BEGIN
         employee_id, lop_date, lop_type, reason, status, source, evidence_url
       ) VALUES (
         NEW.user_id, NEW.date, '0.1_day',
-        'Late shift start after 7:30 AM grace period',
+        'Late shift start after 7:15 AM grace period',
         'pending_admin', 'SYSTEM_LATE_SHIFT_START', 'SYSTEM_AUTO_LOP'
       );
     END IF;
@@ -86,7 +87,7 @@ EXECUTE FUNCTION public.check_hub_manager_late_login();
 --
 -- This inserts a row exactly as the app would (no login_time/created_at
 -- override) — created_at will default to NOW(), so only run this test
--- itself after 7:30 AM IST for the row to actually trigger the LOP.
+-- itself after 7:15 AM IST for the row to actually trigger the LOP.
 --
 -- INSERT INTO shift_sessions (user_id, date, login_selfie_url, status, target_hours, max_hours)
 -- VALUES ('<hub_manager_id>', CURRENT_DATE, 'TEST', 'active', 9, 12);

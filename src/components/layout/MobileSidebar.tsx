@@ -93,10 +93,11 @@ const navigationConfig: NavGroup[] = [
     roles: [
       'employee', 'director', 'Director', 'vendor_head',
       'nsm', 'datateam', 'data_team', 'data', 'boi', 'gmo', 'smo', 'hr', 'gm', 'admin',
-      'accounts', 'farmmanager', 'bd_data', 'rsh', 'RSH', 'site_visit_farm_manager',
+      'farmmanager', 'bd_data', 'rsh', 'RSH', 'site_visit_farm_manager',
       'cafe_manager', 'palm_cafe_manager',
       'back_office', 'driver',
       'warehouse_manager', 'qc_manager',
+      // accounts intentionally excluded — approve-only via FF Payments below
       // purchase_manager, purchase_head, shift_employee → trimmed section below
       // hub_manager → trimmed section below
       // field_executive, tele_caller, bde, ff_operations_manager excluded —
@@ -450,24 +451,11 @@ const navigationConfig: NavGroup[] = [
     ],
   },
 
-  {
-    title: 'Accounts Board',
-    icon: Shield,
-    roles: ['accounts'],
-    items: [
-      { icon: Banknote, label: 'Salary Sheet', path: '/accounts/salary-sheet' },
-      { icon: CheckSquare, label: 'Salary Execution', path: '/accounts/salary-execution' },
-      { icon: Banknote, label: 'Salary Batches', path: '/accounts/salary-batches' },
-      { icon: Search, label: 'Payment Search', path: '/payment-search' },
-    ],
-  },
-
-
   // Purchase Team - Command Center section
   {
     title: 'HR & Payroll',
     icon: Wallet,
-    roles: ['hr', 'accounts'],
+    roles: ['hr'],
     items: [
       { icon: Users, label: 'Employee Master', path: '/hr/employee-master' },
       { icon: Banknote, label: 'Salary Sheet', path: '/hr/sheet' },
@@ -483,16 +471,6 @@ const navigationConfig: NavGroup[] = [
       { icon: CheckSquare, label: 'Salary Approval (Legacy)', path: '/hr/approval' },
     ],
   },
-  {
-    title: 'Salary Execution',
-    icon: Wallet,
-    roles: ['accounts'],
-    items: [
-      { icon: CheckSquare, label: 'Process Payments', path: '/accounts/salary-execution' },
-    ],
-  },
-
-
   // Purchase Team - Command Center section
   {
     title: 'Command Center',
@@ -676,8 +654,6 @@ const navigationConfig: NavGroup[] = [
       { icon: LayoutDashboard, label: 'Home',              path: '/ff-operations' },
       { icon: Package,         label: 'Items',             path: '/ff-operations/items' },
       { icon: FileText,        label: 'Auto Bill',         path: '/purchase/auto-bill' },
-      { icon: Plus,            label: 'New Vendor Payment',    path: '/ff/vendor-payment/new' },
-      { icon: Truck,           label: 'New Transport Payment', path: '/ff/transport-payment/new' },
       { icon: Truck,           label: 'Transit',           path: '/transit' },
       { icon: LayoutDashboard, label: 'Sales Dashboard',   path: '/sales' },
       { icon: Users,           label: 'Customers',         path: '/sales/customers' },
@@ -783,6 +759,8 @@ const navigationConfig: NavGroup[] = [
     defaultOpen: true,
     items: [
       { icon: LayoutDashboard, label: 'Warehouse Dashboard', path: '/warehouse' },
+      { icon: ClipboardCheck,  label: 'PO Assignment',       path: '/warehouse/po-assignment' },
+      { icon: History,         label: 'PO History',          path: '/warehouse/po-history' },
       { icon: ClipboardCheck,  label: 'QC Inspection',       path: '/warehouse/qc' },
       { icon: FileText,        label: 'QC Rejections',       path: '/warehouse/qc-rejections' },
       { icon: RotateCcw,       label: 'Returns',             path: '/warehouse/returns' },
@@ -935,16 +913,15 @@ export function MobileSidebar({ onClose }: MobileSidebarProps) {
     return true;
   });
 
-  // ff_payment_access: specific individuals granted vendor/transport payment-raising
-  // without a role change — see matching bypass in App.tsx's ProtectedRoute.
+  // ff_payment_access: specific individuals with approve-only payment access
+  // (raising is hub_manager/shift_employee only) — see matching bypass in
+  // App.tsx's ProtectedRoute.
   if ((user as any)?.ff_payment_access) {
     filteredGroups.push({
       title: 'Payments',
       icon: Banknote,
       roles: [],
       items: [
-        { icon: Plus,    label: 'New Vendor Payment',     path: '/ff/vendor-payment/new' },
-        { icon: Truck,   label: 'New Transport Payment',  path: '/ff/transport-payment/new' },
         { icon: History, label: 'My Submitted Payments',  path: '/my-submitted-payments' },
       ],
     });

@@ -1,5 +1,6 @@
 // @ts-nocheck
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -134,6 +135,10 @@ function RejectModal({ onClose, onConfirm }: { onClose: () => void; onConfirm: (
 }
 
 // ── Items detail expand ───────────────────────────────────────
+// Two different flows write `items` with different field names:
+//   FFVendorPaymentForm.tsx (manual raise)   → qty, rate, amount, qc_grade, deduction_reason
+//   BuyPage.tsx (vendor-cart Buy flow)       → quantity, unit_price, total, item_photo_url, scale_photo_url
+// Read both shapes so items show correctly regardless of which flow raised the payment.
 function ItemsTable({ items }: { items: any[] }) {
   if (!items?.length) return <p className="text-xs text-gray-400 italic">No items</p>;
   return (
@@ -146,25 +151,49 @@ function ItemsTable({ items }: { items: any[] }) {
           <th className="text-right px-2 py-1.5 font-medium text-gray-500 border-b">Amount</th>
           <th className="text-center px-2 py-1.5 font-medium text-gray-500 border-b">Grade</th>
           <th className="text-left px-2 py-1.5 font-medium text-gray-500 border-b">Deduction</th>
+          <th className="text-left px-2 py-1.5 font-medium text-gray-500 border-b">Photos</th>
         </tr>
       </thead>
       <tbody>
-        {items.map((item, i) => (
-          <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
-            <td className="px-2 py-1.5 font-medium text-gray-800">{item.product_name}</td>
-            <td className="px-2 py-1.5 text-right text-gray-600">{item.qty} {item.unit}</td>
-            <td className="px-2 py-1.5 text-right text-gray-600">₹{item.rate}</td>
-            <td className="px-2 py-1.5 text-right font-semibold text-gray-800">₹{Number(item.amount).toLocaleString('en-IN')}</td>
-            <td className="px-2 py-1.5 text-center">
-              <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
-                item.qc_grade === 'A' ? 'bg-green-100 text-green-700' :
-                item.qc_grade === 'B' ? 'bg-yellow-100 text-yellow-700' :
-                'bg-red-100 text-red-600'
-              }`}>{item.qc_grade || '—'}</span>
-            </td>
-            <td className="px-2 py-1.5 text-gray-500 text-xs">{item.deduction_reason || '—'}</td>
-          </tr>
-        ))}
+        {items.map((item, i) => {
+          const qty    = item.qty ?? item.quantity ?? 0;
+          const rate   = item.rate ?? item.unit_price ?? 0;
+          const amount = item.amount ?? item.total ?? 0;
+          return (
+            <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
+              <td className="px-2 py-1.5 font-medium text-gray-800">{item.product_name}</td>
+              <td className="px-2 py-1.5 text-right text-gray-600">{qty} {item.unit}</td>
+              <td className="px-2 py-1.5 text-right text-gray-600">₹{rate}</td>
+              <td className="px-2 py-1.5 text-right font-semibold text-gray-800">₹{Number(amount).toLocaleString('en-IN')}</td>
+              <td className="px-2 py-1.5 text-center">
+                {item.qc_grade ? (
+                  <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${
+                    item.qc_grade === 'A' ? 'bg-green-100 text-green-700' :
+                    item.qc_grade === 'B' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-red-100 text-red-600'
+                  }`}>{item.qc_grade}</span>
+                ) : '—'}
+              </td>
+              <td className="px-2 py-1.5 text-gray-500 text-xs">{item.deduction_reason || '—'}</td>
+              <td className="px-2 py-1.5">
+                {(item.item_photo_url || item.scale_photo_url) ? (
+                  <div className="flex gap-1">
+                    {item.item_photo_url && (
+                      <a href={item.item_photo_url} target="_blank" rel="noopener noreferrer" title="Item photo">
+                        <img src={item.item_photo_url} className="w-8 h-8 rounded object-cover border border-gray-200 hover:opacity-75 transition" />
+                      </a>
+                    )}
+                    {item.scale_photo_url && (
+                      <a href={item.scale_photo_url} target="_blank" rel="noopener noreferrer" title="Weight scale photo">
+                        <img src={item.scale_photo_url} className="w-8 h-8 rounded object-cover border border-gray-200 hover:opacity-75 transition" />
+                      </a>
+                    )}
+                  </div>
+                ) : '—'}
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
@@ -192,8 +221,10 @@ function PaymentCard({
     (userRole === 'ceo'                   && payment.payment_status === 'pending_ceo') ||
     (userRole === 'admin')
   );
+  // Only Accounts actually disburses/marks paid — CEO's role in this chain
+  // ends at approval, matching separation of duties (admin kept as override).
   const canMarkPaid = payment.payment_status === 'approved' &&
-    (userRole === 'admin' || userRole === 'accounts' || userRole === 'ceo');
+    (userRole === 'admin' || userRole === 'accounts');
 
   const amount = type === 'vendor'
     ? payment.net_amount ?? payment.gross_amount
@@ -317,6 +348,19 @@ function PaymentCard({
                   )}
                 </div>
               )}
+              {/* Payment slip — shared across all items in a Buy-cart submission,
+                  stored redundantly per item under payment_proof_url */}
+              {payment.items?.[0]?.payment_proof_url && (
+                <div className="mb-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Payment Slip</p>
+                  <a href={payment.items[0].payment_proof_url} target="_blank" rel="noopener noreferrer">
+                    <img
+                      src={payment.items[0].payment_proof_url}
+                      className="w-24 h-24 rounded-lg object-cover border border-gray-200 hover:opacity-75 transition"
+                    />
+                  </a>
+                </div>
+              )}
               <ItemsTable items={payment.items || []} />
             </>
           )}
@@ -388,8 +432,18 @@ const APPROVED_BY_COL: Record<string, string> = {
 export default function FFPaymentApprovals() {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<'vendor' | 'transport'>('vendor');
+  const location = useLocation();
+  // Several routes (e.g. /l1/payments vs /l1/transport-payments) share this
+  // same component — default the tab to match which one was opened, since
+  // react-router doesn't remount the component when navigating between
+  // sibling routes that render the same element.
+  const isTransportRoute = location.pathname.includes('transport');
+  const [tab, setTab] = useState<'vendor' | 'transport'>(isTransportRoute ? 'transport' : 'vendor');
   const [statusFilter, setStatusFilter] = useState<string>('pending');
+
+  useEffect(() => {
+    setTab(location.pathname.includes('transport') ? 'transport' : 'vendor');
+  }, [location.pathname]);
 
   const role = user?.role || '';
   // ff_payment_access: specific individuals granted the FF Ops approval step

@@ -61,16 +61,19 @@ function rowToPO(row: any): StoredPO {
 // ── StoredPO → DB payload ─────────────────────────────────────
 function poToPayload(po: StoredPO): Record<string, any> {
   const payload: Record<string, any> = {
-    po_number:     po.poNumber,
-    status:        (po.status === 'open' || po.status === 'pending_approval') ? 'pending' : po.status,
-    sub_total:     po.subTotal,
-    total_amount:  po.total,
-    notes:         po.notes || null,
-    items:         po.items,
-    vendor_name:   po.vendorName || null,
-    delivery_date: po.deliveryDate || null,
-    payment_terms: po.paymentTerms || null,
+    po_number:       po.poNumber,
+    status:          (po.status === 'open' || po.status === 'pending_approval') ? 'pending' : po.status,
+    sub_total:       po.subTotal,
+    total_amount:    po.total,
+    total_estimated: po.total,
+    items_count:     po.items?.length ?? 0,
+    notes:           po.notes || null,
+    items:           po.items,
+    vendor_name:     po.vendorName || null,
+    delivery_date:   po.deliveryDate || null,
+    payment_terms:   po.paymentTerms || null,
   };
+  if (po.deliveryDate) payload.eod_date = po.deliveryDate;
   if (po.hub_id && po.hub_id !== 'unassigned')    payload.hub_id    = po.hub_id;
   if (po.hub_name)  payload.hub_name  = po.hub_name;
   if (po.vendor_id) payload.vendor_id = po.vendor_id;
@@ -152,7 +155,14 @@ export async function savePOToStore(po: StoredPO): Promise<string | null> {
       received_qty:   0,
     }));
     const { error: itemErr } = await supabase.from('purchase_order_items').insert(itemRows);
-    if (itemErr) console.error('[purchaseStore] insert purchase_order_items:', itemErr.message);
+    if (itemErr) {
+      // The PO row itself was already saved, but its line items weren't —
+      // most likely an RLS gap (this role can write purchase_orders but
+      // not purchase_order_items). Surface this as a full failure rather
+      // than silently returning a "successful" id for a PO with 0 items.
+      console.error('[purchaseStore] insert purchase_order_items:', itemErr.message);
+      return null;
+    }
   }
 
   return poId;

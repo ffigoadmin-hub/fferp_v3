@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, addDays } from 'date-fns';
 import { toast } from 'sonner';
@@ -84,6 +85,19 @@ const VENDOR_MAP: Record<string, string> = {
 function vendorFor(name: string) {
   return VENDOR_MAP[name] ?? 'TBD';
 }
+
+// Roles the live purchase_orders RLS policies actually allow to INSERT/UPDATE
+// (union of "Purchase manage POs", "Purchase team manages POs", "po_hub_exec",
+// "po_ops_all" — confirmed live via pg_policies 2026-07-29). The route itself
+// also allows field_executive/bde/tele_caller so Sales Team can view demand,
+// but RLS silently rejects their writes — so the "Generate All POs" action
+// itself must be gated separately here, or it fails silently with a fake
+// success toast (the exact bug this constant was added to fix).
+const CAN_GENERATE_PO_ROLES = new Set([
+  'admin', 'ceo', 'gm', 'ff_operations_manager', 'l1_manager',
+  'purchase_manager', 'purchase_head', 'back_office', 'shift_employee',
+  'hub_manager', 'smo', 'gmo', 'auditor', 'accounts',
+]);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -215,6 +229,8 @@ function ProductRow({ row, onTogglePO }: { row: ProductDemand; onTogglePO: (name
 
 export default function EODPOEngine() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const canGeneratePOs = CAN_GENERATE_PO_ROLES.has((user?.role || '').toLowerCase());
   const [targetDate, setTargetDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [poCreatedSet, setPoCreatedSet] = useState<Set<string>>(new Set());
   const [generatedPOs, setGeneratedPOs] = useState<GeneratedPO[]>([]);
@@ -359,6 +375,12 @@ export default function EODPOEngine() {
 
   // ── Generate POs ─────────────────────────────────────────────────────────
   const generatePOs = useCallback(async () => {
+    if (!canGeneratePOs) {
+      toast.error('Your role can view demand but not generate POs', {
+        description: 'Ask Purchase, Ops Manager, or a Hub Manager to generate POs for this date.',
+      });
+      return;
+    }
     const shortfallProducts = productDemand.filter(p => p.shortfall > 0);
     if (shortfallProducts.length === 0) {
       toast.info('No shortfall — stock is sufficient for all orders!');
@@ -443,6 +465,7 @@ export default function EODPOEngine() {
       }
 
       const newPOs: GeneratedPO[] = [];
+      const failedPOs: string[] = [];
       let serial = (await fetchMaxPOSerial()) + 1;
 
       // ── Step 3: One PO per hub — all shortfall items, no vendor grouping ──
@@ -497,26 +520,43 @@ export default function EODPOEngine() {
         };
 
         const savedId = await savePOToStore(po);
-        if (!savedId) console.warn('[EOD PO] Supabase save failed for', poNumber);
-
-        newPOs.push({ poNumber, vendor: hubData.hubName, items: shortfallItems, total });
+        if (!savedId) {
+          console.warn('[EOD PO] Supabase save failed for', poNumber);
+          failedPOs.push(`${poNumber} (${hubData.hubName})`);
+        } else {
+          newPOs.push({ poNumber, vendor: hubData.hubName, items: shortfallItems, total });
+        }
         serial++;
       }
 
-      // Mark all shortfall products as PO created
-      setPoCreatedSet(new Set(shortfallProducts.map(p => p.product_name)));
+      // Only mark products as PO-created if at least one PO actually saved —
+      // an all-failed run should leave the "+ Add to PO" buttons untouched
+      // so the user can see nothing succeeded and retry.
+      setPoCreatedSet(newPOs.length > 0
+        ? new Set(shortfallProducts.map(p => p.product_name))
+        : poCreatedSet);
       setGeneratedPOs(newPOs);
-      setShowPOPreview(true);
+      setShowPOPreview(newPOs.length > 0);
 
-      toast.success(`✅ ${newPOs.length} PO${newPOs.length > 1 ? 's' : ''} generated & saved to database!`, {
-        description: `${newPOs.length} hub${newPOs.length > 1 ? 's' : ''} · Visible to purchase executives`,
-      });
+      if (failedPOs.length > 0) {
+        toast.error(
+          newPOs.length > 0
+            ? `${newPOs.length} PO(s) saved, but ${failedPOs.length} failed`
+            : `All ${failedPOs.length} PO(s) failed to save`,
+          { description: `Failed: ${failedPOs.join(', ')} — check console for the exact database error, likely a permissions issue.` }
+        );
+      }
+      if (newPOs.length > 0) {
+        toast.success(`✅ ${newPOs.length} PO${newPOs.length > 1 ? 's' : ''} generated & saved to database!`, {
+          description: `${newPOs.length} hub${newPOs.length > 1 ? 's' : ''} · Visible to purchase executives`,
+        });
+      }
     } catch (err: any) {
       toast.error('PO generation failed', { description: err?.message });
     } finally {
       setGenerating(false);
     }
-  }, [productDemand, targetDate]);
+  }, [productDemand, targetDate, canGeneratePOs]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -641,16 +681,19 @@ export default function EODPOEngine() {
             {productDemand.length > 0 && (
               <div className="px-5 py-4 border-t border-gray-50 flex items-center justify-between bg-gray-50/50">
                 <p className="text-[12px] text-gray-500">
-                  {summary.productsShort > 0
+                  {!canGeneratePOs
+                    ? 'View only — ask Purchase/Ops/a Hub Manager to generate POs'
+                    : summary.productsShort > 0
                     ? `${summary.productsShort} product${summary.productsShort > 1 ? 's' : ''} need purchasing · ${kg(summary.totalShortfall)} total`
                     : '✓ Stock is sufficient for all orders'}
                 </p>
                 <button
                   onClick={generatePOs}
-                  disabled={generating || summary.productsShort === 0}
+                  disabled={generating || summary.productsShort === 0 || !canGeneratePOs}
+                  title={!canGeneratePOs ? "Your role can view demand but can't generate POs" : undefined}
                   className={cn(
                     'flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold transition-all',
-                    summary.productsShort > 0 && !generating
+                    summary.productsShort > 0 && !generating && canGeneratePOs
                       ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white hover:shadow-lg hover:scale-[1.02] active:scale-100'
                       : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                   )}

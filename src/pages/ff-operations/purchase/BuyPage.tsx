@@ -49,6 +49,23 @@ interface Vendor {
   type: string | null;
 }
 
+interface CartItem {
+  itemId: string;
+  productName: string;
+  unit: string;
+  requiredQty: number;
+  alreadyBought: number;
+  remainingQty: number;
+  qty: string;   // editable "buy now" qty
+  rate: string;  // editable rate
+  // each item is weighed/photographed separately, even when bought from
+  // the same vendor as other items in this cart
+  itemPhotoFile: File | null;
+  itemPhotoUrl: string;
+  scalePhotoFile: File | null;
+  scalePhotoUrl: string;
+}
+
 interface BuyFormState {
   vendorType: 'static' | 'dynamic';
   selectedVendor: Vendor | null;
@@ -60,27 +77,38 @@ interface BuyFormState {
   dynIfsc: string;
   dynUpi: string;
   dynGst: string;
-  // purchase details
-  buyQty: string;
-  rate: string;
-  amount: string;            // manual entry
-  itemPhotoFile: File | null;
-  itemPhotoUrl: string;
-  scalePhotoFile: File | null;
-  scalePhotoUrl: string;
-  proofPhotoFile: File | null;   // vendor payment proof / handwritten slip
+  // cart — one row per item being bought from this vendor in this trip
+  cart: CartItem[];
+  // one shared payment slip covers the whole vendor purchase, uploaded once
+  // at the end after all items are added
+  proofPhotoFile: File | null;
   proofPhotoUrl: string;
   notes: string;
 }
 
-const EMPTY_FORM: BuyFormState = {
-  vendorType: 'static',
-  selectedVendor: null,
+function makeCartRow(item: POItem): CartItem {
+  const alreadyBought = Number((item as any).ordered_qty ?? 0);
+  const requiredQty = Number(item.required_qty ?? 0);
+  const remainingQty = Math.max(0, requiredQty - alreadyBought);
+  return {
+    itemId: item.id,
+    productName: item.product_name || item.item_name || 'Item',
+    unit: item.unit || 'kg',
+    requiredQty,
+    alreadyBought,
+    remainingQty,
+    qty: remainingQty > 0 ? String(remainingQty) : '',
+    rate: item.estimated_price ? String(item.estimated_price) : '',
+    itemPhotoFile: null, itemPhotoUrl: '',
+    scalePhotoFile: null, scalePhotoUrl: '',
+  };
+}
+
+const EMPTY_FORM_BASE = {
+  vendorType: 'static' as const,
+  selectedVendor: null as Vendor | null,
   dynName: '', dynPhone: '', dynBank: '', dynAccount: '', dynIfsc: '', dynUpi: '', dynGst: '',
-  buyQty: '', rate: '', amount: '',
-  itemPhotoFile: null, itemPhotoUrl: '',
-  scalePhotoFile: null, scalePhotoUrl: '',
-  proofPhotoFile: null, proofPhotoUrl: '',
+  proofPhotoFile: null as File | null, proofPhotoUrl: '',
   notes: '',
 };
 
@@ -127,19 +155,44 @@ function PhotoBox({
 
 // ── Buy Dialog ─────────────────────────────────────────────────────────────────
 function BuyDialog({
-  open, onClose, po, item, onSuccess,
+  open, onClose, po, onSuccess,
 }: {
   open: boolean; onClose: () => void;
-  po: PurchaseOrder; item: POItem;
+  po: PurchaseOrder;
   onSuccess: () => void;
 }) {
   const { user } = useAuth();
-  const [form, setForm] = useState<BuyFormState>(EMPTY_FORM);
+  const [form, setForm] = useState<BuyFormState>(() => ({
+    ...EMPTY_FORM_BASE,
+    cart: [],
+  }));
   const [vendorSearch, setVendorSearch] = useState('');
   const [showVendorList, setShowVendorList] = useState(false);
+  const [addItemPicker, setAddItemPicker] = useState('');
   const [saving, setSaving] = useState(false);
 
   const set = (k: keyof BuyFormState, v: any) => setForm(f => ({ ...f, [k]: v }));
+
+  const availableToAdd = po.items.filter(i =>
+    !form.cart.some(c => c.itemId === i.id) && makeCartRow(i).remainingQty > 0
+  );
+
+  const addItemToCart = (poItemId: string) => {
+    const poItem = po.items.find(i => i.id === poItemId);
+    if (!poItem) return;
+    setForm(f => ({ ...f, cart: [...f.cart, makeCartRow(poItem)] }));
+    setAddItemPicker('');
+  };
+
+  const removeCartRow = (itemId: string) => {
+    setForm(f => ({ ...f, cart: f.cart.filter(c => c.itemId !== itemId) }));
+  };
+
+  const updateCartRow = (itemId: string, patch: Partial<Pick<CartItem, 'qty' | 'rate'>>) => {
+    setForm(f => ({ ...f, cart: f.cart.map(c => c.itemId === itemId ? { ...c, ...patch } : c) }));
+  };
+
+  const cartTotal = form.cart.reduce((s, c) => s + (Number(c.qty) || 0) * (Number(c.rate) || 0), 0);
 
   // Fetch static vendors
   const { data: vendors = [] } = useQuery({
@@ -158,26 +211,39 @@ function BuyDialog({
     v.name.toLowerCase().includes(vendorSearch.toLowerCase())
   );
 
-  const handlePhotoFile = (key: 'itemPhotoFile' | 'scalePhotoFile' | 'proofPhotoFile', urlKey: 'itemPhotoUrl' | 'scalePhotoUrl' | 'proofPhotoUrl', file: File) => {
+  // Shared payment-proof photo (form-level, one for the whole cart)
+  const handleProofFile = (file: File) => {
     const url = URL.createObjectURL(file);
-    setForm(f => ({ ...f, [key]: file, [urlKey]: url }));
+    setForm(f => ({ ...f, proofPhotoFile: file, proofPhotoUrl: url }));
   };
-
-  const removePhoto = (key: 'itemPhotoFile' | 'scalePhotoFile' | 'proofPhotoFile', urlKey: 'itemPhotoUrl' | 'scalePhotoUrl' | 'proofPhotoUrl') => {
+  const removeProofPhoto = () => {
     setForm(f => {
-      if (f[urlKey]) URL.revokeObjectURL(f[urlKey] as string);
-      return { ...f, [key]: null, [urlKey]: '' };
+      if (f.proofPhotoUrl) URL.revokeObjectURL(f.proofPhotoUrl);
+      return { ...f, proofPhotoFile: null, proofPhotoUrl: '' };
     });
   };
 
-  const buyQty = Number(form.buyQty) || 0;
-  const rate = Number(form.rate) || 0;
-  const amount = Number(form.amount) || 0;
+  // Per-item photos (item photo + weight scale photo), each item weighed separately
+  const handleCartPhotoFile = (itemId: string, key: 'itemPhotoFile' | 'scalePhotoFile', urlKey: 'itemPhotoUrl' | 'scalePhotoUrl', file: File) => {
+    const url = URL.createObjectURL(file);
+    setForm(f => ({ ...f, cart: f.cart.map(c => c.itemId === itemId ? { ...c, [key]: file, [urlKey]: url } : c) }));
+  };
+  const removeCartPhoto = (itemId: string, key: 'itemPhotoFile' | 'scalePhotoFile', urlKey: 'itemPhotoUrl' | 'scalePhotoUrl') => {
+    setForm(f => ({
+      ...f,
+      cart: f.cart.map(c => {
+        if (c.itemId !== itemId) return c;
+        if (c[urlKey]) URL.revokeObjectURL(c[urlKey] as string);
+        return { ...c, [key]: null, [urlKey]: '' };
+      }),
+    }));
+  };
 
   const canSave =
     (form.vendorType === 'static' ? !!form.selectedVendor : !!form.dynName.trim()) &&
-    buyQty > 0 && rate > 0 && amount > 0 &&
-    !!form.itemPhotoUrl && !!form.scalePhotoUrl && !!form.proofPhotoUrl;
+    form.cart.length > 0 &&
+    form.cart.every(c => (Number(c.qty) || 0) > 0 && (Number(c.rate) || 0) > 0 && !!c.itemPhotoUrl && !!c.scalePhotoUrl) &&
+    !!form.proofPhotoUrl;
 
   // ── Upload helper ──
   const uploadPhoto = async (file: File, path: string): Promise<string> => {
@@ -195,9 +261,7 @@ function BuyDialog({
     if (!canSave) return;
     setSaving(true);
     try {
-      const today = format(new Date(), 'yyyy-MM-dd');
-
-      // 1. Ensure vendor exists
+      // 1. Ensure vendor exists (once for the whole cart)
       let vendorId: string;
       if (form.vendorType === 'static' && form.selectedVendor) {
         vendorId = form.selectedVendor.id;
@@ -222,55 +286,67 @@ function BuyDialog({
         vendorId = newVendor.id;
       }
 
-      // 2. Upload photos
+      // 2. Upload photos — each item's photo + weight-scale photo separately
+      // (they're weighed one at a time even when bought from one vendor),
+      // plus one shared payment-slip photo for the whole cart.
       const ts = Date.now();
-      const itemPhotoPath  = `purchase-receipts/${po.id}/${item.id}-item-${ts}.jpg`;
-      const scalePhotoPath = `purchase-receipts/${po.id}/${item.id}-scale-${ts}.jpg`;
-      const proofPhotoPath = `purchase-receipts/${po.id}/${item.id}-proof-${ts}.jpg`;
+      const proofPhotoPath = `purchase-receipts/${po.id}/cart-${ts}-proof.jpg`;
 
-      const [itemPhotoPublic, scalePhotoPublic, proofPhotoPublic] = await Promise.all([
-        uploadPhoto(form.itemPhotoFile!, itemPhotoPath),
-        uploadPhoto(form.scalePhotoFile!, scalePhotoPath),
+      const [proofPhotoPublic, cartPhotoUrls] = await Promise.all([
         uploadPhoto(form.proofPhotoFile!, proofPhotoPath),
+        Promise.all(form.cart.map(async c => {
+          const [itemUrl, scaleUrl] = await Promise.all([
+            uploadPhoto(c.itemPhotoFile!, `purchase-receipts/${po.id}/cart-${ts}-${c.itemId}-item.jpg`),
+            uploadPhoto(c.scalePhotoFile!, `purchase-receipts/${po.id}/cart-${ts}-${c.itemId}-scale.jpg`),
+          ]);
+          return { itemId: c.itemId, itemUrl, scaleUrl };
+        })),
       ]);
+      const photosByItemId = Object.fromEntries(cartPhotoUrls.map(p => [p.itemId, p]));
 
-      // 3. Insert purchase_entries
+      // 3. One purchase_entries row for the whole cart
       const { data: entry, error: entryErr } = await supabase
         .from('purchase_entries')
         .insert({
           po_id: po.id,
           vendor_id: vendorId,
           purchased_by: user?.id,
-          total_amount: amount,
-          receipt_url: itemPhotoPublic,
+          total_amount: cartTotal,
+          receipt_url: proofPhotoPublic,
           notes: form.notes.trim() || null,
         })
         .select('id')
         .single();
       if (entryErr) throw entryErr;
 
-      // 4. Insert purchase_entry_items
-      await supabase.from('purchase_entry_items').insert({
+      // 4. One purchase_entry_items row per cart item, each traced back to
+      // its purchase_order_items row via po_item_id.
+      const entryItemRows = form.cart.map(c => ({
         entry_id: entry.id,
-        product_name: item.product_name || item.item_name || 'Item',
-        quantity: buyQty,
-        unit: item.unit || 'kg',
-        unit_price: rate,
-        total: amount,
-      });
+        po_item_id: c.itemId,
+        product_name: c.productName,
+        quantity: Number(c.qty),
+        unit: c.unit,
+        unit_price: Number(c.rate),
+        total: Number(c.qty) * Number(c.rate),
+      }));
+      const { error: entryItemsErr } = await supabase.from('purchase_entry_items').insert(entryItemRows);
+      if (entryItemsErr) throw entryItemsErr;
 
-      // 5. Insert ff_vendor_payments → triggers payment chain
-      const paymentItems = [{
-        po_item_id: item.id,
-        product_name: item.product_name || item.item_name,
-        quantity: buyQty,
-        unit: item.unit || 'kg',
-        unit_price: rate,
-        total: amount,
-        item_photo_url: itemPhotoPublic,
-        scale_photo_url: scalePhotoPublic,
+      // 5. One ff_vendor_payments row → triggers payment chain, items array
+      // holds one element per cart item, each with its own item/scale photo
+      // but sharing the one payment-slip photo for the whole purchase.
+      const paymentItems = form.cart.map(c => ({
+        po_item_id: c.itemId,
+        product_name: c.productName,
+        quantity: Number(c.qty),
+        unit: c.unit,
+        unit_price: Number(c.rate),
+        total: Number(c.qty) * Number(c.rate),
+        item_photo_url: photosByItemId[c.itemId]?.itemUrl,
+        scale_photo_url: photosByItemId[c.itemId]?.scaleUrl,
         payment_proof_url: proofPhotoPublic,
-      }];
+      }));
 
       const { error: payErr } = await supabase
         .from('ff_vendor_payments')
@@ -279,40 +355,55 @@ function BuyDialog({
           purchase_order_id: po.id,
           hub_id: po.hub_id,
           items: paymentItems,
-          gross_amount: amount,
+          gross_amount: cartTotal,
           deduction_amount: 0,
-          net_amount: amount,
+          // net_amount is a DB-generated column (gross_amount - deduction_amount) —
+          // must not be set explicitly, Postgres rejects any value for it.
           payment_status: 'pending_ff_ops',
           created_by: user?.id,
           purchase_entry_id: entry.id,
         });
       if (payErr) throw payErr;
 
-      // 6. Accumulate ordered_qty → set partial or ordered
-      const { data: currentPOItem } = await supabase
-        .from('purchase_order_items')
-        .select('ordered_qty, required_qty')
-        .eq('id', item.id)
-        .single();
-      const prevOrdered  = Number(currentPOItem?.ordered_qty ?? 0);
-      const newOrdered   = prevOrdered + buyQty;
-      const requiredQty  = Number(currentPOItem?.required_qty ?? item.required_qty ?? 0);
-      const newItemStatus = newOrdered >= requiredQty ? 'ordered' : 'partial';
+      // 6. Per cart item: accumulate ordered_qty → set partial or ordered.
+      // Both the read and the write are checked for errors — this step was
+      // previously silent-failing (RLS or otherwise) while still showing a
+      // success toast, leaving ordered_qty/status stuck at their old values.
+      for (const c of form.cart) {
+        const { data: currentPOItem, error: fetchErr } = await supabase
+          .from('purchase_order_items')
+          .select('ordered_qty, required_qty')
+          .eq('id', c.itemId)
+          .single();
+        if (fetchErr) throw new Error(`Couldn't read current progress for ${c.productName}: ${fetchErr.message}`);
 
-      await supabase
-        .from('purchase_order_items')
-        .update({ status: newItemStatus, ordered_qty: newOrdered, unit_price: rate, total_price: amount })
-        .eq('id', item.id);
+        const prevOrdered   = Number(currentPOItem?.ordered_qty ?? 0);
+        const buyQty        = Number(c.qty);
+        const newOrdered    = prevOrdered + buyQty;
+        const requiredQty   = Number(currentPOItem?.required_qty ?? c.requiredQty ?? 0);
+        // purchase_order_items_status_check only allows
+        // 'pending'|'fulfilled_by_stock'|'purchased'|'received' — there is no
+        // 'partial' status. A partial buy stays 'pending'; the UI derives
+        // "partial" purely from ordered_qty vs required_qty, not this string.
+        const newItemStatus = newOrdered >= requiredQty ? 'purchased' : 'pending';
 
-      toast.success(`✅ Purchase recorded — payment sent to FF Ops for approval`);
+        const { error: updateErr } = await supabase
+          .from('purchase_order_items')
+          .update({ status: newItemStatus, ordered_qty: newOrdered, unit_price: Number(c.rate), total_price: buyQty * Number(c.rate) })
+          .eq('id', c.itemId);
+        if (updateErr) throw new Error(`Couldn't update progress for ${c.productName}: ${updateErr.message}`);
+      }
+
+      toast.success(`✅ Purchase recorded for ${form.cart.length} item${form.cart.length > 1 ? 's' : ''} — payment sent to FF Ops for approval`);
       onSuccess();
       onClose();
 
       // Cleanup object URLs
-      if (form.itemPhotoUrl)  URL.revokeObjectURL(form.itemPhotoUrl);
-      if (form.scalePhotoUrl) URL.revokeObjectURL(form.scalePhotoUrl);
       if (form.proofPhotoUrl) URL.revokeObjectURL(form.proofPhotoUrl);
-      setForm(EMPTY_FORM);
+      form.cart.forEach(c => {
+        if (c.itemPhotoUrl)  URL.revokeObjectURL(c.itemPhotoUrl);
+        if (c.scalePhotoUrl) URL.revokeObjectURL(c.scalePhotoUrl);
+      });
 
     } catch (err: any) {
       toast.error(err.message || 'Failed to save purchase');
@@ -322,10 +413,11 @@ function BuyDialog({
   };
 
   const handleClose = () => {
-    if (form.itemPhotoUrl)  URL.revokeObjectURL(form.itemPhotoUrl);
-    if (form.scalePhotoUrl) URL.revokeObjectURL(form.scalePhotoUrl);
     if (form.proofPhotoUrl) URL.revokeObjectURL(form.proofPhotoUrl);
-    setForm(EMPTY_FORM);
+    form.cart.forEach(c => {
+      if (c.itemPhotoUrl)  URL.revokeObjectURL(c.itemPhotoUrl);
+      if (c.scalePhotoUrl) URL.revokeObjectURL(c.scalePhotoUrl);
+    });
     setVendorSearch('');
     setShowVendorList(false);
     onClose();
@@ -337,47 +429,114 @@ function BuyDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ShoppingBag className="h-5 w-5 text-green-600" />
-            Buy — {item?.product_name || item?.item_name}
-            <span className="text-sm text-gray-400 font-normal ml-1">({po.po_number})</span>
+            Buy from Vendor
+            <span className="text-sm text-gray-400 font-normal ml-1">({po.po_number} · {po.hub_name})</span>
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-5 pt-2">
-          {/* Required qty banner */}
-          <div className="bg-blue-50 rounded-xl px-4 py-3 flex items-center gap-4">
-            <Package className="h-5 w-5 text-blue-500 shrink-0" />
-            <div>
-              <p className="text-xs text-blue-500 font-medium">PO Required</p>
-              <p className="text-lg font-black text-blue-800">
-                {Number(item?.required_qty || 0).toFixed(1)} {item?.unit || 'kg'}
-              </p>
+          {/* Cart — one row per item being bought from this vendor */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide">
+                Items in this purchase ({form.cart.length})
+              </label>
+              {availableToAdd.length > 0 && (
+                <select
+                  value={addItemPicker}
+                  onChange={e => { if (e.target.value) addItemToCart(e.target.value); }}
+                  className="text-xs border border-dashed border-blue-300 text-blue-600 font-semibold rounded-lg px-2 py-1.5 bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                >
+                  <option value="">+ Add item from this PO…</option>
+                  {availableToAdd.map(i => (
+                    <option key={i.id} value={i.id}>{i.product_name || i.item_name}</option>
+                  ))}
+                </select>
+              )}
             </div>
-            {item?.estimated_price && (
-              <div className="ml-auto text-right">
-                <p className="text-xs text-blue-500 font-medium">Est. Rate</p>
-                <p className="text-base font-bold text-blue-700">
-                  ₹{Number(item.estimated_price).toLocaleString('en-IN')}
-                </p>
+
+            {form.cart.length === 0 && (
+              <div className="border border-dashed border-gray-200 rounded-xl py-6 text-center text-sm text-gray-400">
+                No items added yet — use "+ Add item from this PO…" above to start.
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {form.cart.map(c => {
+                const rowTotal = (Number(c.qty) || 0) * (Number(c.rate) || 0);
+                return (
+                  <div key={c.itemId} className="border border-gray-200 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-gray-800 truncate">{c.productName}</p>
+                        <p className="text-[11px] text-gray-500">
+                          Required: {c.requiredQty.toFixed(1)} {c.unit}
+                          {c.alreadyBought > 0 && (
+                            <span className="text-orange-600 font-semibold"> · {c.alreadyBought.toFixed(1)} {c.unit} already bought · {c.remainingQty.toFixed(1)} {c.unit} remaining</span>
+                          )}
+                        </p>
+                      </div>
+                      {form.cart.length > 1 && (
+                        <button onClick={() => removeCartRow(c.itemId)}
+                          className="shrink-0 p-1 text-gray-300 hover:text-red-500 rounded-lg transition-colors">
+                          <X size={14} />
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-500 mb-0.5">Buy Qty ({c.unit})</label>
+                        <input
+                          type="number" min="0" step="0.1"
+                          value={c.qty}
+                          onChange={e => updateCartRow(c.itemId, { qty: e.target.value })}
+                          placeholder="0.0"
+                          className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-green-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-500 mb-0.5">Rate (₹/{c.unit})</label>
+                        <input
+                          type="number" min="0"
+                          value={c.rate}
+                          onChange={e => updateCartRow(c.itemId, { rate: e.target.value })}
+                          placeholder="0"
+                          className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-green-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-500 mb-0.5">Total</label>
+                        <div className="w-full px-2.5 py-1.5 border border-green-200 bg-green-50 rounded-lg text-sm font-bold text-green-800">
+                          ₹{rowTotal.toLocaleString('en-IN')}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <PhotoBox
+                        label="Item Photo" icon={ImageIcon} required
+                        url={c.itemPhotoUrl}
+                        onFile={f => handleCartPhotoFile(c.itemId, 'itemPhotoFile', 'itemPhotoUrl', f)}
+                        onRemove={() => removeCartPhoto(c.itemId, 'itemPhotoFile', 'itemPhotoUrl')}
+                      />
+                      <PhotoBox
+                        label="Weight Scale Photo" icon={Scale} required
+                        url={c.scalePhotoUrl}
+                        onFile={f => handleCartPhotoFile(c.itemId, 'scalePhotoFile', 'scalePhotoUrl', f)}
+                        onRemove={() => removeCartPhoto(c.itemId, 'scalePhotoFile', 'scalePhotoUrl')}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {form.cart.length > 0 && (
+              <div className="flex items-center justify-between bg-slate-800 text-white rounded-xl px-4 py-2.5">
+                <span className="text-xs font-medium text-slate-300">Cart Total ({form.cart.length} item{form.cart.length > 1 ? 's' : ''})</span>
+                <span className="text-lg font-black">₹{cartTotal.toLocaleString('en-IN')}</span>
               </div>
             )}
           </div>
-
-          {/* Already bought (split vendor) banner */}
-          {(item?.ordered_qty ?? 0) > 0 && (
-            <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3 flex items-center gap-3">
-              <CheckCircle2 className="h-4 w-4 text-orange-500 shrink-0" />
-              <div className="flex-1">
-                <p className="text-xs text-orange-600 font-semibold">Split Buy — Already Purchased</p>
-                <p className="text-sm font-bold text-orange-800">
-                  {Number(item.ordered_qty).toFixed(1)} {item?.unit || 'kg'} bought from previous vendor
-                  {' '}&bull;{' '}
-                  <span className="text-orange-600">
-                    Still need {Math.max(0, Number(item.required_qty) - Number(item.ordered_qty)).toFixed(1)} {item?.unit || 'kg'} more
-                  </span>
-                </p>
-              </div>
-            </div>
-          )}
 
           {/* Vendor type toggle */}
           <div className="flex gap-3">
@@ -478,71 +637,31 @@ function BuyDialog({
             </div>
           )}
 
-          {/* Purchase details */}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">
-                Qty ({item?.unit || 'kg'}) *
-              </label>
-              <input
-                type="number" min="0" step="0.1"
-                value={form.buyQty}
-                onChange={e => set('buyQty', e.target.value)}
-                placeholder="0.0"
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-green-400"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">
-                Rate (₹/{item?.unit || 'kg'}) *
-              </label>
-              <input
-                type="number" min="0"
-                value={form.rate}
-                onChange={e => set('rate', e.target.value)}
-                placeholder="0"
-                className="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-green-400"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">
-                Amount (₹) *
-              </label>
-              <input
-                type="number" min="0"
-                value={form.amount}
-                onChange={e => set('amount', e.target.value)}
-                placeholder="Enter amount"
-                className="w-full px-3 py-2.5 border border-green-300 bg-green-50 rounded-xl text-sm font-bold text-green-800 focus:outline-none focus:ring-2 focus:ring-green-400"
+          {/* Shared payment-slip photo — one for the whole cart, uploaded last
+              after all items and their own photos are added above */}
+          <div>
+            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-1.5">
+              Finish the purchase
+            </label>
+            <div className="max-w-[180px]">
+              <PhotoBox
+                label="Payment Proof / Slip" icon={Banknote} required
+                url={form.proofPhotoUrl}
+                onFile={handleProofFile}
+                onRemove={removeProofPhoto}
               />
             </div>
           </div>
-
-          {/* Photo uploads */}
-          <div className="grid grid-cols-3 gap-3">
-            <PhotoBox
-              label="Item Photo" icon={ImageIcon} required
-              url={form.itemPhotoUrl}
-              onFile={f => handlePhotoFile('itemPhotoFile', 'itemPhotoUrl', f)}
-              onRemove={() => removePhoto('itemPhotoFile', 'itemPhotoUrl')}
-            />
-            <PhotoBox
-              label="Weight Scale Photo" icon={Scale} required
-              url={form.scalePhotoUrl}
-              onFile={f => handlePhotoFile('scalePhotoFile', 'scalePhotoUrl', f)}
-              onRemove={() => removePhoto('scalePhotoFile', 'scalePhotoUrl')}
-            />
-            <PhotoBox
-              label="Payment Proof / Slip" icon={Banknote} required
-              url={form.proofPhotoUrl}
-              onFile={f => handlePhotoFile('proofPhotoFile', 'proofPhotoUrl', f)}
-              onRemove={() => removePhoto('proofPhotoFile', 'proofPhotoUrl')}
-            />
-          </div>
-          {(!form.scalePhotoUrl || !form.proofPhotoUrl) && (
+          {form.cart.some(c => !c.itemPhotoUrl || !c.scalePhotoUrl) && (
             <p className="text-[11px] text-red-500 font-semibold flex items-center gap-1">
               <AlertCircle size={11} />
-              {!form.proofPhotoUrl ? 'Vendor payment proof / slip photo is mandatory' : 'Weight scale photo is mandatory'}
+              Every item needs its own Item Photo and Weight Scale Photo before you can save.
+            </p>
+          )}
+          {form.cart.every(c => c.itemPhotoUrl && c.scalePhotoUrl) && !form.proofPhotoUrl && (
+            <p className="text-[11px] text-red-500 font-semibold flex items-center gap-1">
+              <AlertCircle size={11} />
+              Vendor payment proof / slip photo is mandatory
             </p>
           )}
 
@@ -595,63 +714,83 @@ function POCard({
   po, onBuy,
 }: {
   po: PurchaseOrder;
-  onBuy: (po: PurchaseOrder, item: POItem) => void;
+  onBuy: (po: PurchaseOrder) => void;
 }) {
   const [open, setOpen] = useState(true); // default open so exec sees items immediately
 
-  const itemsDone  = po.items.filter(i => ['ordered', 'received'].includes(i.status)).length;
-  const itemsPartial = po.items.filter(i => i.status === 'partial').length;
+  const itemsDone  = po.items.filter(i => ['purchased', 'received'].includes(i.status)).length;
+  const itemsPartial = po.items.filter(i => !['purchased', 'received'].includes(i.status) && Number((i as any).ordered_qty ?? 0) > 0).length;
   const itemsTotal = po.items.length;
-  const pct = itemsTotal > 0 ? Math.round((itemsDone / itemsTotal) * 100) : 0;
+  const allDone = itemsTotal > 0 && itemsDone === itemsTotal;
+
+  // Progress bar reflects actual quantity bought, not just fully-completed
+  // item count — otherwise buying half of everything still shows 0%.
+  const totalRequired = po.items.reduce((s, i) => s + Number(i.required_qty ?? 0), 0);
+  const totalOrdered  = po.items.reduce((s, i) => s + Math.min(Number((i as any).ordered_qty ?? 0), Number(i.required_qty ?? 0)), 0);
+  const pct = totalRequired > 0 ? Math.round((totalOrdered / totalRequired) * 100) : 0;
 
   return (
     <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm bg-white">
       {/* PO header */}
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-3 px-5 py-4 bg-white hover:bg-slate-50 transition-colors text-left"
-      >
-        {open
-          ? <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
-          : <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />}
+      <div className="w-full flex items-center gap-3 px-5 py-4 bg-white hover:bg-slate-50 transition-colors">
+        <button onClick={() => setOpen(v => !v)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+          {open
+            ? <ChevronDown className="h-4 w-4 text-gray-400 shrink-0" />
+            : <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />}
 
-        <div className="flex-1 flex flex-wrap items-center gap-4">
-          <div>
-            <p className="text-[11px] text-gray-400 uppercase tracking-wide">PO</p>
-            <p className="text-sm font-bold text-blue-700">{po.po_number}</p>
-          </div>
-          {po.hub_name && (
+          <div className="flex-1 flex flex-wrap items-center gap-4">
             <div>
-              <p className="text-[11px] text-gray-400 uppercase tracking-wide">Hub</p>
-              <p className="text-sm font-semibold text-gray-700">{po.hub_name}</p>
+              <p className="text-[11px] text-gray-400 uppercase tracking-wide">PO</p>
+              <p className="text-sm font-bold text-blue-700">{po.po_number}</p>
             </div>
+            {po.hub_name && (
+              <div>
+                <p className="text-[11px] text-gray-400 uppercase tracking-wide">Hub</p>
+                <p className="text-sm font-semibold text-gray-700">{po.hub_name}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-[11px] text-gray-400 uppercase tracking-wide">EOD Date</p>
+              <p className="text-sm font-semibold text-gray-700 flex items-center gap-1">
+                <Calendar size={11} className="text-gray-400" />
+                {po.eod_date ? format(new Date(po.eod_date), 'd MMM yyyy') : '—'}
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] text-gray-400 uppercase tracking-wide">Progress</p>
+              <p className="text-sm font-semibold text-gray-700">
+                {itemsDone}/{itemsTotal} done
+                {itemsPartial > 0 && <span className="ml-1 text-orange-500">· {itemsPartial} partial</span>}
+              </p>
+            </div>
+            {/* progress bar */}
+            <div className="flex-1 max-w-32">
+              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={cn('h-full rounded-full transition-all', pct >= 100 ? 'bg-green-500' : 'bg-blue-500')}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-gray-400 mt-0.5 text-right">{pct}%</p>
+            </div>
+          </div>
+        </button>
+
+        {/* One overall Buy button for the whole PO — opens the cart to pick items */}
+        <button
+          onClick={() => onBuy(po)}
+          disabled={allDone}
+          className={cn(
+            'shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all',
+            allDone
+              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              : 'bg-green-600 hover:bg-green-700 text-white shadow-sm hover:shadow-md'
           )}
-          <div>
-            <p className="text-[11px] text-gray-400 uppercase tracking-wide">EOD Date</p>
-            <p className="text-sm font-semibold text-gray-700 flex items-center gap-1">
-              <Calendar size={11} className="text-gray-400" />
-              {po.eod_date ? format(new Date(po.eod_date), 'd MMM yyyy') : '—'}
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] text-gray-400 uppercase tracking-wide">Progress</p>
-            <p className="text-sm font-semibold text-gray-700">
-              {itemsDone}/{itemsTotal} done
-              {itemsPartial > 0 && <span className="ml-1 text-orange-500">· {itemsPartial} partial</span>}
-            </p>
-          </div>
-          {/* progress bar */}
-          <div className="flex-1 max-w-32">
-            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className={cn('h-full rounded-full transition-all', pct >= 100 ? 'bg-green-500' : 'bg-blue-500')}
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <p className="text-[10px] text-gray-400 mt-0.5 text-right">{pct}%</p>
-          </div>
-        </div>
-      </button>
+        >
+          <ShoppingBag size={13} />
+          {allDone ? 'Done' : 'Buy'}
+        </button>
+      </div>
 
       {/* Item rows */}
       {open && (
@@ -659,9 +798,9 @@ function POCard({
           {po.items.length === 0 ? (
             <p className="px-5 py-4 text-sm text-gray-400">No items in this PO.</p>
           ) : po.items.map(item => {
-            const done    = item.status === 'received' || item.status === 'ordered';
-            const partial = item.status === 'partial';
+            const done    = item.status === 'received' || item.status === 'purchased';
             const alreadyBought = Number(item.ordered_qty ?? 0);
+            const partial = !done && alreadyBought > 0;
             const stillNeed = Math.max(0, Number(item.required_qty) - alreadyBought);
             return (
               <div key={item.id}
@@ -699,23 +838,6 @@ function POCard({
                     )}
                   </p>
                 </div>
-
-                {/* Buy button */}
-                <button
-                  onClick={() => onBuy(po, item)}
-                  disabled={done}
-                  className={cn(
-                    'shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all',
-                    done
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : partial
-                        ? 'bg-orange-500 hover:bg-orange-600 text-white shadow-sm hover:shadow-md'
-                        : 'bg-green-600 hover:bg-green-700 text-white shadow-sm hover:shadow-md'
-                  )}
-                >
-                  <ShoppingBag size={13} />
-                  {done ? 'Done' : partial ? 'Buy More' : 'Buy'}
-                </button>
               </div>
             );
           })}
@@ -733,7 +855,6 @@ export default function BuyPage() {
   const queryClient = useQueryClient();
 
   const [activePO, setActivePO] = useState<PurchaseOrder | null>(null);
-  const [activeItem, setActiveItem] = useState<POItem | null>(null);
   const [showAll, setShowAll] = useState(false);
 
   const { data: orders = [], isLoading, refetch } = useQuery({
@@ -762,9 +883,8 @@ export default function BuyPage() {
     refetchInterval: 30_000,
   });
 
-  const handleBuy = (po: PurchaseOrder, item: POItem) => {
+  const handleBuy = (po: PurchaseOrder) => {
     setActivePO(po);
-    setActiveItem(item);
   };
 
   const handleSuccess = () => {
@@ -781,7 +901,7 @@ export default function BuyPage() {
   }
 
   const totalItems   = orders.reduce((s, po) => s + po.items.length, 0);
-  const boughtItems  = orders.reduce((s, po) => s + po.items.filter(i => ['ordered','received'].includes(i.status)).length, 0);
+  const boughtItems  = orders.reduce((s, po) => s + po.items.filter(i => ['purchased','received'].includes(i.status)).length, 0);
   const pendingItems = totalItems - boughtItems;
 
   return (
@@ -843,12 +963,11 @@ export default function BuyPage() {
       )}
 
       {/* Buy dialog */}
-      {activePO && activeItem && (
+      {activePO && (
         <BuyDialog
-          open={!!(activePO && activeItem)}
-          onClose={() => { setActivePO(null); setActiveItem(null); }}
+          open={!!activePO}
+          onClose={() => setActivePO(null)}
           po={activePO}
-          item={activeItem}
           onSuccess={handleSuccess}
         />
       )}
