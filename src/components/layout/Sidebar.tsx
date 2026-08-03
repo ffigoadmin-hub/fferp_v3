@@ -536,6 +536,7 @@ const navigationConfig: NavGroup[] = [
       { icon: BookOpen,       label: 'SOP Management',      path: '/admin/sop-management' },
       { icon: MessageSquarePlus, label: 'Announcements',   path: '/announcements' },
       { icon: Clock,          label: 'Shift Users',         path: '/admin/shift-users' },
+      { icon: Camera,         label: 'Shift Attendance',    path: '/admin/shift-attendance' },
       { icon: MapPin,         label: 'Geofencing',          path: '/admin/geofencing' },
       { icon: Volume2,        label: 'Notification Sounds', path: '/admin/notification-sounds' },
       { icon: Settings,       label: 'Cron Management',     path: '/admin/crons' },
@@ -628,6 +629,7 @@ const navigationConfig: NavGroup[] = [
     items: [
       { icon: LayoutDashboard, label: 'Shift Dashboard',  path: '/shift/dashboard' },
       { icon: Clock,           label: 'Shift Users Mgmt', path: '/admin/shift-users' },
+      { icon: Camera,          label: 'Shift Attendance', path: '/admin/shift-attendance' },
     ],
   },
   // ── Admin — Sales & CRM ───────────────────────────────────────────────────────

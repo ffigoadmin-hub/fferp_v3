@@ -378,6 +378,7 @@ const navigationConfig: NavGroup[] = [
       { icon: Users, label: 'User Management', path: '/user-management' },
       { icon: Building2, label: 'Departments', path: '/departments' },
       { icon: Clock, label: 'Shift Users', path: '/admin/shift-users' },
+      { icon: Camera, label: 'Shift Attendance', path: '/admin/shift-attendance' },
       { icon: Shield, label: 'Role Management', path: '/role-management' },
       { icon: Users, label: 'Employee Directory', path: '/employee-directory' },
       { icon: Camera, label: 'Selfie Attendance', path: '/selfie-attendance' },

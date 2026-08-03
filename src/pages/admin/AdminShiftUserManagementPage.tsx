@@ -66,6 +66,7 @@ export default function AdminShiftUserManagementPage() {
     const {
         shiftUsers,
         activeUsers,
+        checkedInToday,
         isLoading,
         isProcessing,
         assignUser,
@@ -82,12 +83,15 @@ export default function AdminShiftUserManagementPage() {
     const [profileSearch, setProfileSearch] = useState('');
     const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
 
-    // Fetch all profiles for the add dialog
+    // Fetch shift-role profiles for the add dialog — same role scope as the
+    // hook (hub_manager/shift_employee), since only they're real shift users.
     useEffect(() => {
         const fetchProfiles = async () => {
             const { data, error } = await supabase
                 .from('profiles')
                 .select('id, name, email, role, department')
+                .in('role', ['hub_manager', 'shift_employee'])
+                .eq('is_active', true)
                 .order('name');
 
             if (error) {
@@ -95,17 +99,18 @@ export default function AdminShiftUserManagementPage() {
                 return;
             }
 
-            console.log('Fetched profiles:', data?.length);
             setAllProfiles(data || []);
         };
 
         fetchProfiles();
-    }, []);
+    }, [shiftUsers.length]);
 
-    // Filter already assigned users from the add list
-    const assignedUserIds = new Set(shiftUsers.map(u => u.userId));
+    // "Available to add" now means: real shift users who don't yet have a
+    // custom target-hours override (everyone already appears in the main
+    // table below regardless, by role).
+    const customizedUserIds = new Set(shiftUsers.filter(u => u.id).map(u => u.userId));
     const availableProfiles = allProfiles
-        .filter(p => !assignedUserIds.has(p.id))
+        .filter(p => !customizedUserIds.has(p.id))
         .filter(p => !selectedDepartment || selectedDepartment === 'all' || (p.department === selectedDepartment))
         .filter(p =>
             profileSearch === '' ||
@@ -165,14 +170,14 @@ export default function AdminShiftUserManagementPage() {
         }
     };
 
-    const handleToggle = async (assignmentId: string, isActive: boolean) => {
+    const handleToggle = async (userId: string, isActive: boolean) => {
         if (!user) return;
-        await toggleUser(assignmentId, isActive, user.id);
+        await toggleUser(userId, isActive, user.id);
     };
 
-    const handleTargetHoursChange = async (assignmentId: string, hours: string) => {
+    const handleTargetHoursChange = async (userId: string, hours: string) => {
         if (!user) return;
-        await updateTargetHours(assignmentId, parseFloat(hours), user.id);
+        await updateTargetHours(userId, parseFloat(hours), user.id);
     };
 
     if (isLoading) {
@@ -327,7 +332,7 @@ export default function AdminShiftUserManagementPage() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-4">
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total Shift Users</CardTitle>
@@ -336,7 +341,22 @@ export default function AdminShiftUserManagementPage() {
                     <CardContent>
                         <div className="text-2xl font-bold">{shiftUsers.length}</div>
                         <p className="text-xs text-muted-foreground">
-                            Assigned to flexible shift mode
+                            Hub Managers &amp; Purchase Executives
+                        </p>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Checked In Today</CardTitle>
+                        <UserCheck className="h-4 w-4 text-blue-500" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-blue-600">
+                            {checkedInToday.length}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            Started their shift today
                         </p>
                     </CardContent>
                 </Card>
@@ -393,7 +413,7 @@ export default function AdminShiftUserManagementPage() {
                     {filteredShiftUsers.length === 0 ? (
                         <div className="text-center py-8 text-muted-foreground">
                             {shiftUsers.length === 0
-                                ? 'No users assigned to shift mode yet'
+                                ? 'No active Hub Manager or Purchase Executive accounts found'
                                 : 'No users match your search'}
                         </div>
                     ) : (
@@ -402,16 +422,17 @@ export default function AdminShiftUserManagementPage() {
                                 <TableRow>
                                     <TableHead>Employee</TableHead>
                                     <TableHead>Department</TableHead>
+                                    <TableHead>Checked In Today</TableHead>
                                     <TableHead>Target Hours</TableHead>
                                     <TableHead>Status</TableHead>
-                                    <TableHead>Assigned</TableHead>
+                                    <TableHead>Config</TableHead>
                                     <TableHead className="text-right">Active</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {filteredShiftUsers.map((shiftUser) => (
-                                    <TableRow key={shiftUser.id}>
+                                    <TableRow key={shiftUser.userId}>
                                         <TableCell>
                                             <div>
                                                 <div className="font-medium">{shiftUser.userName}</div>
@@ -426,10 +447,21 @@ export default function AdminShiftUserManagementPage() {
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
+                                            {shiftUser.checkedInToday ? (
+                                                <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">
+                                                    {shiftUser.todayLoginTime
+                                                        ? format(new Date(shiftUser.todayLoginTime), 'h:mm a')
+                                                        : 'Checked in'}
+                                                </Badge>
+                                            ) : (
+                                                <Badge variant="secondary">Not yet</Badge>
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
                                             <Select
                                                 value={shiftUser.targetHours.toString()}
                                                 onValueChange={(value) =>
-                                                    handleTargetHoursChange(shiftUser.id, value)
+                                                    handleTargetHoursChange(shiftUser.userId, value)
                                                 }
                                                 disabled={isProcessing}
                                             >
@@ -455,54 +487,64 @@ export default function AdminShiftUserManagementPage() {
                                         </TableCell>
                                         <TableCell>
                                             <div className="text-sm">
-                                                <div>
-                                                    {format(new Date(shiftUser.assignedAt), 'MMM d, yyyy')}
-                                                </div>
-                                                <div className="text-muted-foreground">
-                                                    by {shiftUser.assignedByName}
-                                                </div>
+                                                {shiftUser.assignedAt ? (
+                                                    <>
+                                                        <div>
+                                                            {format(new Date(shiftUser.assignedAt), 'MMM d, yyyy')}
+                                                        </div>
+                                                        <div className="text-muted-foreground">
+                                                            by {shiftUser.assignedByName}
+                                                        </div>
+                                                    </>
+                                                ) : (
+                                                    <span className="text-muted-foreground">Default (9h)</span>
+                                                )}
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <Switch
                                                 checked={shiftUser.isActive}
                                                 onCheckedChange={(checked) =>
-                                                    handleToggle(shiftUser.id, checked)
+                                                    handleToggle(shiftUser.userId, checked)
                                                 }
                                                 disabled={isProcessing}
                                             />
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            <AlertDialog>
-                                                <AlertDialogTrigger asChild>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="gap-1 text-orange-600 border-orange-200 hover:bg-orange-50 hover:text-orange-700"
-                                                        disabled={isProcessing}
-                                                    >
-                                                        <UserMinus className="h-3 w-3" />
-                                                        Convert to General
-                                                    </Button>
-                                                </AlertDialogTrigger>
-                                                <AlertDialogContent>
-                                                    <AlertDialogHeader>
-                                                        <AlertDialogTitle>Convert to General User</AlertDialogTitle>
-                                                        <AlertDialogDescription>
-                                                            This will remove <strong>{shiftUser.userName}</strong> from shift mode and convert them back to a general employee. Their shift tracking data will be preserved but they will no longer be tracked as a shift user.
-                                                        </AlertDialogDescription>
-                                                    </AlertDialogHeader>
-                                                    <AlertDialogFooter>
-                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                        <AlertDialogAction
-                                                            onClick={() => user && removeUser(shiftUser.id, user.id)}
-                                                            className="bg-orange-600 hover:bg-orange-700"
+                                            {shiftUser.id ? (
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="gap-1 text-orange-600 border-orange-200 hover:bg-orange-50 hover:text-orange-700"
+                                                            disabled={isProcessing}
                                                         >
-                                                            Yes, Convert to General
-                                                        </AlertDialogAction>
-                                                    </AlertDialogFooter>
-                                                </AlertDialogContent>
-                                            </AlertDialog>
+                                                            <UserMinus className="h-3 w-3" />
+                                                            Reset to Default
+                                                        </Button>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Reset to Default Config</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                This clears <strong>{shiftUser.userName}</strong>'s custom target hours and active/inactive override, resetting them to the default (9h target, 12h max, active). They remain a shift user by role — this does not remove their attendance history or ability to start a shift.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                            <AlertDialogAction
+                                                                onClick={() => user && shiftUser.id && removeUser(shiftUser.id, user.id)}
+                                                                className="bg-orange-600 hover:bg-orange-700"
+                                                            >
+                                                                Yes, Reset
+                                                            </AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            ) : (
+                                                <span className="text-xs text-muted-foreground">—</span>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 ))}
