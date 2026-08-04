@@ -1051,6 +1051,7 @@ const navigationConfig: NavGroup[] = [
     roles: ['hub_manager'],
     items: [
       { icon: LayoutDashboard, label: 'Warehouse Dashboard', path: '/warehouse' },
+      { icon: ClipboardList,   label: 'Purchase Orders',     path: '/purchase/orders' },
       { icon: ClipboardCheck,  label: 'PO Assignment',       path: '/warehouse/po-assignment' },
       { icon: History,         label: 'PO History',          path: '/warehouse/po-history' },
       { icon: PackageCheck,    label: 'QC Inspection',       path: '/warehouse/qc' },

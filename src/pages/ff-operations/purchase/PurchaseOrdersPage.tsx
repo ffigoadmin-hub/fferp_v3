@@ -1,17 +1,29 @@
 // @ts-nocheck
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { ElementType } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import {
   Package, ChevronDown, ChevronRight, RefreshCw,
   ShoppingCart, Clock, CheckCircle2, XCircle, Loader2,
-  Calendar, Hash, ShoppingBag,
+  Calendar, Hash, ShoppingBag, Pencil, Plus, Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { savePOToStore, fetchMaxPOSerial, type StoredPO } from '@/lib/purchaseStore';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface POItem {
@@ -72,8 +84,187 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+// ── Create / Edit PO Dialog ──────────────────────────────────────────────────────
+interface EditableItem { key: string; itemName: string; quantity: number; rate: number; }
+
+function poToEditableItems(po: PurchaseOrder | null): EditableItem[] {
+  if (!po || !Array.isArray(po.items) || po.items.length === 0) {
+    return [{ key: Math.random().toString(36).slice(2), itemName: '', quantity: 0, rate: 0 }];
+  }
+  return po.items.map((it, idx) => ({
+    key: `${idx}-${Math.random().toString(36).slice(2)}`,
+    itemName: itemName(it),
+    quantity: itemQty(it),
+    rate: itemRate(it),
+  }));
+}
+
+function PODialog({
+  open, onClose, po, hubs, onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  po: PurchaseOrder | null;
+  hubs: Array<{ id: string; name: string }>;
+  onSaved: () => void;
+}) {
+  const isNew = !po;
+  const [hubId, setHubId] = useState('');
+  const [vendorName, setVendorName] = useState('');
+  const [deliveryDate, setDeliveryDate] = useState('');
+  const [notes, setNotes] = useState('');
+  const [items, setItems] = useState<EditableItem[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setHubId(po?.hub_id ?? '');
+    setVendorName(po?.vendor_name ?? '');
+    setDeliveryDate((po?.delivery_date ?? '').slice(0, 10));
+    setNotes(po?.notes ?? '');
+    setItems(poToEditableItems(po));
+  }, [open, po]);
+
+  const addItem = () => setItems(prev => [...prev, { key: Math.random().toString(36).slice(2), itemName: '', quantity: 0, rate: 0 }]);
+  const removeItem = (key: string) => setItems(prev => prev.filter(i => i.key !== key));
+  const updateItem = (key: string, patch: Partial<EditableItem>) =>
+    setItems(prev => prev.map(i => i.key === key ? { ...i, ...patch } : i));
+
+  const subTotal = items.reduce((s, i) => s + (Number(i.quantity) || 0) * (Number(i.rate) || 0), 0);
+
+  const handleSave = async () => {
+    if (!hubId) { toast.error('Select a delivery hub'); return; }
+    const validItems = items.filter(i => i.itemName.trim() && i.quantity > 0);
+    if (!validItems.length) { toast.error('Add at least one item with name and qty'); return; }
+
+    setSaving(true);
+    try {
+      const hub = hubs.find(h => h.id === hubId);
+      let poNumber = po?.po_number;
+      if (isNew) {
+        const serial = (await fetchMaxPOSerial()) + 1;
+        poNumber = `PO-${String(serial).padStart(5, '0')}`;
+      }
+
+      const stored: StoredPO = {
+        id: po?.id ?? '',
+        poNumber: poNumber!,
+        vendorName,
+        date: po?.order_date ?? new Date().toISOString().split('T')[0],
+        deliveryDate,
+        paymentTerms: 'Due on Receipt',
+        status: (po?.status ?? 'pending') as any,
+        items: validItems.map((it, idx) => ({
+          id: idx + 1,
+          itemName: it.itemName.trim(),
+          account: 'Cost of Goods Sold',
+          quantity: Number(it.quantity),
+          rate: Number(it.rate),
+          tax: 'GST 5%',
+          discount: 0,
+          customerDetails: '',
+        })),
+        subTotal,
+        total: subTotal,
+        notes,
+        hub_id: hubId,
+        hub_name: hub?.name ?? '',
+      };
+
+      const result = await savePOToStore(stored);
+      if (!result) { toast.error('Failed to save PO'); return; }
+      toast.success(isNew ? 'Purchase order created' : 'Purchase order updated');
+      onSaved();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{isNew ? 'New Purchase Order' : `Edit ${po?.po_number}`}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Delivery Hub *</Label>
+              <Select value={hubId} onValueChange={setHubId}>
+                <SelectTrigger><SelectValue placeholder="Select hub" /></SelectTrigger>
+                <SelectContent>
+                  {hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Delivery Date</Label>
+              <Input type="date" value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Vendor</Label>
+            <Input value={vendorName} onChange={e => setVendorName(e.target.value)} placeholder="Vendor name (optional)" />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Items</Label>
+              <button onClick={addItem} className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                <Plus className="h-3.5 w-3.5" /> Add item
+              </button>
+            </div>
+            {items.map(item => (
+              <div key={item.key} className="grid grid-cols-[1fr_70px_80px_auto] gap-2 items-center">
+                <Input
+                  value={item.itemName}
+                  onChange={e => updateItem(item.key, { itemName: e.target.value })}
+                  placeholder="Product name"
+                  className="text-sm"
+                />
+                <Input
+                  type="number"
+                  value={item.quantity || ''}
+                  onChange={e => updateItem(item.key, { quantity: Number(e.target.value) })}
+                  placeholder="Qty"
+                  className="text-sm"
+                />
+                <Input
+                  type="number"
+                  value={item.rate || ''}
+                  onChange={e => updateItem(item.key, { rate: Number(e.target.value) })}
+                  placeholder="Rate"
+                  className="text-sm"
+                />
+                <button onClick={() => removeItem(item.key)} disabled={items.length <= 1} className="text-red-400 hover:text-red-600 disabled:opacity-30">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+            <p className="text-right text-sm font-bold text-slate-700 pt-1">
+              Total: ₹{subTotal.toLocaleString('en-IN')}
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Notes</Label>
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : (isNew ? 'Create PO' : 'Save Changes')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── PO Row (expandable) ────────────────────────────────────────────────────────
-function PORow({ po, showBuy }: { po: PurchaseOrder; showBuy: boolean }) {
+function PORow({ po, showBuy, canEdit, onEdit }: { po: PurchaseOrder; showBuy: boolean; canEdit: boolean; onEdit: (po: PurchaseOrder) => void }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const items = Array.isArray(po.items) ? po.items : [];
@@ -120,6 +311,19 @@ function PORow({ po, showBuy }: { po: PurchaseOrder; showBuy: boolean }) {
             <StatusBadge status={po.status} />
           </div>
         </div>
+
+        {canEdit && (
+          <button
+            onClick={e => {
+              e.stopPropagation();
+              onEdit(po);
+            }}
+            className="shrink-0 px-3 py-1.5 border border-gray-200 hover:bg-gray-50 text-gray-600 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+            Edit
+          </button>
+        )}
 
         {showBuy && (
           <button
@@ -190,7 +394,20 @@ export default function PurchaseOrdersPage() {
   const hubId = (user as any)?.hub_id ?? null;
   const isManagement = ['ceo', 'gm', 'admin', 'director', 'ff_operations_manager'].includes(user?.role ?? '');
   const showBuy = user?.role === 'shift_employee';
+  const canEditPO = ['ff_operations_manager', 'hub_manager', 'admin'].includes(user?.role ?? '');
   const [filter, setFilter] = useState<'all' | 'pending' | 'ordered' | 'received'>('all');
+  const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+
+  const { data: hubs = [] } = useQuery({
+    queryKey: ['hubs-active-po-edit'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('hubs').select('id, name, address, city').eq('is_active', true).order('name');
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: canEditPO,
+  });
 
   const { data: orders = [], isLoading, refetch } = useQuery({
     queryKey: ['purchase-orders-exec', hubId],
@@ -269,13 +486,24 @@ export default function PurchaseOrdersPage() {
           </h1>
           <p className="text-[13px] text-slate-500">All EOD-generated POs assigned to your hub</p>
         </div>
-        <button
-          onClick={() => refetch()}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {canEditPO && (
+            <Button
+              onClick={() => { setEditingPO(null); setDialogOpen(true); }}
+              className="flex items-center gap-1.5"
+            >
+              <Plus className="h-4 w-4" />
+              New PO
+            </Button>
+          )}
+          <button
+            onClick={() => refetch()}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -332,11 +560,29 @@ export default function PurchaseOrdersPage() {
                   <span className="text-xs text-gray-400">({pos.length} PO{pos.length !== 1 ? 's' : ''})</span>
                 </div>
                 <div className="space-y-2">
-                  {pos.map(po => <PORow key={po.id} po={po} showBuy={showBuy} />)}
+                  {pos.map(po => (
+                    <PORow
+                      key={po.id}
+                      po={po}
+                      showBuy={showBuy}
+                      canEdit={canEditPO}
+                      onEdit={p => { setEditingPO(p); setDialogOpen(true); }}
+                    />
+                  ))}
                 </div>
               </div>
             ))}
         </div>
+      )}
+
+      {canEditPO && (
+        <PODialog
+          open={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          po={editingPO}
+          hubs={hubs}
+          onSaved={() => refetch()}
+        />
       )}
     </div>
   );
