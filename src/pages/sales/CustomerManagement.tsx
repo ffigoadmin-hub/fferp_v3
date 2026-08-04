@@ -596,7 +596,6 @@ function CustomerFormModal({
           status:        'confirmed',
           payment_mode:  payMode,
           subtotal:      orderTotal,
-          net_amount:    orderTotal,
           total_amount:  orderTotal,
           hub_id:        selectedHubId || null,
           hub_name:      selectedHubName || null,

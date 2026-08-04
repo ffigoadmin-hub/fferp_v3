@@ -438,7 +438,6 @@ export default function NewOrder() {
             status:        'confirmed',
             payment_mode:  paymentMode,
             subtotal,
-            net_amount:    netAmount,
             total_amount:  netAmount,
             notes:         notes.trim() || null,
             hub_id:        selectedHubId || null,

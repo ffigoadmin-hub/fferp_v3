@@ -56,7 +56,6 @@ export default function CustomerCart() {
           customer_name:    `Customer ${phone.slice(-4)}`,
           order_number:     orderNum,
           total_amount:     total,
-          net_amount:       total,
           subtotal:         total,
           payment_mode:     paymentMode,
           payment_status:   'pending',

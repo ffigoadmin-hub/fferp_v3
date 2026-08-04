@@ -136,7 +136,6 @@ export default function BulkOrderPage() {
           status:        'confirmed',
           payment_mode:  row.payment_mode,
           subtotal:      total,
-          net_amount:    total,
           total_amount:  total,
           notes:         row.notes || null,
           hub_id:        (user as any)?.hub_id ?? null,
