@@ -413,7 +413,7 @@ function CustomerFormModal({
   const { data: hubs = [] } = useQuery({
     queryKey: ['hubs-active-modal'],
     queryFn: async () => {
-      const { data } = await supabase.from('hubs').select('id, name, location, city').eq('is_active', true).order('name');
+      const { data } = await supabase.from('hubs').select('id, name, address, city').eq('is_active', true).order('name');
       return data ?? [];
     },
   });
@@ -815,7 +815,7 @@ function CustomerFormModal({
                   }`}
                 >
                   <p className={`text-xs font-bold ${selectedHubId === hub.id ? 'text-purple-700' : 'text-slate-700'}`}>{hub.name}</p>
-                  <p className="text-[10px] text-slate-400">{hub.location}</p>
+                  <p className="text-[10px] text-slate-400">{hub.address}</p>
                 </button>
               ))}
             </div>

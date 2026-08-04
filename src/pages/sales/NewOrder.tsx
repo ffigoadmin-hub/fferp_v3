@@ -80,8 +80,27 @@ function InlineNewCustomer({
       payload.name = name.trim();
     }
     const { data, error } = await supabase.from('customers').insert(payload).select().single();
+    if (error) {
+      if (error.code === '23505' || error.message.includes('customers_phone_unique')) {
+        const { data: existing, error: lookupErr } = await supabase
+          .from('customers')
+          .select('id, shop_name, first_name, last_name, customer_type, phone, mobile, area, credit_limit, outstanding_balance, gst_number, owner_name')
+          .eq('phone', phone.trim())
+          .maybeSingle();
+        setSaving(false);
+        if (!lookupErr && existing) {
+          toast.info('A customer with this phone already exists — selected them instead');
+          onSaved(existing);
+          return;
+        }
+        toast.error('A customer with this phone already exists, but could not be looked up');
+        return;
+      }
+      setSaving(false);
+      toast.error(error.message);
+      return;
+    }
     setSaving(false);
-    if (error) { toast.error(error.message); return; }
     toast.success('Customer created');
     onSaved(data);
   };
@@ -371,7 +390,7 @@ export default function NewOrder() {
   const { data: hubs = [], isLoading: hubsLoading, isError: hubsErrored, refetch: refetchHubs } = useQuery({
     queryKey: ['hubs-active'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('hubs').select('id, name, location, city').eq('is_active', true).order('name');
+      const { data, error } = await supabase.from('hubs').select('id, name, address, city').eq('is_active', true).order('name');
       if (error) throw error;
       return data ?? [];
     },
@@ -653,7 +672,7 @@ export default function NewOrder() {
                   <p className={`text-xs font-bold ${selectedHubId === hub.id ? 'text-purple-700' : 'text-slate-700'}`}>
                     {hub.name}
                   </p>
-                  <p className="text-[10px] text-slate-400 mt-0.5">{hub.location}, {hub.city}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{hub.address}, {hub.city}</p>
                 </button>
               ))}
             </div>

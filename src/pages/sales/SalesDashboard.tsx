@@ -171,7 +171,7 @@ function ShiftPanel({
                   <div className="flex justify-between text-[11px]">
                     <span className="text-slate-500">PO #</span>
                     <span className="font-mono font-bold text-purple-600 text-[10px]">
-                      PO-{isShift1 ? 'DAY' : 'NGT'}-{hub.location?.substring(0, 2).toUpperCase() ?? 'XX'}
+                      PO-{isShift1 ? 'DAY' : 'NGT'}-{hub.address?.substring(0, 2).toUpperCase() ?? 'XX'}
                     </span>
                   </div>
                 </div>
@@ -254,7 +254,7 @@ export default function SalesDashboard() {
   const { data: hubs = [] } = useQuery({
     queryKey: ['hubs-active'],
     queryFn: async () => {
-      const { data } = await supabase.from('hubs').select('id, name, location, city').eq('is_active', true).order('name');
+      const { data } = await supabase.from('hubs').select('id, name, address, city').eq('is_active', true).order('name');
       return data ?? [];
     },
   });
