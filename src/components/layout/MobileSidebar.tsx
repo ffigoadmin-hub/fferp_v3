@@ -660,6 +660,9 @@ const navigationConfig: NavGroup[] = [
       { icon: Users,           label: 'Customers',         path: '/sales/customers' },
       { icon: ClipboardList,   label: 'Sales Orders',      path: '/sales/orders' },
       { icon: FileText,        label: 'Invoices',          path: '/sales/invoices' },
+      { icon: Plus,            label: 'New Vendor Payment',    path: '/ff/vendor-payment/new' },
+      { icon: Truck,           label: 'New Transport Payment', path: '/ff/transport-payment/new' },
+      { icon: CheckSquare,     label: 'Payment Approvals',     path: '/ff-operations/payment-approvals' },
     ],
   },
 
@@ -914,8 +917,8 @@ export function MobileSidebar({ onClose }: MobileSidebarProps) {
     return true;
   });
 
-  // ff_payment_access: specific individuals with approve-only payment access
-  // (raising is hub_manager/shift_employee only) — see matching bypass in
+  // ff_payment_access: specific individuals (Anusiya/Arun) with payment
+  // access including raising new payments — see matching bypass in
   // App.tsx's ProtectedRoute.
   if ((user as any)?.ff_payment_access) {
     filteredGroups.push({
@@ -923,7 +926,10 @@ export function MobileSidebar({ onClose }: MobileSidebarProps) {
       icon: Banknote,
       roles: [],
       items: [
+        { icon: Plus,    label: 'New Vendor Payment',       path: '/ff/vendor-payment/new' },
+        { icon: Truck,   label: 'New Transport Payment',    path: '/ff/transport-payment/new' },
         { icon: History, label: 'My Submitted Payments',  path: '/my-submitted-payments' },
+        { icon: CheckSquare, label: 'Payment Approvals',  path: '/ff-operations/payment-approvals' },
       ],
     });
   }

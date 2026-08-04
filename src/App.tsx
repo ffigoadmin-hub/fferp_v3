@@ -397,11 +397,12 @@ const OPS_ROLES = [
 // Mirrors RedirectPage.tsx's FF_OPS_ACCESS_ELIGIBLE_ROLES — keep both in sync.
 const FF_OPS_ACCESS_ELIGIBLE_ROLES = new Set(['field_executive', 'bde', 'tele_caller']);
 
-// ff_payment_access: specific individuals with approve-only payment access
-// (raising a new payment is hub_manager/shift_employee only) — routes this
+// ff_payment_access: specific individuals (Anusiya/Arun) granted payment
+// access including raising new vendor/transport payments — routes this
 // bypass applies to.
 const FF_PAYMENT_ACCESS_ROUTES = [
   '/my-submitted-payments', '/ff-operations/payment-approvals',
+  '/ff/vendor-payment/new', '/ff/transport-payment/new',
   // Warehouse & QC — same flag holders also granted warehouse access
   '/warehouse', '/warehouse/qc', '/warehouse/inventory', '/warehouse/returns', '/warehouse/qc-rejections',
 ];
@@ -888,8 +889,8 @@ const AppRoutes = () => {
       <Route path="/ff-operations/task-assign"        element={<ProtectedRoute allowedRoles={['ff_operations_manager','admin']}><TaskAssign /></ProtectedRoute>} />
       <Route path="/ff-operations/payment-approvals"  element={<ProtectedRoute allowedRoles={['ff_operations_manager','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
       {/* Phase 4: Payment submission forms */}
-      <Route path="/ff/vendor-payment/new"    element={<ProtectedRoute allowedRoles={['hub_manager','shift_employee','purchase_manager','purchase_head','admin']}><FFVendorPaymentForm /></ProtectedRoute>} />
-      <Route path="/ff/transport-payment/new" element={<ProtectedRoute allowedRoles={['hub_manager','shift_employee','purchase_manager','purchase_head','admin']}><FFTransportPaymentForm /></ProtectedRoute>} />
+      <Route path="/ff/vendor-payment/new"    element={<ProtectedRoute allowedRoles={['hub_manager','shift_employee','purchase_manager','purchase_head','ff_operations_manager','admin']}><FFVendorPaymentForm /></ProtectedRoute>} />
+      <Route path="/ff/transport-payment/new" element={<ProtectedRoute allowedRoles={['hub_manager','shift_employee','purchase_manager','purchase_head','ff_operations_manager','admin']}><FFTransportPaymentForm /></ProtectedRoute>} />
       {/* Phase 5: FF Payments Report */}
       <Route path="/reports/ff-payments" element={<ProtectedRoute allowedRoles={['admin','ceo','gm','l1_manager','auditor','ff_operations_manager','accounts']}><FFPaymentsReport /></ProtectedRoute>} />
       {/* GM FF payments (shared component, role-aware) */}

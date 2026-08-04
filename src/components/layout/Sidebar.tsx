@@ -708,6 +708,8 @@ const navigationConfig: NavGroup[] = [
           { label: 'Purchase Orders',     path: '/purchase/orders' },
           { label: '⚡ EOD PO Engine',    path: '/ff-operations/eod-po-engine' },
           { label: 'Vendors',             path: '/purchase/vendors' },
+          { label: 'New Vendor Payment',   path: '/ff/vendor-payment/new' },
+          { label: 'New Transport Payment', path: '/ff/transport-payment/new' },
           { label: 'Payment Approvals',   path: '/ff-operations/payment-approvals', action: false },
           { label: '🏷️ Box Labels',       path: '/ff-operations/labels', action: true },
         ],
@@ -1215,8 +1217,8 @@ export function Sidebar() {
     return true;
   });
 
-  // ff_payment_access: specific individuals with approve-only payment access
-  // (raising is now hub_manager/shift_employee only) — see matching bypass in
+  // ff_payment_access: specific individuals (Anusiya/Arun) with payment
+  // access including raising new payments — see matching bypass in
   // App.tsx's ProtectedRoute.
   if ((user as any)?.ff_payment_access) {
     filteredGroups.push({
@@ -1224,6 +1226,8 @@ export function Sidebar() {
       icon: Banknote,
       roles: [],
       items: [
+        { icon: Plus,            label: 'New Vendor Payment',      path: '/ff/vendor-payment/new' },
+        { icon: Truck,           label: 'New Transport Payment',   path: '/ff/transport-payment/new' },
         { icon: History,        label: 'My Submitted Payments',  path: '/my-submitted-payments' },
         { icon: ClipboardCheck, label: 'Payment Approvals',      path: '/ff-operations/payment-approvals' },
       ],
