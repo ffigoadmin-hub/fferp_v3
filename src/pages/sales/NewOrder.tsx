@@ -368,12 +368,14 @@ export default function NewOrder() {
   });
 
   /* Hubs */
-  const { data: hubs = [] } = useQuery({
+  const { data: hubs = [], isLoading: hubsLoading, isError: hubsErrored, refetch: refetchHubs } = useQuery({
     queryKey: ['hubs-active'],
     queryFn: async () => {
-      const { data } = await supabase.from('hubs').select('id, name, location, city').eq('is_active', true).order('name');
+      const { data, error } = await supabase.from('hubs').select('id, name, location, city').eq('is_active', true).order('name');
+      if (error) throw error;
       return data ?? [];
     },
+    retry: 2,
   });
 
   /* Products */
@@ -616,25 +618,47 @@ export default function NewOrder() {
             Delivery Hub <span className="text-red-500">*</span>
             <span className="text-[10px] font-normal text-slate-400 ml-1">— Select based on customer location</span>
           </label>
-          <div className="grid grid-cols-3 gap-2">
-            {(hubs as any[]).map((hub: any) => (
+          {hubsLoading ? (
+            <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" /> Loading hubs…
+            </div>
+          ) : hubsErrored ? (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2">
+              <p className="text-xs text-red-600 flex items-center gap-1">
+                <AlertTriangle className="h-3.5 w-3.5" /> Failed to load hubs.
+              </p>
               <button
-                key={hub.id}
-                onClick={() => { setSelectedHubId(hub.id); setSelectedHubName(hub.name); }}
-                className={`rounded-xl border-2 p-3 text-left transition-all ${
-                  selectedHubId === hub.id
-                    ? 'border-purple-500 bg-purple-50'
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
-                }`}
+                onClick={() => refetchHubs()}
+                className="text-xs font-semibold text-red-700 underline hover:no-underline"
               >
-                <p className={`text-xs font-bold ${selectedHubId === hub.id ? 'text-purple-700' : 'text-slate-700'}`}>
-                  {hub.name}
-                </p>
-                <p className="text-[10px] text-slate-400 mt-0.5">{hub.location}, {hub.city}</p>
+                Retry
               </button>
-            ))}
-          </div>
-          {!selectedHubId && (
+            </div>
+          ) : (hubs as any[]).length === 0 ? (
+            <p className="text-xs text-amber-600 flex items-center gap-1 py-2">
+              <AlertTriangle className="h-3.5 w-3.5" /> No active hubs found. Contact an admin.
+            </p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {(hubs as any[]).map((hub: any) => (
+                <button
+                  key={hub.id}
+                  onClick={() => { setSelectedHubId(hub.id); setSelectedHubName(hub.name); }}
+                  className={`rounded-xl border-2 p-3 text-left transition-all ${
+                    selectedHubId === hub.id
+                      ? 'border-purple-500 bg-purple-50'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  <p className={`text-xs font-bold ${selectedHubId === hub.id ? 'text-purple-700' : 'text-slate-700'}`}>
+                    {hub.name}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{hub.location}, {hub.city}</p>
+                </button>
+              ))}
+            </div>
+          )}
+          {!hubsLoading && !hubsErrored && (hubs as any[]).length > 0 && !selectedHubId && (
             <p className="text-[10px] text-amber-600 mt-1.5 flex items-center gap-1">
               <AlertTriangle className="h-3 w-3" /> Hub selection is required to generate Purchase Order
             </p>
