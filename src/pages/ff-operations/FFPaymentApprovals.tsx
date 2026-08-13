@@ -365,14 +365,36 @@ function PaymentCard({
             </>
           )}
           {type === 'transport' && (
-            <div className="grid grid-cols-2 gap-3 py-3 text-xs text-gray-600">
-              <div><b>Trip Date:</b> {payment.trip_date ? format(new Date(payment.trip_date), 'dd MMM yyyy') : '—'}</div>
-              <div><b>KM Covered:</b> {payment.km_covered ?? '—'} km</div>
-              <div><b>Base Amount:</b> ₹{Number(payment.base_amount || 0).toLocaleString('en-IN')}</div>
-              <div><b>Toll Charges:</b> ₹{Number(payment.toll_charges || 0).toLocaleString('en-IN')}</div>
-              <div><b>Other Charges:</b> ₹{Number(payment.other_charges || 0).toLocaleString('en-IN')}</div>
-              <div className="font-semibold text-gray-800"><b>Total:</b> ₹{Number(payment.total_amount || 0).toLocaleString('en-IN')}</div>
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-3 py-3 text-xs text-gray-600">
+                <div><b>Trip Date:</b> {payment.trip_date ? format(new Date(payment.trip_date), 'dd MMM yyyy') : '—'}</div>
+                <div><b>KM Covered:</b> {payment.km_covered ?? '—'} km</div>
+                <div><b>Base Amount:</b> ₹{Number(payment.base_amount || 0).toLocaleString('en-IN')}</div>
+                <div><b>Toll Charges:</b> ₹{Number(payment.toll_charges || 0).toLocaleString('en-IN')}</div>
+                <div><b>Other Charges:</b> ₹{Number(payment.other_charges || 0).toLocaleString('en-IN')}</div>
+                <div className="font-semibold text-gray-800"><b>Total:</b> ₹{Number(payment.total_amount || 0).toLocaleString('en-IN')}</div>
+              </div>
+              {(payment.bill_url || payment.trip_proof_url) && (
+                <div className="flex gap-3 pb-3">
+                  {payment.bill_url && (
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Bill / Receipt</p>
+                      <a href={payment.bill_url} target="_blank" rel="noopener noreferrer">
+                        <img src={payment.bill_url} className="w-24 h-24 rounded-lg object-cover border border-gray-200 hover:opacity-75 transition" />
+                      </a>
+                    </div>
+                  )}
+                  {payment.trip_proof_url && (
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Trip Proof</p>
+                      <a href={payment.trip_proof_url} target="_blank" rel="noopener noreferrer">
+                        <img src={payment.trip_proof_url} className="w-24 h-24 rounded-lg object-cover border border-gray-200 hover:opacity-75 transition" />
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
           {/* Approval history */}
           {(payment.ff_ops_approved_at || payment.gm_approved_at || payment.l1_approved_at || payment.auditor_approved_at || payment.ceo_approved_at) && (

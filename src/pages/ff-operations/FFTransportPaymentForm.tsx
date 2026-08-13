@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   Truck, ChevronLeft, Save, CheckCircle2, MapPin,
-  Calculator, Calendar, Upload, User,
+  Calculator, Calendar, Upload, User, X,
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -27,13 +27,22 @@ export default function FFTransportPaymentForm() {
     base_amount:    '',
     toll_charges:   '',
     other_charges:  '',
-    bill_url:       '',
-    trip_proof_url: '',
   });
   const [step, setStep] = useState<'form' | 'done'>('form');
   const [createdId, setCreatedId] = useState('');
+  const [billFile, setBillFile] = useState<File | null>(null);
+  const [billPreview, setBillPreview] = useState('');
+  const [tripProofFile, setTripProofFile] = useState<File | null>(null);
+  const [tripProofPreview, setTripProofPreview] = useState('');
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  const uploadPhoto = async (file: File, path: string): Promise<string> => {
+    const { error } = await supabase.storage.from('app-images').upload(path, file, { upsert: true });
+    if (error) throw error;
+    const { data: { publicUrl } } = supabase.storage.from('app-images').getPublicUrl(path);
+    return publicUrl;
+  };
 
   // Drivers in the system
   const { data: drivers = [] } = useQuery({
@@ -65,6 +74,13 @@ export default function FFTransportPaymentForm() {
     mutationFn: async () => {
       if (!form.trip_date)    throw new Error('Trip date is required');
       if (total <= 0)          throw new Error('Total amount must be > ₹0');
+      if (!billFile)           throw new Error('Please upload the bill / receipt photo');
+
+      const ts = Date.now();
+      const [billUrl, tripProofUrl] = await Promise.all([
+        uploadPhoto(billFile, `purchase-receipts/transport/${ts}-bill.jpg`),
+        tripProofFile ? uploadPhoto(tripProofFile, `purchase-receipts/transport/${ts}-trip-proof.jpg`) : Promise.resolve(null),
+      ]);
 
       const { data, error } = await (supabase as any)
         .from('ff_transport_payments')
@@ -79,8 +95,8 @@ export default function FFTransportPaymentForm() {
           base_amount:    base,
           toll_charges:   toll,
           other_charges:  other,
-          bill_url:       form.bill_url       || null,
-          trip_proof_url: form.trip_proof_url || null,
+          bill_url:       billUrl,
+          trip_proof_url: tripProofUrl,
           payment_status: 'pending_ff_ops',
           created_by:     user?.id,
         })
@@ -148,6 +164,33 @@ export default function FFTransportPaymentForm() {
       className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
       {...rest}
     />
+  );
+
+  const PhotoField = ({ label, required, preview, onFile, onRemove }: any) => (
+    <div>
+      <label className="block text-xs font-medium text-gray-600 mb-1">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      {preview ? (
+        <div className="relative w-full h-28 rounded-xl overflow-hidden border-2 border-green-200">
+          <img src={preview} alt={label} className="w-full h-full object-cover" />
+          <button onClick={onRemove} className="absolute top-1 right-1 p-0.5 bg-red-500 text-white rounded-full hover:bg-red-600">
+            <X size={10} />
+          </button>
+        </div>
+      ) : (
+        <label className={`flex flex-col items-center justify-center gap-1 w-full h-28 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${
+          required ? 'border-amber-300 bg-amber-50 hover:bg-amber-100' : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
+        }`}>
+          <Upload size={16} className={required ? 'text-amber-400' : 'text-gray-400'} />
+          <span className="text-xs text-gray-500">Click to upload</span>
+          <input
+            type="file" accept="image/*" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ''; }}
+          />
+        </label>
+      )}
+    </div>
   );
 
   return (
@@ -245,22 +288,28 @@ export default function FFTransportPaymentForm() {
       {/* Supporting docs */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">
         <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-          <Upload className="w-4 h-4 text-gray-400" /> Supporting Documents (URL)
+          <Upload className="w-4 h-4 text-gray-400" /> Supporting Photos
         </h2>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Bill / Receipt URL">
-            <Input field="bill_url" placeholder="https://..." />
-          </Field>
-          <Field label="Trip Proof URL">
-            <Input field="trip_proof_url" placeholder="https://..." />
-          </Field>
+          <PhotoField
+            label="Bill / Receipt" required
+            preview={billPreview}
+            onFile={f => { setBillFile(f); setBillPreview(URL.createObjectURL(f)); }}
+            onRemove={() => { setBillFile(null); setBillPreview(''); }}
+          />
+          <PhotoField
+            label="Trip Proof"
+            preview={tripProofPreview}
+            onFile={f => { setTripProofFile(f); setTripProofPreview(URL.createObjectURL(f)); }}
+            onRemove={() => { setTripProofFile(null); setTripProofPreview(''); }}
+          />
         </div>
       </div>
 
       {/* Submit */}
       <button
         onClick={() => submitMutation.mutate()}
-        disabled={submitMutation.isPending || total <= 0}
+        disabled={submitMutation.isPending || total <= 0 || !billFile}
         className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-orange-600 text-white font-medium hover:bg-orange-700 disabled:opacity-50 transition text-sm"
       >
         <Save className="w-4 h-4" />

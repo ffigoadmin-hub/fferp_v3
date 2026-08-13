@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import {
   Banknote, Plus, Trash2, Save, ChevronLeft, CheckCircle2,
   Package, AlertCircle, Calculator, Building2, FileText,
+  Upload, X, Receipt,
 } from 'lucide-react';
 
 interface LineItem {
@@ -32,12 +33,27 @@ export default function FFVendorPaymentForm() {
   const qc = useQueryClient();
 
   const [vendorId, setVendorId]   = useState('');
+  const [vendorMode, setVendorMode] = useState<'existing' | 'new'>('existing');
+  const [newVendor, setNewVendor] = useState({ name: '', phone: '', gst_number: '', bank_name: '', bank_account: '', bank_ifsc: '' });
   const [poId, setPoId]           = useState('');
   const [hubId, setHubId]         = useState((user as any)?.hub_id ?? '');
   const [items, setItems]         = useState<LineItem[]>([{ ...EMPTY_ITEM }]);
   const [notes, setNotes]         = useState('');
   const [step, setStep]           = useState<'form' | 'confirm' | 'done'>('form');
   const [createdId, setCreatedId] = useState('');
+  const [proofPhotoFile, setProofPhotoFile] = useState<File | null>(null);
+  const [proofPhotoUrl, setProofPhotoUrl]   = useState('');
+
+  const handleProofFile = (file: File) => {
+    if (proofPhotoUrl) URL.revokeObjectURL(proofPhotoUrl);
+    setProofPhotoFile(file);
+    setProofPhotoUrl(URL.createObjectURL(file));
+  };
+  const removeProofPhoto = () => {
+    if (proofPhotoUrl) URL.revokeObjectURL(proofPhotoUrl);
+    setProofPhotoFile(null);
+    setProofPhotoUrl('');
+  };
 
   // Fetch vendors (with bank details)
   const { data: vendors = [] } = useQuery({
@@ -132,17 +148,43 @@ export default function FFVendorPaymentForm() {
 
   const submitMutation = useMutation({
     mutationFn: async () => {
-      if (!vendorId) throw new Error('Please select a vendor');
+      if (vendorMode === 'existing' && !vendorId) throw new Error('Please select a vendor');
+      if (vendorMode === 'new' && !newVendor.name.trim()) throw new Error('Please enter the new vendor\'s name');
       if (items.length === 0) throw new Error('Add at least one item');
       if (netAmount <= 0)    throw new Error('Net amount must be greater than ₹0');
+      if (!proofPhotoFile)  throw new Error('Please upload the payment slip photo');
+
+      let finalVendorId = vendorId;
+      if (vendorMode === 'new') {
+        const { data: vendorRow, error: vErr } = await (supabase as any)
+          .from('vendors')
+          .insert({
+            name:         newVendor.name.trim(),
+            phone:        newVendor.phone.trim() || null,
+            gst_number:   newVendor.gst_number.trim() || null,
+            bank_name:    newVendor.bank_name.trim() || null,
+            bank_account: newVendor.bank_account.trim() || null,
+            bank_ifsc:    newVendor.bank_ifsc.trim() || null,
+            is_active:    true,
+          })
+          .select('id')
+          .single();
+        if (vErr) throw vErr;
+        finalVendorId = vendorRow.id;
+      }
+
+      const path = `purchase-receipts/manual/${Date.now()}-${finalVendorId}-proof.jpg`;
+      const { error: upErr } = await supabase.storage.from('app-images').upload(path, proofPhotoFile, { upsert: true });
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from('app-images').getPublicUrl(path);
 
       const { data, error } = await (supabase as any)
         .from('ff_vendor_payments')
         .insert({
-          vendor_id:        vendorId,
+          vendor_id:        finalVendorId,
           purchase_order_id: poId || null,
           hub_id:           hubId || null,
-          items:            items,
+          items:            items.map(i => ({ ...i, payment_proof_url: publicUrl })),
           gross_amount:     grossAmount,
           deduction_amount: deduction,
           payment_status:   'pending_ff_ops',
@@ -158,6 +200,7 @@ export default function FFVendorPaymentForm() {
       setCreatedId(id);
       setStep('done');
       qc.invalidateQueries({ queryKey: ['ff-vendor-payments'] });
+      qc.invalidateQueries({ queryKey: ['ff-vendors'] });
       toast.success('Payment request submitted to FF Ops Manager ✓');
     },
     onError: (e: any) => toast.error(e.message || 'Submission failed'),
@@ -183,7 +226,7 @@ export default function FFVendorPaymentForm() {
         </div>
         <div className="flex gap-3 w-full">
           <button
-            onClick={() => { setStep('form'); setItems([{ ...EMPTY_ITEM }]); setVendorId(''); setPoId(''); }}
+            onClick={() => { setStep('form'); setItems([{ ...EMPTY_ITEM }]); setVendorId(''); setVendorMode('existing'); setNewVendor({ name: '', phone: '', gst_number: '', bank_name: '', bank_account: '', bank_ifsc: '' }); setPoId(''); removeProofPhoto(); }}
             className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             New Request
@@ -218,20 +261,62 @@ export default function FFVendorPaymentForm() {
           <Building2 className="w-4 h-4 text-blue-500" /> Vendor & Purchase Order
         </h2>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Vendor <span className="text-red-500">*</span></label>
-            <select
-              value={vendorId}
-              onChange={e => { setVendorId(e.target.value); setPoId(''); setItems([{ ...EMPTY_ITEM }]); }}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+        <div className="flex gap-2">
+          {(['existing', 'new'] as const).map(m => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setVendorMode(m)}
+              className={`flex-1 py-2 rounded-lg text-xs font-semibold border-2 transition-colors ${
+                vendorMode === m
+                  ? m === 'existing' ? 'bg-blue-600 text-white border-blue-600' : 'bg-purple-600 text-white border-purple-600'
+                  : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+              }`}
             >
-              <option value="">— Select Vendor —</option>
-              {vendors.map((v: any) => (
-                <option key={v.id} value={v.id}>{v.name}</option>
+              {m === 'existing' ? '⭐ Existing Vendor' : '➕ New Vendor'}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          {vendorMode === 'existing' ? (
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Vendor <span className="text-red-500">*</span></label>
+              <select
+                value={vendorId}
+                onChange={e => { setVendorId(e.target.value); setPoId(''); setItems([{ ...EMPTY_ITEM }]); }}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+              >
+                <option value="">— Select Vendor —</option>
+                {vendors.map((v: any) => (
+                  <option key={v.id} value={v.id}>{v.name}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="col-span-2 grid grid-cols-2 gap-3 bg-purple-50 rounded-xl p-4">
+              <h4 className="col-span-2 text-xs font-bold text-purple-700 uppercase tracking-wide">New Vendor Details</h4>
+              {[
+                { label: 'Vendor Name *', key: 'name', placeholder: 'Enter vendor name', span: true },
+                { label: 'Phone', key: 'phone', placeholder: 'Mobile number' },
+                { label: 'GST Number', key: 'gst_number', placeholder: 'GST number' },
+                { label: 'Bank Name', key: 'bank_name', placeholder: 'Bank name' },
+                { label: 'Account No.', key: 'bank_account', placeholder: 'Account number' },
+                { label: 'IFSC Code', key: 'bank_ifsc', placeholder: 'IFSC code' },
+              ].map(f => (
+                <div key={f.key} className={f.span ? 'col-span-2' : ''}>
+                  <label className="block text-[11px] font-semibold text-gray-600 mb-0.5">{f.label}</label>
+                  <input
+                    value={(newVendor as any)[f.key]}
+                    onChange={e => setNewVendor(v => ({ ...v, [f.key]: e.target.value }))}
+                    placeholder={f.placeholder}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-purple-400"
+                  />
+                </div>
               ))}
-            </select>
-          </div>
+              <p className="col-span-2 text-[10px] text-purple-600">Saved once you submit — it'll appear under "Existing Vendor" for future payments.</p>
+            </div>
+          )}
 
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Hub</label>
@@ -381,6 +466,30 @@ export default function FFVendorPaymentForm() {
         </div>
       </div>
 
+      {/* Payment Slip */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+        <label className="block text-xs font-medium text-gray-600 mb-2 flex items-center gap-1">
+          <Receipt className="w-3.5 h-3.5" /> Payment Slip Photo <span className="text-red-500">*</span>
+        </label>
+        {proofPhotoUrl ? (
+          <div className="relative w-full max-w-xs h-36 rounded-xl overflow-hidden border-2 border-green-200">
+            <img src={proofPhotoUrl} alt="Payment slip" className="w-full h-full object-cover" />
+            <button onClick={removeProofPhoto} className="absolute top-1.5 right-1.5 p-1 bg-red-500 text-white rounded-full hover:bg-red-600">
+              <X size={12} />
+            </button>
+          </div>
+        ) : (
+          <label className="flex flex-col items-center justify-center gap-1.5 w-full max-w-xs h-36 rounded-xl border-2 border-dashed border-amber-300 bg-amber-50 hover:bg-amber-100 cursor-pointer transition-colors">
+            <Upload size={20} className="text-amber-400" />
+            <span className="text-xs text-gray-500">Upload the physical slip</span>
+            <input
+              type="file" accept="image/*" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleProofFile(f); e.target.value = ''; }}
+            />
+          </label>
+        )}
+      </div>
+
       {/* Notes */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
         <label className="block text-xs font-medium text-gray-600 mb-2 flex items-center gap-1">
@@ -431,7 +540,7 @@ export default function FFVendorPaymentForm() {
 
         <button
           onClick={() => submitMutation.mutate()}
-          disabled={submitMutation.isPending || !vendorId || items.every(i => !i.product_name)}
+          disabled={submitMutation.isPending || (vendorMode === 'existing' ? !vendorId : !newVendor.name.trim()) || items.every(i => !i.product_name) || !proofPhotoUrl}
           className="mt-5 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 transition text-sm"
         >
           <Save className="w-4 h-4" />
