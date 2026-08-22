@@ -41,18 +41,22 @@ export default function FFVendorPaymentForm() {
   const [notes, setNotes]         = useState('');
   const [step, setStep]           = useState<'form' | 'confirm' | 'done'>('form');
   const [createdId, setCreatedId] = useState('');
-  const [proofPhotoFile, setProofPhotoFile] = useState<File | null>(null);
-  const [proofPhotoUrl, setProofPhotoUrl]   = useState('');
+  const [proofPhotos, setProofPhotos] = useState<{ file: File; url: string }[]>([]);
 
-  const handleProofFile = (file: File) => {
-    if (proofPhotoUrl) URL.revokeObjectURL(proofPhotoUrl);
-    setProofPhotoFile(file);
-    setProofPhotoUrl(URL.createObjectURL(file));
+  const addProofFiles = (files: FileList) => {
+    const added = Array.from(files).map(file => ({ file, url: URL.createObjectURL(file) }));
+    setProofPhotos(prev => [...prev, ...added]);
   };
-  const removeProofPhoto = () => {
-    if (proofPhotoUrl) URL.revokeObjectURL(proofPhotoUrl);
-    setProofPhotoFile(null);
-    setProofPhotoUrl('');
+  const removeProofPhoto = (idx: number) => {
+    setProofPhotos(prev => {
+      const target = prev[idx];
+      if (target) URL.revokeObjectURL(target.url);
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+  const clearProofPhotos = () => {
+    proofPhotos.forEach(p => URL.revokeObjectURL(p.url));
+    setProofPhotos([]);
   };
 
   // Fetch vendors (with bank details)
@@ -61,7 +65,7 @@ export default function FFVendorPaymentForm() {
     queryFn: async () => {
       const { data } = await (supabase as any)
         .from('vendors')
-        .select('id, name, bank_name, bank_account, bank_ifsc, phone')
+        .select('id, name, bank_name, bank_account, bank_ifsc, account_number, ifsc_code, phone')
         .order('name');
       return data || [];
     },
@@ -152,20 +156,28 @@ export default function FFVendorPaymentForm() {
       if (vendorMode === 'new' && !newVendor.name.trim()) throw new Error('Please enter the new vendor\'s name');
       if (items.length === 0) throw new Error('Add at least one item');
       if (netAmount <= 0)    throw new Error('Net amount must be greater than ₹0');
-      if (!proofPhotoFile)  throw new Error('Please upload the payment slip photo');
+      if (proofPhotos.length === 0) throw new Error('Please upload at least one payment slip photo');
 
       let finalVendorId = vendorId;
       if (vendorMode === 'new') {
         const { data: vendorRow, error: vErr } = await (supabase as any)
           .from('vendors')
           .insert({
-            name:         newVendor.name.trim(),
-            phone:        newVendor.phone.trim() || null,
-            gst_number:   newVendor.gst_number.trim() || null,
-            bank_name:    newVendor.bank_name.trim() || null,
-            bank_account: newVendor.bank_account.trim() || null,
-            bank_ifsc:    newVendor.bank_ifsc.trim() || null,
-            is_active:    true,
+            name:           newVendor.name.trim(),
+            phone:          newVendor.phone.trim() || null,
+            gst_number:     newVendor.gst_number.trim() || null,
+            bank_name:      newVendor.bank_name.trim() || null,
+            // Written under BOTH column-naming conventions seen in this
+            // codebase (bank_account/bank_ifsc used by VendorManagement.tsx
+            // + this form's own vendor list; account_number/ifsc_code used
+            // by BuyPage.tsx + FFPaymentApprovals.tsx's approval-card query)
+            // until CHECK_VENDORS_BANK_COLUMNS.sql confirms which is real —
+            // this guarantees a vendor created here shows correctly in both.
+            bank_account:   newVendor.bank_account.trim() || null,
+            bank_ifsc:      newVendor.bank_ifsc.trim() || null,
+            account_number: newVendor.bank_account.trim() || null,
+            ifsc_code:      newVendor.bank_ifsc.trim() || null,
+            is_active:      true,
           })
           .select('id')
           .single();
@@ -173,10 +185,14 @@ export default function FFVendorPaymentForm() {
         finalVendorId = vendorRow.id;
       }
 
-      const path = `purchase-receipts/manual/${Date.now()}-${finalVendorId}-proof.jpg`;
-      const { error: upErr } = await supabase.storage.from('app-images').upload(path, proofPhotoFile, { upsert: true });
-      if (upErr) throw upErr;
-      const { data: { publicUrl } } = supabase.storage.from('app-images').getPublicUrl(path);
+      const ts = Date.now();
+      const publicUrls = await Promise.all(proofPhotos.map(async (p, idx) => {
+        const path = `purchase-receipts/manual/${ts}-${finalVendorId}-proof-${idx}.jpg`;
+        const { error: upErr } = await supabase.storage.from('app-images').upload(path, p.file, { upsert: true });
+        if (upErr) throw upErr;
+        const { data: { publicUrl } } = supabase.storage.from('app-images').getPublicUrl(path);
+        return publicUrl;
+      }));
 
       const { data, error } = await (supabase as any)
         .from('ff_vendor_payments')
@@ -184,7 +200,9 @@ export default function FFVendorPaymentForm() {
           vendor_id:        finalVendorId,
           purchase_order_id: poId || null,
           hub_id:           hubId || null,
-          items:            items.map(i => ({ ...i, payment_proof_url: publicUrl })),
+          // payment_proof_url kept as the first slip for older readers that
+          // expect a single URL; payment_proof_urls carries the full set.
+          items:            items.map(i => ({ ...i, payment_proof_url: publicUrls[0], payment_proof_urls: publicUrls })),
           gross_amount:     grossAmount,
           deduction_amount: deduction,
           payment_status:   'pending_ff_ops',
@@ -226,7 +244,7 @@ export default function FFVendorPaymentForm() {
         </div>
         <div className="flex gap-3 w-full">
           <button
-            onClick={() => { setStep('form'); setItems([{ ...EMPTY_ITEM }]); setVendorId(''); setVendorMode('existing'); setNewVendor({ name: '', phone: '', gst_number: '', bank_name: '', bank_account: '', bank_ifsc: '' }); setPoId(''); removeProofPhoto(); }}
+            onClick={() => { setStep('form'); setItems([{ ...EMPTY_ITEM }]); setVendorId(''); setVendorMode('existing'); setNewVendor({ name: '', phone: '', gst_number: '', bank_name: '', bank_account: '', bank_ifsc: '' }); setPoId(''); clearProofPhotos(); }}
             className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             New Request
@@ -332,19 +350,25 @@ export default function FFVendorPaymentForm() {
             </select>
           </div>
 
-          {/* Vendor bank details autofill */}
-          {selectedVendor && (selectedVendor.bank_name || selectedVendor.bank_account) && (
-            <div className="col-span-2 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 flex items-start gap-3">
-              <Banknote className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
-              <div className="text-xs space-y-0.5">
-                <p className="font-semibold text-blue-800">Bank Details — {selectedVendor.name}</p>
-                {selectedVendor.bank_name    && <p className="text-blue-700">Bank: {selectedVendor.bank_name}</p>}
-                {selectedVendor.bank_account && <p className="text-blue-700">Account: {selectedVendor.bank_account}</p>}
-                {selectedVendor.bank_ifsc    && <p className="text-blue-700">IFSC: {selectedVendor.bank_ifsc}</p>}
-                {selectedVendor.phone        && <p className="text-blue-600">Phone: {selectedVendor.phone}</p>}
+          {/* Vendor bank details autofill — falls back across both column
+              naming conventions in play (see comment on the new-vendor insert) */}
+          {selectedVendor && (() => {
+            const acct = selectedVendor.bank_account || selectedVendor.account_number;
+            const ifsc = selectedVendor.bank_ifsc || selectedVendor.ifsc_code;
+            if (!selectedVendor.bank_name && !acct) return null;
+            return (
+              <div className="col-span-2 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 flex items-start gap-3">
+                <Banknote className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+                <div className="text-xs space-y-0.5">
+                  <p className="font-semibold text-blue-800">Bank Details — {selectedVendor.name}</p>
+                  {selectedVendor.bank_name && <p className="text-blue-700">Bank: {selectedVendor.bank_name}</p>}
+                  {acct && <p className="text-blue-700">Account: {acct}</p>}
+                  {ifsc && <p className="text-blue-700">IFSC: {ifsc}</p>}
+                  {selectedVendor.phone && <p className="text-blue-600">Phone: {selectedVendor.phone}</p>}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           <div className="col-span-2">
             <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -466,28 +490,31 @@ export default function FFVendorPaymentForm() {
         </div>
       </div>
 
-      {/* Payment Slip */}
+      {/* Payment Slip(s) */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
         <label className="block text-xs font-medium text-gray-600 mb-2 flex items-center gap-1">
-          <Receipt className="w-3.5 h-3.5" /> Payment Slip Photo <span className="text-red-500">*</span>
+          <Receipt className="w-3.5 h-3.5" /> Payment Slip Photo{proofPhotos.length > 1 ? 's' : ''} <span className="text-red-500">*</span>
         </label>
-        {proofPhotoUrl ? (
-          <div className="relative w-full max-w-xs h-36 rounded-xl overflow-hidden border-2 border-green-200">
-            <img src={proofPhotoUrl} alt="Payment slip" className="w-full h-full object-cover" />
-            <button onClick={removeProofPhoto} className="absolute top-1.5 right-1.5 p-1 bg-red-500 text-white rounded-full hover:bg-red-600">
-              <X size={12} />
-            </button>
-          </div>
-        ) : (
-          <label className="flex flex-col items-center justify-center gap-1.5 w-full max-w-xs h-36 rounded-xl border-2 border-dashed border-amber-300 bg-amber-50 hover:bg-amber-100 cursor-pointer transition-colors">
-            <Upload size={20} className="text-amber-400" />
-            <span className="text-xs text-gray-500">Upload the physical slip</span>
+        <div className="flex flex-wrap gap-3">
+          {proofPhotos.map((p, idx) => (
+            <div key={idx} className="relative w-28 h-28 rounded-xl overflow-hidden border-2 border-green-200">
+              <img src={p.url} alt={`Payment slip ${idx + 1}`} className="w-full h-full object-cover" />
+              <button onClick={() => removeProofPhoto(idx)} className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600">
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+          <label className="flex flex-col items-center justify-center gap-1 w-28 h-28 rounded-xl border-2 border-dashed border-amber-300 bg-amber-50 hover:bg-amber-100 cursor-pointer transition-colors">
+            <Upload size={18} className="text-amber-400" />
+            <span className="text-[10px] text-gray-500 text-center px-1">
+              {proofPhotos.length === 0 ? 'Upload slip' : 'Add another'}
+            </span>
             <input
-              type="file" accept="image/*" className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleProofFile(f); e.target.value = ''; }}
+              type="file" accept="image/*" multiple className="hidden"
+              onChange={e => { if (e.target.files?.length) addProofFiles(e.target.files); e.target.value = ''; }}
             />
           </label>
-        )}
+        </div>
       </div>
 
       {/* Notes */}
@@ -540,7 +567,7 @@ export default function FFVendorPaymentForm() {
 
         <button
           onClick={() => submitMutation.mutate()}
-          disabled={submitMutation.isPending || (vendorMode === 'existing' ? !vendorId : !newVendor.name.trim()) || items.every(i => !i.product_name) || !proofPhotoUrl}
+          disabled={submitMutation.isPending || (vendorMode === 'existing' ? !vendorId : !newVendor.name.trim()) || items.every(i => !i.product_name) || proofPhotos.length === 0}
           className="mt-5 w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 transition text-sm"
         >
           <Save className="w-4 h-4" />

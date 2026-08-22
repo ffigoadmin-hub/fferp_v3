@@ -348,19 +348,29 @@ function PaymentCard({
                   )}
                 </div>
               )}
-              {/* Payment slip — shared across all items in a Buy-cart submission,
-                  stored redundantly per item under payment_proof_url */}
-              {payment.items?.[0]?.payment_proof_url && (
-                <div className="mb-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Payment Slip</p>
-                  <a href={payment.items[0].payment_proof_url} target="_blank" rel="noopener noreferrer">
-                    <img
-                      src={payment.items[0].payment_proof_url}
-                      className="w-24 h-24 rounded-lg object-cover border border-gray-200 hover:opacity-75 transition"
-                    />
-                  </a>
-                </div>
-              )}
+              {/* Payment slip(s) — shared across all items in a submission,
+                  stored redundantly per item under payment_proof_url(s) */}
+              {(() => {
+                const first = payment.items?.[0];
+                const urls: string[] = first?.payment_proof_urls?.length
+                  ? first.payment_proof_urls
+                  : (first?.payment_proof_url ? [first.payment_proof_url] : []);
+                if (!urls.length) return null;
+                return (
+                  <div className="mb-3">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">
+                      Payment Slip{urls.length > 1 ? `s (${urls.length})` : ''}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {urls.map((u, i) => (
+                        <a key={i} href={u} target="_blank" rel="noopener noreferrer">
+                          <img src={u} className="w-24 h-24 rounded-lg object-cover border border-gray-200 hover:opacity-75 transition" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
               <ItemsTable items={payment.items || []} />
             </>
           )}
