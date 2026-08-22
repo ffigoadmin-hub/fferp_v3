@@ -22,6 +22,7 @@ interface CartItem {
   is_custom: boolean;        // free-text item not from catalog
   product_id: string | null;
   product_name: string;
+  category: string;          // required when is_custom — becomes a real product's category
   unit: Unit;
   qty: number;
   unit_price: number;
@@ -36,6 +37,7 @@ function newCartItem(): CartItem {
     is_custom: false,
     product_id: null,
     product_name: '',
+    category: '',
     unit: 'kg',
     qty: 1,
     unit_price: 0,
@@ -150,18 +152,27 @@ function CartRow({
   onChange,
   onRemove,
   products,
+  categories,
 }: {
   item: CartItem;
   onChange: (key: string, patch: Partial<CartItem>) => void;
   onRemove: (key: string) => void;
   products: any[];
+  categories: string[];
 }) {
   const [showProductSearch, setShowProductSearch] = useState(false);
   const [productQ, setProductQ] = useState('');
   const searchRef = useRef<HTMLDivElement>(null);
+  const [showCategorySearch, setShowCategorySearch] = useState(false);
+  const [categoryQ, setCategoryQ] = useState('');
+  const categoryRef = useRef<HTMLDivElement>(null);
 
   const filteredProducts = products.filter(p =>
     !productQ || p.name.toLowerCase().includes(productQ.toLowerCase())
+  ).slice(0, 8);
+
+  const filteredCategories = categories.filter(c =>
+    !categoryQ || c.toLowerCase().includes(categoryQ.toLowerCase())
   ).slice(0, 8);
 
   const total = lineTotal(item);
@@ -248,6 +259,56 @@ function CartRow({
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
+
+      {/* Row 1b: Category (custom items only — becomes the new product's category) */}
+      {item.is_custom && (
+        <div className="relative" ref={categoryRef}>
+          <div
+            className="flex items-center gap-2 cursor-pointer rounded-lg border border-gray-200 px-2.5 py-1.5 bg-white"
+            onClick={() => setShowCategorySearch(true)}
+          >
+            <span className={`text-xs flex-1 ${item.category ? 'text-slate-800 font-medium' : 'text-gray-400'}`}>
+              {item.category || 'Category…'}
+            </span>
+            <ChevronDown className="h-3 w-3 text-gray-400" />
+          </div>
+          {showCategorySearch && (
+            <div className="absolute top-full left-0 right-0 z-20 bg-white border border-gray-200 rounded-xl shadow-lg mt-1">
+              <div className="p-2 border-b border-gray-100">
+                <input autoFocus value={categoryQ} onChange={e => setCategoryQ(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:ring-1 focus:ring-green-500"
+                  placeholder="Search categories…" />
+              </div>
+              <div className="max-h-48 overflow-y-auto divide-y divide-gray-50">
+                {filteredCategories.map(c => (
+                  <button key={c} onMouseDown={() => {
+                    onChange(item.key, { category: c });
+                    setShowCategorySearch(false);
+                    setCategoryQ('');
+                  }}
+                    className="w-full text-left px-3 py-2 hover:bg-green-50 text-xs font-medium text-slate-800">
+                    {c}
+                  </button>
+                ))}
+                {categoryQ.length > 0 && !categories.some(c => c.toLowerCase() === categoryQ.toLowerCase()) && (
+                  <button onMouseDown={() => {
+                    onChange(item.key, { category: categoryQ });
+                    setShowCategorySearch(false);
+                    setCategoryQ('');
+                  }}
+                    className="w-full text-left px-3 py-2 hover:bg-amber-50 border-t border-gray-100 flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-amber-600 uppercase">Use manually:</span>
+                    <span className="text-xs font-semibold text-slate-700">"{categoryQ}"</span>
+                  </button>
+                )}
+                {filteredCategories.length === 0 && !categoryQ && (
+                  <p className="px-3 py-2 text-xs text-slate-400 text-center">Type a category name to search</p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Row 2: Unit, Qty, Price, Discount */}
       <div className="grid grid-cols-4 gap-2">
@@ -360,6 +421,7 @@ export default function NewOrder() {
           is_custom: false,
           product_id: it.product?.id ?? null,
           product_name: it.product?.name ?? '',
+          category: it.product?.category ?? '',
           unit: (it.product?.unit ?? 'kg').toLowerCase() as Unit,
           qty: it.qty_kg ?? it.quantity_kg ?? 1,
           unit_price: it.unit_price ?? 0,
@@ -406,6 +468,8 @@ export default function NewOrder() {
     },
   });
 
+  const categories = [...new Set((products as any[]).map(p => p.category).filter(Boolean))].sort() as string[];
+
   /* Cart helpers */
   const updateItem = (key: string, patch: Partial<CartItem>) =>
     setCart(prev => prev.map(c => c.key === key ? { ...c, ...patch } : c));
@@ -425,8 +489,32 @@ export default function NewOrder() {
       if (!selectedHubId) throw new Error('Please select a delivery hub for this order');
       const validItems = cart.filter(c => c.product_name.trim() && c.qty > 0 && c.unit_price > 0);
       if (!validItems.length) throw new Error('Add at least one item with name, qty and price');
+      if (validItems.some(c => c.is_custom && !c.category.trim())) {
+        throw new Error('Pick or type a category for every custom item');
+      }
 
       try {
+        // Custom items with no product_id become real catalog products —
+        // same self-service pattern as the dynamic-vendor flow — so they're
+        // searchable/reusable from the catalog on the next order.
+        const customItems = validItems.filter(c => c.is_custom && !c.product_id);
+        let newProductIds: Record<string, string> = {};
+        if (customItems.length > 0) {
+          const { data: newProducts, error: prodErr } = await supabase
+            .from('products')
+            .insert(customItems.map(c => ({
+              name: c.product_name.trim(),
+              category: c.category.trim(),
+              unit: c.unit,
+              grade_a_price: c.unit_price,
+              is_active: true,
+            })))
+            .select('id, name');
+          if (prodErr) throw prodErr;
+          newProductIds = Object.fromEntries(
+            customItems.map((c, idx) => [c.key, newProducts![idx].id])
+          );
+        }
         const isRealUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user?.id ?? '');
         const { data: order, error: orderErr } = await supabase
           .from('sales_orders')
@@ -451,7 +539,7 @@ export default function NewOrder() {
         const { error: itemsErr } = await supabase.from('sales_order_items').insert(
           validItems.map(item => ({
             order_id:     order.id,
-            product_id:   item.product_id || null,
+            product_id:   newProductIds[item.key] || item.product_id || null,
             product_name: item.product_name,
             quantity:     item.qty,
             qty_kg:       item.qty,
@@ -713,6 +801,7 @@ export default function NewOrder() {
             onChange={updateItem}
             onRemove={removeItem}
             products={products as any[]}
+            categories={categories}
           />
         ))}
 
