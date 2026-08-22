@@ -1,10 +1,15 @@
 // @ts-nocheck
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
-import { Banknote, Truck, ChevronDown, ChevronUp, RefreshCw, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { toast } from 'sonner';
+import { Banknote, Truck, ChevronDown, ChevronUp, RefreshCw, Clock, CheckCircle2, XCircle, Trash2, Loader2 } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 // ── Status config ──────────────────────────────────────────────
 const STATUS_COLORS: Record<string, string> = {
@@ -68,8 +73,9 @@ function ApprovalTimeline({ status }: { status: string }) {
   );
 }
 
-function PaymentRow({ payment, type }: { payment: any; type: 'vendor' | 'transport' }) {
+function PaymentRow({ payment, type, onDelete, isDeleting }: { payment: any; type: 'vendor' | 'transport'; onDelete: (payment: any) => void; isDeleting: boolean }) {
   const [expanded, setExpanded] = useState(false);
+  const canDelete = payment.payment_status === 'pending_ff_ops';
 
   const amount = type === 'vendor'
     ? (payment.net_amount ?? payment.gross_amount)
@@ -107,12 +113,24 @@ function PaymentRow({ payment, type }: { payment: any; type: 'vendor' | 'transpo
             <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${STATUS_COLORS[payment.payment_status] || 'bg-gray-100 text-gray-600'}`}>
               {STATUS_LABELS[payment.payment_status] || payment.payment_status}
             </span>
-            <button
-              onClick={() => setExpanded(v => !v)}
-              className="mt-1 p-1 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 transition"
-            >
-              {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
+            <div className="flex items-center gap-1 mt-1">
+              {canDelete && (
+                <button
+                  onClick={() => onDelete(payment)}
+                  disabled={isDeleting}
+                  title="Delete this payment request"
+                  className="p-1 rounded-lg border border-red-100 text-red-400 hover:bg-red-50 hover:text-red-600 transition disabled:opacity-40"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+              <button
+                onClick={() => setExpanded(v => !v)}
+                className="p-1 rounded-lg border border-gray-200 text-gray-400 hover:bg-gray-50 transition"
+              >
+                {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -121,6 +139,9 @@ function PaymentRow({ payment, type }: { payment: any; type: 'vendor' | 'transpo
           <div className="mt-3 pt-3 border-t border-gray-50">
             <ApprovalTimeline status={payment.payment_status} />
           </div>
+        )}
+        {canDelete && (
+          <p className="mt-2 text-[10px] text-gray-400">Wrong info? You can delete this until FF Ops reviews it.</p>
         )}
       </div>
 
@@ -176,10 +197,35 @@ function PaymentRow({ payment, type }: { payment: any; type: 'vendor' | 'transpo
 // ── Main page ──────────────────────────────────────────────────
 export default function MySubmittedPayments() {
   const { user } = useAuth();
+  const qc = useQueryClient();
   const [tab, setTab] = useState<'vendor' | 'transport'>('vendor');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
 
   const userId = user?.id;
+
+  const deleteMutation = useMutation({
+    mutationFn: async (payment: any) => {
+      const table = tab === 'vendor' ? 'ff_vendor_payments' : 'ff_transport_payments';
+      // Belt-and-suspenders: only the creator can delete, and only before
+      // FF Ops has reviewed it — re-checked here even though the UI already
+      // hides the button once either condition stops holding.
+      const { error } = await (supabase as any)
+        .from(table)
+        .delete()
+        .eq('id', payment.id)
+        .eq('created_by', userId)
+        .eq('payment_status', 'pending_ff_ops');
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Payment request deleted');
+      setDeleteTarget(null);
+      qc.invalidateQueries({ queryKey: ['my-vendor-payments'] });
+      qc.invalidateQueries({ queryKey: ['my-transport-payments'] });
+    },
+    onError: (e: any) => toast.error(e.message || 'Failed to delete'),
+  });
 
   const { data: vendorPayments = [], isLoading: vLoading, refetch: vRefetch } = useQuery({
     queryKey: ['my-vendor-payments', userId, statusFilter],
@@ -324,10 +370,39 @@ export default function MySubmittedPayments() {
       ) : (
         <div className="space-y-3">
           {payments.map((payment: any) => (
-            <PaymentRow key={payment.id} payment={payment} type={tab} />
+            <PaymentRow
+              key={payment.id}
+              payment={payment}
+              type={tab}
+              onDelete={setDeleteTarget}
+              isDeleting={deleteMutation.isPending && deleteTarget?.id === payment.id}
+            />
           ))}
         </div>
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={v => !v && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this payment request?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the {tab} payment request
+              {deleteTarget?.vendors?.name ? ` for ${deleteTarget.vendors.name}` : ''}
+              {' '}and cannot be undone. Only possible while it's still pending FF Ops review.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget)}
+              disabled={deleteMutation.isPending}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
