@@ -205,10 +205,18 @@ function CartRow({
               </div>
               {showProductSearch && (
                 <div className="absolute top-full left-0 right-0 z-20 bg-white border border-gray-200 rounded-xl shadow-lg mt-1">
-                  <div className="p-2 border-b border-gray-100">
+                  <div className="p-2 border-b border-gray-100 space-y-1.5">
                     <input autoFocus value={productQ} onChange={e => setProductQ(e.target.value)}
                       className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:ring-1 focus:ring-green-500"
                       placeholder="Search products…" />
+                    <button onMouseDown={() => {
+                      onChange(item.key, { is_custom: true, product_id: null, product_name: productQ });
+                      setShowProductSearch(false);
+                      setProductQ('');
+                    }}
+                      className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-semibold">
+                      <Plus className="h-3.5 w-3.5" /> Add New Item{productQ ? ` — "${productQ}"` : ''}
+                    </button>
                   </div>
                   <div className="max-h-48 overflow-y-auto divide-y divide-gray-50">
                     {filteredProducts.map(p => (
@@ -227,17 +235,6 @@ function CartRow({
                         <p className="text-[10px] text-slate-400">₹{p.grade_a_price}/kg · {p.category}</p>
                       </button>
                     ))}
-                    {productQ.length > 0 && (
-                      <button onMouseDown={() => {
-                        onChange(item.key, { is_custom: true, product_id: null, product_name: productQ });
-                        setShowProductSearch(false);
-                        setProductQ('');
-                      }}
-                        className="w-full text-left px-3 py-2 hover:bg-amber-50 border-t border-gray-100 flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-amber-600 uppercase">Use manually:</span>
-                        <span className="text-xs font-semibold text-slate-700">"{productQ}"</span>
-                      </button>
-                    )}
                     {filteredProducts.length === 0 && !productQ && (
                       <p className="px-3 py-2 text-xs text-slate-400 text-center">Type a product name to search</p>
                     )}
