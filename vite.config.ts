@@ -24,10 +24,6 @@ export default defineConfig(({ mode }) => ({
     exclude: ["pdfjs-dist"],
   },
   build: {
-    rollupOptions: {
-      // Treat pdfjs-dist as external so Rollup doesn't try to bundle it
-      external: (id) => id.startsWith("pdfjs-dist"),
-    },
     // Increase chunk size limit to avoid warnings on large ERP bundle
     chunkSizeWarningLimit: 3000,
   },
