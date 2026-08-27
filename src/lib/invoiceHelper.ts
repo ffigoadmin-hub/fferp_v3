@@ -27,6 +27,8 @@ export interface CreateInvoiceParams {
   subtotal: number;
   discountAmount?: number;
   taxAmount?: number;
+  /** Pre-filled from the order's delivery_charges — still editable later via finalizeInvoice(). */
+  deliveryCharges?: number;
   totalAmount: number;
   paymentMode?: string;
   notes?: string | null;
@@ -72,6 +74,7 @@ export async function createInvoiceForOrder(params: CreateInvoiceParams): Promis
       subtotal:         params.subtotal,
       discount_amount:  params.discountAmount ?? 0,
       tax_amount:       params.taxAmount ?? 0,
+      delivery_charges: params.deliveryCharges ?? 0,
       total_amount:     params.totalAmount,
       payment_mode:     params.paymentMode ?? 'cod',
       status:           'draft',

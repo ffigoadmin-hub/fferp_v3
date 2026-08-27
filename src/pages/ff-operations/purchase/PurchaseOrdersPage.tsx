@@ -11,9 +11,11 @@ import {
   Package, ChevronDown, ChevronRight, RefreshCw,
   ShoppingCart, Clock, CheckCircle2, XCircle, Loader2,
   Calendar, Hash, ShoppingBag, Pencil, Plus, Trash2,
+  Upload, FileWarning, CheckCircle, AlertCircle as AlertCircleIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { savePOToStore, fetchMaxPOSerial, type StoredPO } from '@/lib/purchaseStore';
+import { parsePOFile, matchVendor, matchHub, type ParsedPO } from '@/lib/poImportParsers';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -263,6 +265,276 @@ function PODialog({
   );
 }
 
+// ── Import PO(s) Dialog — PDF / CSV / XLSX ──────────────────────────────────────
+interface ReviewRow extends ParsedPO {
+  key: string;
+  hubId: string;
+  vendorId: string;          // '' → will create a new vendor from vendorNameOverride
+  vendorNameOverride: string;
+  include: boolean;
+  status: 'pending' | 'importing' | 'done' | 'error';
+  errorMsg?: string;
+}
+
+function ImportPODialog({
+  open, onClose, hubs, vendors, onSaved,
+}: {
+  open: boolean;
+  onClose: () => void;
+  hubs: Array<{ id: string; name: string }>;
+  vendors: Array<{ id: string; name: string }>;
+  onSaved: () => void;
+}) {
+  const [rows, setRows] = useState<ReviewRow[]>([]);
+  const [parsing, setParsing] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [fileName, setFileName] = useState('');
+
+  const reset = () => { setRows([]); setFileName(''); setExpanded(null); };
+
+  const handleFile = async (file: File) => {
+    setFileName(file.name);
+    setParsing(true);
+    setRows([]);
+    try {
+      const parsed = await parsePOFile(file);
+      if (!parsed.length) {
+        toast.error('No purchase orders could be read from this file.');
+        return;
+      }
+      const reviewRows: ReviewRow[] = parsed.map((p, i) => {
+        const hub = matchHub(p.hubRaw, hubs);
+        const vendor = matchVendor(p.vendorRaw, vendors);
+        return {
+          ...p,
+          key: `${i}-${p.sourceRef}`,
+          hubId: hub?.id ?? '',
+          vendorId: vendor?.id ?? '',
+          vendorNameOverride: vendor?.name ?? p.vendorRaw,
+          include: true,
+          status: 'pending',
+        };
+      });
+      setRows(reviewRows);
+      toast.success(`Parsed ${reviewRows.length} PO${reviewRows.length > 1 ? 's' : ''} — review before importing`);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to parse file');
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const updateRow = (key: string, patch: Partial<ReviewRow>) =>
+    setRows(prev => prev.map(r => r.key === key ? { ...r, ...patch } : r));
+
+  const includedCount = rows.filter(r => r.include).length;
+  const readyCount = rows.filter(r => r.include && r.hubId).length;
+
+  const handleImport = async () => {
+    setImporting(true);
+    let serial = await fetchMaxPOSerial();
+    let created = 0, failed = 0;
+
+    for (const row of rows) {
+      if (!row.include) continue;
+      if (!row.hubId) {
+        updateRow(row.key, { status: 'error', errorMsg: 'No hub selected' });
+        failed++;
+        continue;
+      }
+      updateRow(row.key, { status: 'importing' });
+      try {
+        let vendorId = row.vendorId;
+        if (!vendorId) {
+          const name = row.vendorNameOverride.trim();
+          if (!name) throw new Error('No vendor name');
+          const { data: newVendor, error: vErr } = await supabase
+            .from('vendors')
+            .insert({ name, type: 'dynamic', is_active: true })
+            .select('id')
+            .single();
+          if (vErr) throw vErr;
+          vendorId = newVendor.id;
+        }
+
+        serial += 1;
+        const hub = hubs.find(h => h.id === row.hubId);
+        const poNumber = `PO-${String(serial).padStart(5, '0')}`;
+        const stored: StoredPO = {
+          id: '',
+          poNumber,
+          vendorName: row.vendorNameOverride,
+          date: row.date,
+          deliveryDate: row.date,
+          paymentTerms: 'Due on Receipt',
+          status: 'pending',
+          items: row.items.map((it, idx) => ({
+            id: idx + 1,
+            itemName: it.name,
+            account: 'Cost of Goods Sold',
+            quantity: it.qty,
+            rate: it.rate,
+            tax: 'GST 5%',
+            discount: 0,
+            customerDetails: '',
+          })),
+          subTotal: row.parsedTotal,
+          total: row.parsedTotal,
+          notes: `Imported from ${row.sourceRef}`,
+          hub_id: row.hubId,
+          hub_name: hub?.name ?? '',
+          vendor_id: vendorId,
+        };
+
+        const result = await savePOToStore(stored);
+        if (!result) throw new Error('Save failed');
+        updateRow(row.key, { status: 'done' });
+        created++;
+      } catch (e: any) {
+        updateRow(row.key, { status: 'error', errorMsg: e.message || 'Failed' });
+        failed++;
+      }
+    }
+
+    setImporting(false);
+    if (created) onSaved();
+    toast[failed ? 'error' : 'success'](
+      failed ? `Imported ${created}, ${failed} failed — see rows below` : `Imported ${created} purchase order${created > 1 ? 's' : ''}`
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={v => { if (!v) { onClose(); reset(); } }}>
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Import Purchase Orders</DialogTitle>
+        </DialogHeader>
+
+        {!rows.length ? (
+          <label className={cn(
+            'flex flex-col items-center justify-center gap-2 w-full h-40 rounded-xl border-2 border-dashed cursor-pointer transition-colors',
+            parsing ? 'border-blue-300 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
+          )}>
+            {parsing ? (
+              <>
+                <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+                <span className="text-sm text-blue-600">Reading {fileName}…</span>
+              </>
+            ) : (
+              <>
+                <Upload className="h-6 w-6 text-gray-400" />
+                <span className="text-sm font-medium text-gray-600">Upload a PDF, CSV, or XLSX purchase order</span>
+                <span className="text-xs text-gray-400">One PO per page (PDF) or grouped by PO number (CSV/XLSX)</span>
+              </>
+            )}
+            <input
+              type="file" accept=".pdf,.csv,.xlsx,.xls" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }}
+            />
+          </label>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <span>{fileName} — {rows.length} PO{rows.length > 1 ? 's' : ''} parsed, {includedCount} selected, {readyCount} ready</span>
+              <button onClick={reset} className="text-blue-600 hover:underline font-medium">Upload a different file</button>
+            </div>
+
+            <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+              {rows.map(row => (
+                <div key={row.key} className={cn(
+                  'border rounded-lg overflow-hidden',
+                  row.status === 'error' ? 'border-red-300 bg-red-50' :
+                  row.status === 'done' ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white'
+                )}>
+                  <div className="flex items-center gap-2 px-3 py-2">
+                    <input type="checkbox" checked={row.include} disabled={importing}
+                      onChange={e => updateRow(row.key, { include: e.target.checked })} />
+                    <button onClick={() => setExpanded(v => v === row.key ? null : row.key)} className="p-0.5 text-gray-400">
+                      {expanded === row.key ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                    </button>
+                    <span className="text-xs font-mono text-gray-400 w-20 shrink-0">{row.sourceRef}</span>
+
+                    <Select value={row.hubId} onValueChange={v => updateRow(row.key, { hubId: v })} disabled={importing}>
+                      <SelectTrigger className={cn('h-8 text-xs flex-1', !row.hubId && 'border-amber-400 text-amber-700')}>
+                        <SelectValue placeholder="Select hub…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+
+                    <Input
+                      value={row.vendorNameOverride} disabled={importing}
+                      onChange={e => updateRow(row.key, { vendorNameOverride: e.target.value, vendorId: '' })}
+                      className={cn('h-8 text-xs flex-1', !row.vendorId && 'border-amber-300')}
+                      placeholder="Vendor name"
+                    />
+
+                    <span className="text-xs font-semibold text-gray-700 w-20 text-right shrink-0">
+                      ₹{row.parsedTotal.toLocaleString('en-IN')}
+                    </span>
+
+                    {row.status === 'importing' && <Loader2 className="h-4 w-4 animate-spin text-blue-500 shrink-0" />}
+                    {row.status === 'done' && <CheckCircle className="h-4 w-4 text-green-600 shrink-0" />}
+                    {row.status === 'error' && <AlertCircleIcon className="h-4 w-4 text-red-500 shrink-0" title={row.errorMsg} />}
+                  </div>
+
+                  {!row.vendorId && (
+                    <p className="px-3 pb-1.5 -mt-1 text-[10px] text-amber-600">New vendor — will be created on import</p>
+                  )}
+                  {row.declaredTotal != null && Math.abs(row.declaredTotal - row.parsedTotal) > 1 && (
+                    <p className="px-3 pb-1.5 -mt-1 text-[10px] text-red-500 flex items-center gap-1">
+                      <FileWarning className="h-3 w-3" /> File shows total ₹{row.declaredTotal.toLocaleString('en-IN')}, parsed items sum to ₹{row.parsedTotal.toLocaleString('en-IN')} — check items before importing
+                    </p>
+                  )}
+                  {row.status === 'error' && row.errorMsg && (
+                    <p className="px-3 pb-1.5 -mt-1 text-[10px] text-red-600">{row.errorMsg}</p>
+                  )}
+
+                  {expanded === row.key && (
+                    <div className="border-t border-gray-100 px-3 py-2 bg-gray-50/60">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-gray-400">
+                            <th className="text-left font-medium py-1">Item</th>
+                            <th className="text-right font-medium py-1">Qty</th>
+                            <th className="text-right font-medium py-1">Rate</th>
+                            <th className="text-right font-medium py-1">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {row.items.map((it, idx) => (
+                            <tr key={idx} className="border-t border-gray-100">
+                              <td className="py-1 text-gray-700">{it.name}</td>
+                              <td className="py-1 text-right text-gray-600">{it.qty} {it.unit}</td>
+                              <td className="py-1 text-right text-gray-600">₹{it.rate.toFixed(2)}</td>
+                              <td className="py-1 text-right font-medium text-gray-800">₹{it.amount.toLocaleString('en-IN')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {rows.length > 0 && (
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { onClose(); reset(); }} disabled={importing}>Close</Button>
+            <Button onClick={handleImport} disabled={importing || readyCount === 0}>
+              {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : `Import ${readyCount} PO${readyCount === 1 ? '' : 's'}`}
+            </Button>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── PO Row (expandable) ────────────────────────────────────────────────────────
 function PORow({ po, showBuy, canEdit, onEdit }: { po: PurchaseOrder; showBuy: boolean; canEdit: boolean; onEdit: (po: PurchaseOrder) => void }) {
   const [open, setOpen] = useState(false);
@@ -394,15 +666,38 @@ export default function PurchaseOrdersPage() {
   const hubId = (user as any)?.hub_id ?? null;
   const isManagement = ['ceo', 'gm', 'admin', 'director', 'ff_operations_manager'].includes(user?.role ?? '');
   const showBuy = user?.role === 'shift_employee';
-  const canEditPO = ['ff_operations_manager', 'hub_manager', 'admin'].includes(user?.role ?? '');
+  // Anyone who can reach this page at all (see App.tsx's OPS_ROLES on
+  // /purchase/orders) can also create/edit a PO here — matches the ask to
+  // extend PO add/edit to everyone with visibility into this dashboard,
+  // not just Ops Manager/Hub Manager. ff_payment_access flag holders are
+  // included too, for parity with the rest of the FF payment/PO surface.
+  const PO_EDIT_ROLES = new Set([
+    'ceo', 'director', 'gm', 'gmo', 'smo', 'boi', 'nsm', 'admin',
+    'hr', 'accounts', 'back_office',
+    'purchase_manager', 'purchase_head', 'warehouse_manager', 'qc_manager',
+    'field_executive', 'tele_caller', 'bde',
+    'ff_operations_manager', 'hub_manager', 'l1_manager', 'shift_employee',
+  ]);
+  const canEditPO = PO_EDIT_ROLES.has(user?.role ?? '') || (user as any)?.ff_payment_access === true;
   const [filter, setFilter] = useState<'all' | 'pending' | 'ordered' | 'received'>('all');
   const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const { data: hubs = [] } = useQuery({
     queryKey: ['hubs-active-po-edit'],
     queryFn: async () => {
       const { data, error } = await supabase.from('hubs').select('id, name, address, city').eq('is_active', true).order('name');
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: canEditPO,
+  });
+
+  const { data: vendors = [] } = useQuery({
+    queryKey: ['vendors-active-po-import'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('vendors').select('id, name').eq('is_active', true).order('name');
       if (error) throw error;
       return data ?? [];
     },
@@ -488,13 +783,23 @@ export default function PurchaseOrdersPage() {
         </div>
         <div className="flex items-center gap-2">
           {canEditPO && (
-            <Button
-              onClick={() => { setEditingPO(null); setDialogOpen(true); }}
-              className="flex items-center gap-1.5"
-            >
-              <Plus className="h-4 w-4" />
-              New PO
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                onClick={() => setImportOpen(true)}
+                className="flex items-center gap-1.5"
+              >
+                <Upload className="h-4 w-4" />
+                Import
+              </Button>
+              <Button
+                onClick={() => { setEditingPO(null); setDialogOpen(true); }}
+                className="flex items-center gap-1.5"
+              >
+                <Plus className="h-4 w-4" />
+                New PO
+              </Button>
+            </>
           )}
           <button
             onClick={() => refetch()}
@@ -581,6 +886,16 @@ export default function PurchaseOrdersPage() {
           onClose={() => setDialogOpen(false)}
           po={editingPO}
           hubs={hubs}
+          onSaved={() => refetch()}
+        />
+      )}
+
+      {canEditPO && (
+        <ImportPODialog
+          open={importOpen}
+          onClose={() => setImportOpen(false)}
+          hubs={hubs}
+          vendors={vendors}
           onSaved={() => refetch()}
         />
       )}

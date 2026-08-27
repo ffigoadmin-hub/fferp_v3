@@ -7,6 +7,9 @@ import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { createInvoiceForOrder } from '@/lib/invoiceHelper';
 import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
+import { parseSalesOrdersFromPDF, type ParsedSalesOrder } from '@/lib/salesOrderImportParser';
+import { matchHub } from '@/lib/poImportParsers';
 import {
   Plus, Trash2, RefreshCw, CheckCircle2, ShoppingBag,
   Phone, MapPin, User, Store, Package, CalendarDays,
@@ -60,6 +63,247 @@ function newRow(): BulkRow {
 
 const UNITS = ['KG', 'G', 'L', 'ML', 'PCS', 'BOX', 'BAG', 'DOZEN'];
 
+function normCustName(s: string): string {
+  return (s ?? '').toLowerCase().replace(/^ms\.?\s*/i, '').replace(/[^a-z0-9]/g, '');
+}
+function matchCustomer(rawName: string, customers: Array<{ id: string; name: string }>) {
+  const norm = normCustName(rawName);
+  if (!norm) return null;
+  const exact = customers.find(c => normCustName(c.name) === norm);
+  if (exact) return exact;
+  return customers.find(c => {
+    const cn = normCustName(c.name);
+    return cn.length >= 4 && (norm.includes(cn) || cn.includes(norm));
+  }) ?? null;
+}
+
+/* ─── Import Sales Orders from PDF — same Zoho-doc template as the PO import,
+       kept as its own dialog (not the flat CSV pipeline) because a PDF page
+       can hold multiple items for ONE order, and the CSV path here assumes
+       exactly one item per row/order. ─────────────────────────────────────── */
+interface SORow {
+  key: string;
+  parsed: ParsedSalesOrder;
+  hubId: string;
+  customerId: string;       // '' → create new customer from customerNameOverride
+  customerNameOverride: string;
+  include: boolean;
+  status: 'pending' | 'importing' | 'done' | 'error';
+  errorMsg?: string;
+}
+
+function ImportSalesOrderDialog({
+  open, file, onClose, onImported,
+}: {
+  open: boolean;
+  file: File | null;
+  onClose: () => void;
+  onImported: () => void;
+}) {
+  const { user } = useAuth();
+  const [rows, setRows] = useState<SORow[]>([]);
+  const [parsing, setParsing] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const { data: hubs = [] } = useQuery({
+    queryKey: ['hubs-so-import'],
+    queryFn: async () => { const { data } = await supabase.from('hubs').select('id, name').eq('is_active', true); return data ?? []; },
+    enabled: open,
+  });
+  const { data: allCustomers = [] } = useQuery({
+    queryKey: ['customers-so-import'],
+    queryFn: async () => {
+      const { data } = await supabase.from('customers').select('id, shop_name, name, first_name, last_name').eq('is_active', true);
+      return (data ?? []).map((c: any) => ({ id: c.id, name: c.shop_name || c.name || `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim() }));
+    },
+    enabled: open,
+  });
+
+  const parsedOnceRef = useRef<string | null>(null);
+  if (open && file && parsedOnceRef.current !== file.name + file.size) {
+    parsedOnceRef.current = file.name + file.size;
+    setParsing(true);
+    parseSalesOrdersFromPDF(file).then(parsed => {
+      const rr: SORow[] = parsed.map((p, i) => {
+        const hub = matchHub(p.hubRaw, hubs.length ? hubs : []);
+        const cust = matchCustomer(p.customerRaw, allCustomers.length ? allCustomers : []);
+        return {
+          key: `${i}-${p.sourceRef}`,
+          parsed: p,
+          hubId: hub?.id ?? '',
+          customerId: cust?.id ?? '',
+          customerNameOverride: cust?.name ?? p.customerRaw,
+          include: true,
+          status: 'pending',
+        };
+      });
+      setRows(rr);
+      if (!rr.length) toast.error('No orders could be read from this PDF.');
+    }).catch(e => toast.error(e.message || 'Failed to parse PDF'))
+      .finally(() => setParsing(false));
+  }
+
+  const close = () => { onClose(); setRows([]); parsedOnceRef.current = null; };
+  const updateRow = (key: string, patch: Partial<SORow>) => setRows(prev => prev.map(r => r.key === key ? { ...r, ...patch } : r));
+  const readyCount = rows.filter(r => r.include && r.hubId).length;
+
+  const handleImport = async () => {
+    setImporting(true);
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const isRealUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user?.id ?? '');
+    let created = 0, failed = 0;
+
+    for (const row of rows) {
+      if (!row.include) continue;
+      if (!row.hubId) { updateRow(row.key, { status: 'error', errorMsg: 'No hub selected' }); failed++; continue; }
+      updateRow(row.key, { status: 'importing' });
+      try {
+        let customerId = row.customerId;
+        const custName = row.customerNameOverride.trim();
+        if (!customerId) {
+          if (!custName) throw new Error('No customer name');
+          const { data: newCust, error: cErr } = await supabase
+            .from('customers')
+            .insert({ customer_type: 'shop', shop_name: custName, name: custName, is_active: true })
+            .select('id').single();
+          if (cErr) throw cErr;
+          customerId = newCust.id;
+        }
+
+        const hub = hubs.find(h => h.id === row.hubId);
+        const total = row.parsed.parsedTotal;
+        const { data: order, error: oErr } = await supabase
+          .from('sales_orders')
+          .insert({
+            customer_id: customerId, customer_name: custName,
+            order_date: today, delivery_date: row.parsed.date || today,
+            status: 'confirmed', payment_mode: 'cod',
+            subtotal: total, total_amount: total,
+            notes: `Imported from ${row.parsed.sourceRef}`,
+            hub_id: row.hubId, hub_name: hub?.name ?? null,
+            ...(isRealUuid ? { created_by: user!.id } : {}),
+          })
+          .select('id').single();
+        if (oErr) throw oErr;
+
+        const itemRows = row.parsed.items.map(it => ({
+          order_id: order.id, product_name: it.name,
+          quantity: it.qty, qty_kg: it.qty, quantity_kg: it.qty,
+          unit: (it.unit || 'KG').toUpperCase(),
+          unit_price: it.rate, total_price: it.amount, subtotal: it.amount,
+          qc_grade: 'A', grade: 'A',
+        }));
+        if (itemRows.length) {
+          const { error: itemsErr } = await supabase.from('sales_order_items').insert(itemRows);
+          if (itemsErr) throw itemsErr;
+        }
+
+        const suffix = order.id.replace(/-/g, '').slice(0, 6).toUpperCase();
+        await supabase.from('invoices').insert({
+          invoice_number: `INV-${format(new Date(), 'yyyyMMdd')}-${suffix}`,
+          order_id: order.id, customer_id: customerId, customer_name: custName,
+          invoice_date: today, due_date: today,
+          subtotal: total, discount_amount: 0, tax_amount: 0, total_amount: total,
+          payment_mode: 'cod', status: 'unpaid',
+          notes: `Imported from ${row.parsed.sourceRef}`,
+        });
+
+        updateRow(row.key, { status: 'done' });
+        created++;
+      } catch (e: any) {
+        updateRow(row.key, { status: 'error', errorMsg: e.message || 'Failed' });
+        failed++;
+      }
+    }
+
+    setImporting(false);
+    if (created) onImported();
+    toast[failed ? 'error' : 'success'](failed ? `Imported ${created}, ${failed} failed` : `Imported ${created} order${created > 1 ? 's' : ''}`);
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && close()}>
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-xl w-full max-w-3xl max-h-[85vh] overflow-y-auto p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-slate-800">Import Sales Orders from PDF</h3>
+          <button onClick={close} className="p-1 rounded-lg hover:bg-gray-100"><X className="h-4 w-4 text-gray-400" /></button>
+        </div>
+
+        {parsing ? (
+          <div className="flex flex-col items-center justify-center gap-2 h-32 text-purple-600">
+            <RefreshCw className="h-6 w-6 animate-spin" />
+            <span className="text-sm">Reading {file?.name}…</span>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-xs text-gray-500">{rows.length} order{rows.length === 1 ? '' : 's'} parsed, {readyCount} ready</p>
+            {rows.map(row => (
+              <div key={row.key} className={`border rounded-lg overflow-hidden ${row.status === 'error' ? 'border-red-300 bg-red-50' : row.status === 'done' ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-white'}`}>
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <input type="checkbox" checked={row.include} disabled={importing} onChange={e => updateRow(row.key, { include: e.target.checked })} />
+                  <button onClick={() => setExpanded(v => v === row.key ? null : row.key)} className="p-0.5 text-gray-400">
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded === row.key ? '' : '-rotate-90'}`} />
+                  </button>
+                  <span className="text-xs font-mono text-gray-400 w-16 shrink-0">{row.parsed.sourceRef}</span>
+                  <select value={row.hubId} disabled={importing} onChange={e => updateRow(row.key, { hubId: e.target.value })}
+                    className={`h-8 text-xs rounded-lg border px-2 flex-1 ${!row.hubId ? 'border-amber-400 text-amber-700' : 'border-gray-200'}`}>
+                    <option value="">Select hub…</option>
+                    {hubs.map((h: any) => <option key={h.id} value={h.id}>{h.name}</option>)}
+                  </select>
+                  <input value={row.customerNameOverride} disabled={importing}
+                    onChange={e => updateRow(row.key, { customerNameOverride: e.target.value, customerId: '' })}
+                    className={`h-8 text-xs rounded-lg border px-2 flex-1 ${!row.customerId ? 'border-amber-300' : 'border-gray-200'}`}
+                    placeholder="Customer name" />
+                  <span className="text-xs font-semibold text-gray-700 w-20 text-right shrink-0">₹{row.parsed.parsedTotal.toLocaleString('en-IN')}</span>
+                  {row.status === 'importing' && <RefreshCw className="h-4 w-4 animate-spin text-purple-500 shrink-0" />}
+                  {row.status === 'done' && <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />}
+                  {row.status === 'error' && <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />}
+                </div>
+                {!row.customerId && <p className="px-3 pb-1.5 -mt-1 text-[10px] text-amber-600">New customer — will be created on import</p>}
+                {row.parsed.declaredTotal != null && Math.abs(row.parsed.declaredTotal - row.parsed.parsedTotal) > 1 && (
+                  <p className="px-3 pb-1.5 -mt-1 text-[10px] text-red-500">File shows ₹{row.parsed.declaredTotal.toLocaleString('en-IN')}, parsed items sum to ₹{row.parsed.parsedTotal.toLocaleString('en-IN')} — check before importing</p>
+                )}
+                {row.status === 'error' && row.errorMsg && <p className="px-3 pb-1.5 -mt-1 text-[10px] text-red-600">{row.errorMsg}</p>}
+                {expanded === row.key && (
+                  <div className="border-t border-gray-100 px-3 py-2 bg-gray-50/60">
+                    <table className="w-full text-xs">
+                      <thead><tr className="text-gray-400"><th className="text-left font-medium py-1">Item</th><th className="text-right font-medium py-1">Qty</th><th className="text-right font-medium py-1">Rate</th><th className="text-right font-medium py-1">Amount</th></tr></thead>
+                      <tbody>
+                        {row.parsed.items.map((it, idx) => (
+                          <tr key={idx} className="border-t border-gray-100">
+                            <td className="py-1 text-gray-700">{it.name}</td>
+                            <td className="py-1 text-right text-gray-600">{it.qty} {it.unit}</td>
+                            <td className="py-1 text-right text-gray-600">₹{it.rate.toFixed(2)}</td>
+                            <td className="py-1 text-right font-medium text-gray-800">₹{it.amount.toLocaleString('en-IN')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {rows.length > 0 && (
+          <div className="flex justify-end gap-2 pt-2">
+            <button onClick={close} disabled={importing} className="px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50">Close</button>
+            <button onClick={handleImport} disabled={importing || readyCount === 0}
+              className="px-4 py-2 rounded-xl bg-purple-600 text-white text-sm font-bold hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1.5">
+              {importing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : null}
+              Import {readyCount} Order{readyCount === 1 ? '' : 's'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ─── Main Page ───────────────────────────────────────────────────────────── */
 export default function BulkOrderPage() {
   const { user } = useAuth();
@@ -72,6 +316,7 @@ export default function BulkOrderPage() {
   const [csvImporting, setCsvImporting]   = useState(false);
   const [csvPreview, setCsvPreview]       = useState<any[]>([]);
   const [showCsvPanel, setShowCsvPanel]   = useState(false);
+  const [pdfImportFile, setPdfImportFile] = useState<File | null>(null);
   const csvRef = useRef<HTMLInputElement>(null);
 
   /* Customer search */
@@ -184,12 +429,40 @@ export default function BulkOrderPage() {
     }
   };
 
-  /* ── CSV Import ────────────────────────────────────────────────────────── */
+  /* ── CSV / XLSX Import ─────────────────────────────────────────────────── */
+  const normalizeHeader = (h: string) => h.trim().toLowerCase().replace(/\s+/g, '_');
+
   const handleCsvFile = (file: File) => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+
+    if (ext === 'xlsx' || ext === 'xls') {
+      setCsvImporting(true);
+      file.arrayBuffer().then(buf => {
+        const wb = XLSX.read(buf, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        // header:1 to get raw rows first, so header text can be normalized the
+        // same way Papa's transformHeader does for CSV — keeps every
+        // downstream r.phone / r.hub_name lookup working unchanged.
+        const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as any[][];
+        const [headerRow, ...dataRows] = raw;
+        const headers = (headerRow ?? []).map((h: any) => normalizeHeader(String(h ?? '')));
+        const rows = dataRows
+          .filter(r => r.some(c => String(c ?? '').trim() !== ''))
+          .map(r => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ''])));
+        setCsvPreview(rows);
+        setShowCsvPanel(true);
+        setCsvImporting(false);
+      }).catch(err => {
+        toast.error(err.message || 'Failed to read file');
+        setCsvImporting(false);
+      });
+      return;
+    }
+
     Papa.parse(file, {
       header: true,
       skipEmptyLines: true,
-      transformHeader: (h: string) => h.trim().toLowerCase().replace(/\s+/g, '_'),
+      transformHeader: normalizeHeader,
       complete: (result: any) => {
         setCsvPreview(result.data);
         setShowCsvPanel(true);
@@ -365,23 +638,38 @@ export default function BulkOrderPage() {
   return (
     <div className="space-y-4 pb-12 pt-2">
 
-      {/* CSV file input (hidden) */}
-      <input ref={csvRef} type="file" accept=".csv" className="hidden"
-        onChange={e => { const f = e.target.files?.[0]; if (f) handleCsvFile(f); e.target.value = ''; }} />
+      {/* Import file input (hidden) */}
+      <input ref={csvRef} type="file" accept=".csv,.xlsx,.xls,.pdf" className="hidden"
+        onChange={e => {
+          const f = e.target.files?.[0];
+          if (f) {
+            if (f.name.toLowerCase().endsWith('.pdf')) setPdfImportFile(f);
+            else handleCsvFile(f);
+          }
+          e.target.value = '';
+        }} />
+
+      <ImportSalesOrderDialog
+        open={!!pdfImportFile}
+        file={pdfImportFile}
+        onClose={() => setPdfImportFile(null)}
+        onImported={() => navigate('/sales/orders')}
+      />
 
       {/* Header bar */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold text-slate-800">Bulk Order Entry</h2>
-          <p className="text-xs text-slate-400">One card per order — or import from CSV</p>
+          <p className="text-xs text-slate-400">One card per order — or import from CSV/XLSX/PDF</p>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs bg-slate-100 text-slate-500 px-3 py-1.5 rounded-lg font-medium">
             {validRows.length} ready · {invalidRows.length} incomplete
           </span>
-          <button onClick={() => csvRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-700">
-            <Upload className="h-3.5 w-3.5" /> Import CSV
+          <button onClick={() => csvRef.current?.click()} disabled={csvImporting}
+            className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-700 disabled:opacity-50">
+            {csvImporting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            Import File
           </button>
           <button onClick={addRow}
             className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700">
