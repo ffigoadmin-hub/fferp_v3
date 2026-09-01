@@ -303,6 +303,16 @@ export default function PurchaseReportPage() {
               className="text-xs text-blue-600 hover:underline font-medium">Clear dates</button>
           )}
 
+          {/* Hub filter — right next to the date range, so reports can be pulled hub-wise */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Hub</label>
+            <select value={hubFilter} onChange={e => setHubFilter(e.target.value)}
+              className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50">
+              <option value="all">All Hubs</option>
+              {hubs.map((h: any) => <option key={h.id} value={h.id}>{h.name}</option>)}
+            </select>
+          </div>
+
           {/* Search */}
           <div className="flex-1 min-w-[200px] relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -310,13 +320,6 @@ export default function PurchaseReportPage() {
               placeholder="Search PO number, vendor, product…"
               className="w-full pl-9 pr-4 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50" />
           </div>
-
-          {/* Hub filter */}
-          <select value={hubFilter} onChange={e => setHubFilter(e.target.value)}
-            className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50">
-            <option value="all">All Hubs</option>
-            {hubs.map((h: any) => <option key={h.id} value={h.id}>{h.name}</option>)}
-          </select>
 
           {/* Status filter */}
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { ElementType } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,10 +12,12 @@ import {
   ShoppingCart, Clock, CheckCircle2, XCircle, Loader2,
   Calendar, Hash, ShoppingBag, Pencil, Plus, Trash2,
   Upload, FileWarning, CheckCircle, AlertCircle as AlertCircleIcon,
+  Building2, Landmark,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { savePOToStore, fetchMaxPOSerial, type StoredPO } from '@/lib/purchaseStore';
 import { parsePOFile, matchVendor, matchHub, type ParsedPO } from '@/lib/poImportParsers';
+import { fetchStoredVendors, vendorDisplayName } from '@/lib/vendorStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -563,11 +565,13 @@ function ImportPODialog({
 }
 
 // ── PO Row (expandable) ────────────────────────────────────────────────────────
-function PORow({ po, showBuy, canEdit, onEdit }: { po: PurchaseOrder; showBuy: boolean; canEdit: boolean; onEdit: (po: PurchaseOrder) => void }) {
+function PORow({ po, showBuy, canEdit, onEdit, vendorMap }: { po: PurchaseOrder; showBuy: boolean; canEdit: boolean; onEdit: (po: PurchaseOrder) => void; vendorMap: Record<string, any> }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const items = Array.isArray(po.items) ? po.items : [];
   const dateLabel = po.delivery_date || po.order_date || po.created_at;
+  const vendor = po.vendor_name ? vendorMap[po.vendor_name] : null;
+  const bank = vendor?.banks?.[0];
 
   return (
     <div className="border border-gray-100 rounded-xl overflow-hidden shadow-sm">
@@ -583,7 +587,12 @@ function PORow({ po, showBuy, canEdit, onEdit }: { po: PurchaseOrder; showBuy: b
           <div>
             <p className="text-[11px] text-gray-400 font-medium uppercase tracking-wide">PO Number</p>
             <p className="text-sm font-bold text-blue-700">{po.po_number}</p>
-            {po.hub_name && <p className="text-[11px] text-gray-500 mt-0.5">{po.hub_name}</p>}
+            {po.vendor_name && <p className="text-[11px] font-semibold text-gray-700 mt-0.5">{po.vendor_name}</p>}
+            {po.hub_name && (
+              <p className="text-[11px] text-gray-500 flex items-center gap-1">
+                <Building2 className="h-3 w-3 text-gray-300" />{po.hub_name}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -640,6 +649,20 @@ function PORow({ po, showBuy, canEdit, onEdit }: { po: PurchaseOrder; showBuy: b
 
       {open && (
         <div className="bg-gray-50 border-t border-gray-100 px-5 py-3">
+          {po.vendor_name && (
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pb-3 mb-3 border-b border-gray-100 text-xs">
+              <span className="font-semibold text-gray-800">{po.vendor_name}</span>
+              {vendor?.gstin && <span className="text-gray-500 font-mono">GSTIN: {vendor.gstin}</span>}
+              {bank?.bankName ? (
+                <span className="flex items-center gap-1 text-gray-500">
+                  <Landmark className="h-3 w-3 text-gray-300" />
+                  {bank.bankName}{bank.accountNumber && ` · A/C ${bank.accountNumber}`}{bank.ifscCode && ` · ${bank.ifscCode}`}
+                </span>
+              ) : (
+                <span className="text-amber-600">No bank details on file — add them from the Purchase Report page</span>
+              )}
+            </div>
+          )}
           {items.length === 0 ? (
             <p className="text-sm text-gray-400 py-2">No items in this PO.</p>
           ) : (
@@ -730,6 +753,18 @@ export default function PurchaseOrdersPage() {
     },
     enabled: canEditPO,
   });
+
+  // Full vendor records (with bank details) for showing vendor name + bank
+  // info next to each PO — available to anyone who can view this page.
+  const { data: vendorList = [] } = useQuery({
+    queryKey: ['vendors-list-po-view'],
+    queryFn: fetchStoredVendors,
+  });
+  const vendorMap = useMemo(() => {
+    const map: Record<string, any> = {};
+    vendorList.forEach((v: any) => { map[vendorDisplayName(v)] = v; });
+    return map;
+  }, [vendorList]);
 
   const { data: orders = [], isLoading, refetch } = useQuery({
     queryKey: ['purchase-orders-exec', hubId],
@@ -899,6 +934,7 @@ export default function PurchaseOrdersPage() {
                       showBuy={showBuy}
                       canEdit={canEditPO}
                       onEdit={p => { setEditingPO(p); setDialogOpen(true); }}
+                      vendorMap={vendorMap}
                     />
                   ))}
                 </div>
