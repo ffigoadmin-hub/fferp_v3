@@ -12,17 +12,20 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllPOs, type StoredPO } from '@/lib/purchaseStore';
 import { fetchStoredVendors, vendorDisplayName } from '@/lib/vendorStore';
+import { matchVendor } from '@/lib/poImportParsers';
 
 // ─── Editable Bank / IFSC cell ──────────────────────────────────────────────
-function BankDetailsCell({ vendor, onSaved }: { vendor: any; onSaved: () => void }) {
+// `vendor` is the fuzzy-matched vendor record, if one was found. Even when
+// there's no match at all (a PO whose vendor name never became a vendor
+// record), the cell still lets someone type bank details in — saving then
+// creates the vendor record on the spot instead of requiring one to exist.
+function BankDetailsCell({ vendor, vendorName, onSaved }: { vendor: any; vendorName: string; onSaved: () => void }) {
   const bank = vendor?.banks?.[0];
   const [editing, setEditing] = useState(false);
   const [bankName, setBankName] = useState(bank?.bankName || '');
   const [acct, setAcct]         = useState(bank?.accountNumber || '');
   const [ifsc, setIfsc]         = useState(bank?.ifscCode || '');
   const [saving, setSaving]     = useState(false);
-
-  if (!vendor) return <span className="text-gray-300 text-xs">—</span>;
 
   if (!editing) {
     return (
@@ -31,11 +34,12 @@ function BankDetailsCell({ vendor, onSaved }: { vendor: any; onSaved: () => void
           <p className="text-gray-700">{bank?.bankName || <span className="text-gray-300">—</span>}</p>
           {bank?.accountNumber && <p className="font-mono text-gray-400">A/C {bank.accountNumber}</p>}
           {bank?.ifscCode && <p className="font-mono text-gray-400">{bank.ifscCode}</p>}
+          {!vendor && <p className="text-amber-500 text-[10px]">No vendor record — click + to add</p>}
         </div>
         <button
           onClick={(e) => { e.stopPropagation(); setBankName(bank?.bankName || ''); setAcct(bank?.accountNumber || ''); setIfsc(bank?.ifscCode || ''); setEditing(true); }}
           className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-blue-500 transition-opacity shrink-0"
-          title="Edit bank details"
+          title={vendor ? 'Edit bank details' : 'Add bank details'}
         >
           <Pencil className="w-3 h-3" />
         </button>
@@ -44,15 +48,19 @@ function BankDetailsCell({ vendor, onSaved }: { vendor: any; onSaved: () => void
   }
 
   const save = async () => {
+    if (!bankName.trim() && !acct.trim() && !ifsc.trim()) { setEditing(false); return; }
     setSaving(true);
-    const { error } = await supabase.from('vendors').update({
+    const payload = {
       bank_name:    bankName.trim() || null,
       bank_account: acct.trim() || null,
       bank_ifsc:    ifsc.trim().toUpperCase() || null,
-    }).eq('id', vendor.id);
+    };
+    const { error } = vendor
+      ? await supabase.from('vendors').update(payload).eq('id', vendor.id)
+      : await supabase.from('vendors').insert({ name: vendorName, type: 'dynamic', is_active: true, ...payload });
     setSaving(false);
     if (error) { toast.error(error.message); return; }
-    toast.success('Bank details updated');
+    toast.success(vendor ? 'Bank details updated' : `Vendor "${vendorName}" created with bank details`);
     setEditing(false);
     onSaved();
   };
@@ -130,11 +138,20 @@ export default function PurchaseReportPage() {
     toast.success('Refreshed');
   };
 
-  // Build vendor lookup for bank details
-  const vendorMap = useMemo(() => {
-    const map: Record<string, any> = {};
-    vendorList.forEach((v: any) => { map[vendorDisplayName(v)] = v; });
-    return map;
+  // Fuzzy vendor lookup for bank details — PO vendor names come from free-text
+  // entry / PDF import ("MS. KRP TRADERS") and rarely match a vendor record's
+  // stored name exactly, so this reuses the same tolerant matching the PO
+  // import review screen uses instead of an exact-string key lookup.
+  const findVendor = useMemo(() => {
+    const candidates = vendorList.map((v: any) => ({ id: v.id, name: vendorDisplayName(v) }));
+    const cache = new Map<string, any>();
+    return (rawName: string) => {
+      if (cache.has(rawName)) return cache.get(rawName);
+      const m = matchVendor(rawName, candidates);
+      const full = m ? vendorList.find((v: any) => v.id === m.id) ?? null : null;
+      cache.set(rawName, full);
+      return full;
+    };
   }, [vendorList]);
 
   // ── Filter ──────────────────────────────────────────────────────────────────
@@ -171,7 +188,7 @@ export default function PurchaseReportPage() {
     try {
       const rows: any[] = [];
       filtered.forEach(po => {
-        const vendor = vendorMap[po.vendorName];
+        const vendor = findVendor(po.vendorName);
         const statusLabel = STATUS_CFG[po.status]?.label ?? po.status;
 
         if (po.items.length === 0) {
@@ -401,7 +418,7 @@ export default function PurchaseReportPage() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filtered.map(po => {
-                  const vendor = vendorMap[po.vendorName];
+                  const vendor = findVendor(po.vendorName);
                   const statusCfg = STATUS_CFG[po.status] ?? { cls: 'bg-gray-100 text-gray-600', label: po.status };
                   const totalQty = po.items.reduce((s, i) => s + i.quantity, 0);
                   const isExpanded = expandedPO === po.id;
@@ -446,7 +463,7 @@ export default function PurchaseReportPage() {
 
                         {/* Bank / IFSC — editable */}
                         <td className="py-3 px-3 text-xs" onClick={e => e.stopPropagation()}>
-                          <BankDetailsCell vendor={vendor} onSaved={() => qc.invalidateQueries({ queryKey: ['vendors-list'] })} />
+                          <BankDetailsCell vendor={vendor} vendorName={po.vendorName} onSaved={() => qc.invalidateQueries({ queryKey: ['vendors-list'] })} />
                         </td>
 
                         {/* Products */}

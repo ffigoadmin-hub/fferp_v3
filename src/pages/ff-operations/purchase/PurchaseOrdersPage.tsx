@@ -565,12 +565,12 @@ function ImportPODialog({
 }
 
 // ── PO Row (expandable) ────────────────────────────────────────────────────────
-function PORow({ po, showBuy, canEdit, onEdit, vendorMap }: { po: PurchaseOrder; showBuy: boolean; canEdit: boolean; onEdit: (po: PurchaseOrder) => void; vendorMap: Record<string, any> }) {
+function PORow({ po, showBuy, canEdit, onEdit, vendorMap }: { po: PurchaseOrder; showBuy: boolean; canEdit: boolean; onEdit: (po: PurchaseOrder) => void; vendorMap: (name: string) => any }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const items = Array.isArray(po.items) ? po.items : [];
   const dateLabel = po.delivery_date || po.order_date || po.created_at;
-  const vendor = po.vendor_name ? vendorMap[po.vendor_name] : null;
+  const vendor = po.vendor_name ? vendorMap(po.vendor_name) : null;
   const bank = vendor?.banks?.[0];
 
   return (
@@ -756,14 +756,24 @@ export default function PurchaseOrdersPage() {
 
   // Full vendor records (with bank details) for showing vendor name + bank
   // info next to each PO — available to anyone who can view this page.
+  // Fuzzy-matched (not an exact-string key) since a PO's free-text vendor
+  // name ("MS. KRP TRADERS") rarely matches a vendor record's stored name
+  // exactly — same tolerant matching the PO import review screen uses.
   const { data: vendorList = [] } = useQuery({
     queryKey: ['vendors-list-po-view'],
     queryFn: fetchStoredVendors,
   });
   const vendorMap = useMemo(() => {
-    const map: Record<string, any> = {};
-    vendorList.forEach((v: any) => { map[vendorDisplayName(v)] = v; });
-    return map;
+    const candidates = vendorList.map((v: any) => ({ id: v.id, name: vendorDisplayName(v) }));
+    const cache = new Map<string, any>();
+    return (rawName: string) => {
+      if (!rawName) return null;
+      if (cache.has(rawName)) return cache.get(rawName);
+      const m = matchVendor(rawName, candidates);
+      const full = m ? vendorList.find((v: any) => v.id === m.id) ?? null : null;
+      cache.set(rawName, full);
+      return full;
+    };
   }, [vendorList]);
 
   const { data: orders = [], isLoading, refetch } = useQuery({
