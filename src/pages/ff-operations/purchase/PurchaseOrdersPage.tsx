@@ -72,18 +72,66 @@ const STATUS: Record<string, { label: string; cls: string; icon: ElementType }> 
   approved:         { label: 'Approved',          cls: 'bg-blue-100   text-blue-700',   icon: CheckCircle2 },
   ordered:          { label: 'Ordered',           cls: 'bg-purple-100 text-purple-700', icon: ShoppingBag  },
   received:         { label: 'Received',          cls: 'bg-green-100  text-green-700',  icon: CheckCircle2 },
+  billed:           { label: 'Billed',            cls: 'bg-indigo-100 text-indigo-700', icon: CheckCircle2 },
+  rejected:         { label: 'Rejected',          cls: 'bg-red-100    text-red-600',    icon: XCircle      },
   cancelled:        { label: 'Cancelled',         cls: 'bg-red-100    text-red-600',    icon: XCircle      },
   partial:          { label: 'Partial',           cls: 'bg-orange-100 text-orange-700', icon: Package      },
   open:             { label: 'Open',              cls: 'bg-sky-100    text-sky-700',    icon: CheckCircle2 },
 };
 
-function StatusBadge({ status }: { status: string }) {
+// Manual status-update options — same canonical set as the Purchase Report page.
+const STATUS_OPTIONS = [
+  { value: 'pending',   label: 'Pending' },
+  { value: 'approved',  label: 'Approved' },
+  { value: 'ordered',   label: 'Ordered' },
+  { value: 'received',  label: 'Received' },
+  { value: 'billed',    label: 'Billed' },
+  { value: 'rejected',  label: 'Rejected' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+
+function StatusBadge({ status, poId, canEdit, onChanged }: { status: string; poId?: string; canEdit?: boolean; onChanged?: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving]   = useState(false);
   const cfg = STATUS[status] ?? { label: status, cls: 'bg-gray-100 text-gray-600', icon: Package };
   const Icon = cfg.icon;
+
+  if (canEdit && editing) {
+    return (
+      <select
+        autoFocus defaultValue={status} disabled={saving}
+        onClick={e => e.stopPropagation()}
+        onBlur={() => setEditing(false)}
+        onChange={async e => {
+          const value = e.target.value;
+          if (value === status) { setEditing(false); return; }
+          setSaving(true);
+          const { error } = await supabase.from('purchase_orders').update({ status: value }).eq('id', poId);
+          setSaving(false);
+          setEditing(false);
+          if (error) { toast.error(error.message); return; }
+          toast.success(`Status updated to ${STATUS_OPTIONS.find(o => o.value === value)?.label ?? value}`);
+          onChanged?.();
+        }}
+        className="text-xs rounded-full border border-gray-200 px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+      >
+        {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    );
+  }
+
   return (
-    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold capitalize', cfg.cls)}>
+    <span
+      onClick={canEdit ? (e) => { e.stopPropagation(); setEditing(true); } : undefined}
+      title={canEdit ? 'Click to update status' : undefined}
+      className={cn(
+        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold capitalize',
+        canEdit && 'cursor-pointer hover:opacity-75 transition-opacity',
+        cfg.cls,
+      )}
+    >
       <Icon className="h-3 w-3" />
-      {cfg.label}
+      {saving ? '…' : cfg.label}
     </span>
   );
 }
@@ -565,7 +613,7 @@ function ImportPODialog({
 }
 
 // ── PO Row (expandable) ────────────────────────────────────────────────────────
-function PORow({ po, showBuy, canEdit, onEdit, vendorMap }: { po: PurchaseOrder; showBuy: boolean; canEdit: boolean; onEdit: (po: PurchaseOrder) => void; vendorMap: (name: string) => any }) {
+function PORow({ po, showBuy, canEdit, onEdit, vendorMap, onStatusChanged }: { po: PurchaseOrder; showBuy: boolean; canEdit: boolean; onEdit: (po: PurchaseOrder) => void; vendorMap: (name: string) => any; onStatusChanged: () => void }) {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const items = Array.isArray(po.items) ? po.items : [];
@@ -616,7 +664,7 @@ function PORow({ po, showBuy, canEdit, onEdit, vendorMap }: { po: PurchaseOrder;
           </div>
 
           <div className="flex justify-end md:justify-start">
-            <StatusBadge status={po.status} />
+            <StatusBadge status={po.status} poId={po.id} canEdit={canEdit} onChanged={onStatusChanged} />
           </div>
         </div>
 
@@ -945,6 +993,7 @@ export default function PurchaseOrdersPage() {
                       canEdit={canEditPO}
                       onEdit={p => { setEditingPO(p); setDialogOpen(true); }}
                       vendorMap={vendorMap}
+                      onStatusChanged={refetch}
                     />
                   ))}
                 </div>

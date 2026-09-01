@@ -88,14 +88,78 @@ function BankDetailsCell({ vendor, vendorName, onSaved }: { vendor: any; vendorN
 }
 
 // ─── Status config ────────────────────────────────────────────────────────────
+// Covers both the legacy labels this page used and the literal values the DB
+// actually stores today ('pending', 'approved', 'ordered', 'received' — see
+// purchaseStore.ts's poToPayload) so a plain "pending" status gets a proper
+// styled badge instead of falling back to raw gray text.
 const STATUS_CFG: Record<string, { cls: string; label: string }> = {
   draft:            { cls: 'bg-gray-100 text-gray-600',    label: 'Draft' },
+  pending:          { cls: 'bg-amber-100 text-amber-700',  label: 'Pending' },
   pending_approval: { cls: 'bg-amber-100 text-amber-700',  label: 'Pending Approval' },
+  approved:         { cls: 'bg-blue-100 text-blue-700',    label: 'Approved' },
   open:             { cls: 'bg-blue-100 text-blue-700',    label: 'Approved' },
+  ordered:          { cls: 'bg-indigo-100 text-indigo-700',label: 'Ordered' },
+  received:         { cls: 'bg-green-100 text-green-700',  label: 'Received' },
   rejected:         { cls: 'bg-red-100 text-red-600',      label: 'Rejected' },
   billed:           { cls: 'bg-purple-100 text-purple-700',label: 'Billed' },
   cancelled:        { cls: 'bg-red-100 text-red-600',      label: 'Cancelled' },
 };
+
+// Manual status-update options shown in the editable dropdown — the
+// business-flow set (Pending → Approved → Ordered → Received) plus the two
+// terminal/out-of-flow states someone might need to set by hand.
+const STATUS_OPTIONS = [
+  { value: 'pending',   label: 'Pending' },
+  { value: 'approved',  label: 'Approved' },
+  { value: 'ordered',   label: 'Ordered' },
+  { value: 'received',  label: 'Received' },
+  { value: 'billed',    label: 'Billed' },
+  { value: 'rejected',  label: 'Rejected' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+
+// ─── Editable Status cell ───────────────────────────────────────────────────
+function StatusCell({ po, onSaved }: { po: StoredPO; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving]   = useState(false);
+  const cfg = STATUS_CFG[po.status] ?? { cls: 'bg-gray-100 text-gray-600', label: po.status };
+
+  const updateStatus = async (value: string) => {
+    if (value === po.status) { setEditing(false); return; }
+    setSaving(true);
+    const { error } = await supabase.from('purchase_orders').update({ status: value }).eq('id', po.id);
+    setSaving(false);
+    setEditing(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Status updated to ${STATUS_CFG[value]?.label ?? value}`);
+    onSaved();
+  };
+
+  if (editing) {
+    return (
+      <select
+        autoFocus defaultValue={po.status} disabled={saving}
+        onChange={e => updateStatus(e.target.value)}
+        onBlur={() => setEditing(false)}
+        onClick={e => e.stopPropagation()}
+        className="text-[11px] rounded-full border border-gray-200 px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
+      >
+        {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    );
+  }
+
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+      disabled={saving}
+      title="Click to update status"
+      className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold hover:opacity-75 transition-opacity disabled:opacity-50 ${cfg.cls}`}
+    >
+      {saving ? '…' : cfg.label}
+    </button>
+  );
+}
 
 function fmt(n: number) {
   return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -342,12 +406,7 @@ export default function PurchaseReportPage() {
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
             className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50">
             <option value="all">All Status</option>
-            <option value="draft">Draft</option>
-            <option value="pending_approval">Pending Approval</option>
-            <option value="open">Approved</option>
-            <option value="rejected">Rejected</option>
-            <option value="billed">Billed</option>
-            <option value="cancelled">Cancelled</option>
+            {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
 
           <button onClick={refresh}
@@ -419,7 +478,6 @@ export default function PurchaseReportPage() {
               <tbody className="divide-y divide-gray-50">
                 {filtered.map(po => {
                   const vendor = findVendor(po.vendorName);
-                  const statusCfg = STATUS_CFG[po.status] ?? { cls: 'bg-gray-100 text-gray-600', label: po.status };
                   const totalQty = po.items.reduce((s, i) => s + i.quantity, 0);
                   const isExpanded = expandedPO === po.id;
 
@@ -487,11 +545,9 @@ export default function PurchaseReportPage() {
                           {po.deliveryDate && <p className="text-gray-400">Del: {po.deliveryDate}</p>}
                         </td>
 
-                        {/* Status */}
-                        <td className="py-3 px-3 text-center">
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${statusCfg.cls}`}>
-                            {statusCfg.label}
-                          </span>
+                        {/* Status — click to update manually */}
+                        <td className="py-3 px-3 text-center" onClick={e => e.stopPropagation()}>
+                          <StatusCell po={po} onSaved={() => qc.invalidateQueries({ queryKey: ['purchase-report-pos'] })} />
                           {po.approvedBy && (
                             <p className="text-[9px] text-gray-400 mt-0.5">{po.approvedBy}</p>
                           )}
