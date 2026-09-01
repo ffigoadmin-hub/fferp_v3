@@ -290,8 +290,10 @@ function ImportPODialog({
   const [importing, setImporting] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [fileName, setFileName] = useState('');
+  const [batchHubId, setBatchHubId] = useState('');
 
   const reset = () => { setRows([]); setFileName(''); setExpanded(null); };
+  const resetAll = () => { reset(); setBatchHubId(''); };
 
   const handleFile = async (file: File) => {
     setFileName(file.name);
@@ -309,7 +311,7 @@ function ImportPODialog({
         return {
           ...p,
           key: `${i}-${p.sourceRef}`,
-          hubId: hub?.id ?? '',
+          hubId: hub?.id ?? batchHubId,
           vendorId: vendor?.id ?? '',
           vendorNameOverride: vendor?.name ?? p.vendorRaw,
           include: true,
@@ -404,39 +406,64 @@ function ImportPODialog({
     );
   };
 
+  const batchHub = hubs.find(h => h.id === batchHubId);
+
   return (
-    <Dialog open={open} onOpenChange={v => { if (!v) { onClose(); reset(); } }}>
+    <Dialog open={open} onOpenChange={v => { if (!v) { onClose(); resetAll(); } }}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Import Purchase Orders</DialogTitle>
         </DialogHeader>
 
         {!rows.length ? (
-          <label className={cn(
-            'flex flex-col items-center justify-center gap-2 w-full h-40 rounded-xl border-2 border-dashed cursor-pointer transition-colors',
-            parsing ? 'border-blue-300 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
-          )}>
-            {parsing ? (
-              <>
-                <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
-                <span className="text-sm text-blue-600">Reading {fileName}…</span>
-              </>
-            ) : (
-              <>
-                <Upload className="h-6 w-6 text-gray-400" />
-                <span className="text-sm font-medium text-gray-600">Upload a PDF, CSV, or XLSX purchase order</span>
-                <span className="text-xs text-gray-400">One PO per page (PDF) or grouped by PO number (CSV/XLSX)</span>
-              </>
-            )}
-            <input
-              type="file" accept=".pdf,.csv,.xlsx,.xls" className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }}
-            />
-          </label>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs font-semibold text-gray-600">Which hub are these purchase orders for?</Label>
+              <Select value={batchHubId} onValueChange={setBatchHubId} disabled={parsing}>
+                <SelectTrigger className="h-9 text-sm mt-1">
+                  <SelectValue placeholder="Select hub first…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {hubs.map(h => <SelectItem key={h.id} value={h.id}>{h.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Every imported PO will default to this hub — you can still change a row's hub after parsing if the file mixes hubs.
+              </p>
+            </div>
+
+            <label className={cn(
+              'flex flex-col items-center justify-center gap-2 w-full h-40 rounded-xl border-2 border-dashed transition-colors',
+              !batchHubId ? 'border-gray-200 bg-gray-50 opacity-50 cursor-not-allowed' :
+              parsing ? 'border-blue-300 bg-blue-50 cursor-pointer' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 cursor-pointer'
+            )}>
+              {parsing ? (
+                <>
+                  <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+                  <span className="text-sm text-blue-600">Reading {fileName}…</span>
+                </>
+              ) : (
+                <>
+                  <Upload className="h-6 w-6 text-gray-400" />
+                  <span className="text-sm font-medium text-gray-600">
+                    {batchHubId ? 'Upload a PDF, CSV, or XLSX purchase order' : 'Select a hub above to enable upload'}
+                  </span>
+                  <span className="text-xs text-gray-400">One PO per page (PDF) or grouped by PO number (CSV/XLSX)</span>
+                </>
+              )}
+              <input
+                type="file" accept=".pdf,.csv,.xlsx,.xls" className="hidden" disabled={!batchHubId}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }}
+              />
+            </label>
+          </div>
         ) : (
           <div className="space-y-3">
             <div className="flex items-center justify-between text-xs text-gray-500">
-              <span>{fileName} — {rows.length} PO{rows.length > 1 ? 's' : ''} parsed, {includedCount} selected, {readyCount} ready</span>
+              <span>
+                {fileName} — {rows.length} PO{rows.length > 1 ? 's' : ''} parsed, {includedCount} selected, {readyCount} ready
+                {batchHub && <span className="ml-2 px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 font-semibold">Hub: {batchHub.name}</span>}
+              </span>
               <button onClick={reset} className="text-blue-600 hover:underline font-medium">Upload a different file</button>
             </div>
 
@@ -524,7 +551,7 @@ function ImportPODialog({
 
         {rows.length > 0 && (
           <DialogFooter>
-            <Button variant="outline" onClick={() => { onClose(); reset(); }} disabled={importing}>Close</Button>
+            <Button variant="outline" onClick={() => { onClose(); resetAll(); }} disabled={importing}>Close</Button>
             <Button onClick={handleImport} disabled={importing || readyCount === 0}>
               {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : `Import ${readyCount} PO${readyCount === 1 ? '' : 's'}`}
             </Button>

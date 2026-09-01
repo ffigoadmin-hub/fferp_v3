@@ -105,6 +105,7 @@ function ImportSalesOrderDialog({
   const [parsing, setParsing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [batchHubId, setBatchHubId] = useState('');
 
   const { data: hubs = [] } = useQuery({
     queryKey: ['hubs-so-import'],
@@ -121,7 +122,7 @@ function ImportSalesOrderDialog({
   });
 
   const parsedOnceRef = useRef<string | null>(null);
-  if (open && file && parsedOnceRef.current !== file.name + file.size) {
+  if (open && file && batchHubId && parsedOnceRef.current !== file.name + file.size) {
     parsedOnceRef.current = file.name + file.size;
     setParsing(true);
     parseSalesOrdersFromPDF(file).then(parsed => {
@@ -131,7 +132,7 @@ function ImportSalesOrderDialog({
         return {
           key: `${i}-${p.sourceRef}`,
           parsed: p,
-          hubId: hub?.id ?? '',
+          hubId: hub?.id ?? batchHubId,
           customerId: cust?.id ?? '',
           customerNameOverride: cust?.name ?? p.customerRaw,
           include: true,
@@ -144,7 +145,7 @@ function ImportSalesOrderDialog({
       .finally(() => setParsing(false));
   }
 
-  const close = () => { onClose(); setRows([]); parsedOnceRef.current = null; };
+  const close = () => { onClose(); setRows([]); parsedOnceRef.current = null; setBatchHubId(''); };
   const updateRow = (key: string, patch: Partial<SORow>) => setRows(prev => prev.map(r => r.key === key ? { ...r, ...patch } : r));
   const readyCount = rows.filter(r => r.include && r.hubId).length;
 
@@ -232,7 +233,21 @@ function ImportSalesOrderDialog({
           <button onClick={close} className="p-1 rounded-lg hover:bg-gray-100"><X className="h-4 w-4 text-gray-400" /></button>
         </div>
 
-        {parsing ? (
+        {!batchHubId ? (
+          <div className="space-y-3 py-2">
+            <div>
+              <label className="text-xs font-semibold text-gray-600">Which hub are these sales orders for?</label>
+              <select value={batchHubId} onChange={e => setBatchHubId(e.target.value)}
+                className="w-full h-9 mt-1 rounded-lg border border-gray-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
+                <option value="">Select hub first…</option>
+                {hubs.map((h: any) => <option key={h.id} value={h.id}>{h.name}</option>)}
+              </select>
+              <p className="text-[11px] text-gray-400 mt-1">
+                Every imported order will default to this hub — you can still change a row's hub after parsing if the file mixes hubs.
+              </p>
+            </div>
+          </div>
+        ) : parsing ? (
           <div className="flex flex-col items-center justify-center gap-2 h-32 text-purple-600">
             <RefreshCw className="h-6 w-6 animate-spin" />
             <span className="text-sm">Reading {file?.name}…</span>

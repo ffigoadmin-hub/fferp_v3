@@ -5,12 +5,79 @@ import { format } from 'date-fns';
 import {
   ArrowLeft, Download, FileText, Search, RefreshCw,
   ChevronDown, ChevronUp, ChevronsUpDown, Package,
-  TrendingUp, ShoppingBag, CheckCircle2,
+  TrendingUp, ShoppingBag, CheckCircle2, Pencil, Building2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import { fetchAllPOs, type StoredPO } from '@/lib/purchaseStore';
 import { fetchStoredVendors, vendorDisplayName } from '@/lib/vendorStore';
+
+// ─── Editable Bank / IFSC cell ──────────────────────────────────────────────
+function BankDetailsCell({ vendor, onSaved }: { vendor: any; onSaved: () => void }) {
+  const bank = vendor?.banks?.[0];
+  const [editing, setEditing] = useState(false);
+  const [bankName, setBankName] = useState(bank?.bankName || '');
+  const [acct, setAcct]         = useState(bank?.accountNumber || '');
+  const [ifsc, setIfsc]         = useState(bank?.ifscCode || '');
+  const [saving, setSaving]     = useState(false);
+
+  if (!vendor) return <span className="text-gray-300 text-xs">—</span>;
+
+  if (!editing) {
+    return (
+      <div className="group flex items-start gap-1.5">
+        <div>
+          <p className="text-gray-700">{bank?.bankName || <span className="text-gray-300">—</span>}</p>
+          {bank?.accountNumber && <p className="font-mono text-gray-400">A/C {bank.accountNumber}</p>}
+          {bank?.ifscCode && <p className="font-mono text-gray-400">{bank.ifscCode}</p>}
+        </div>
+        <button
+          onClick={(e) => { e.stopPropagation(); setBankName(bank?.bankName || ''); setAcct(bank?.accountNumber || ''); setIfsc(bank?.ifscCode || ''); setEditing(true); }}
+          className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-blue-500 transition-opacity shrink-0"
+          title="Edit bank details"
+        >
+          <Pencil className="w-3 h-3" />
+        </button>
+      </div>
+    );
+  }
+
+  const save = async () => {
+    setSaving(true);
+    const { error } = await supabase.from('vendors').update({
+      bank_name:    bankName.trim() || null,
+      bank_account: acct.trim() || null,
+      bank_ifsc:    ifsc.trim().toUpperCase() || null,
+    }).eq('id', vendor.id);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Bank details updated');
+    setEditing(false);
+    onSaved();
+  };
+
+  return (
+    <div className="space-y-1 w-32">
+      <input value={bankName} onChange={e => setBankName(e.target.value)} placeholder="Bank name"
+        className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      <input value={acct} onChange={e => setAcct(e.target.value)} placeholder="Account no."
+        className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      <input value={ifsc} onChange={e => setIfsc(e.target.value.toUpperCase())} placeholder="IFSC"
+        className="w-full rounded border border-gray-200 px-1.5 py-0.5 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-blue-400" />
+      <div className="flex gap-1">
+        <button onClick={save} disabled={saving}
+          className="text-[10px] px-1.5 py-0.5 rounded bg-blue-600 text-white font-semibold disabled:opacity-50">
+          {saving ? '…' : 'Save'}
+        </button>
+        <button onClick={() => setEditing(false)} disabled={saving}
+          className="text-[10px] px-1.5 py-0.5 rounded border border-gray-200 text-gray-500">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ─── Status config ────────────────────────────────────────────────────────────
 const STATUS_CFG: Record<string, { cls: string; label: string }> = {
@@ -34,6 +101,7 @@ export default function PurchaseReportPage() {
   const [dateTo, setDateTo]     = useState('');
   const [search, setSearch]     = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [hubFilter, setHubFilter]       = useState('all');
   const [expandedPO, setExpandedPO]     = useState<string | null>(null);
   const [downloading, setDownloading]   = useState(false);
 
@@ -47,8 +115,18 @@ export default function PurchaseReportPage() {
     queryFn: fetchStoredVendors,
   });
 
+  const { data: hubs = [] } = useQuery({
+    queryKey: ['hubs-active-purchase-report'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('hubs').select('id, name').eq('is_active', true).order('name');
+      if (error) { console.error('[PurchaseReportPage] hubs:', error.message); return []; }
+      return data ?? [];
+    },
+  });
+
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['purchase-report-pos'] });
+    qc.invalidateQueries({ queryKey: ['vendors-list'] });
     toast.success('Refreshed');
   };
 
@@ -67,14 +145,15 @@ export default function PurchaseReportPage() {
         (!dateFrom || po.date >= dateFrom) &&
         (!dateTo   || po.date <= dateTo);
       const matchStatus = statusFilter === 'all' || po.status === statusFilter;
+      const matchHubFilter = hubFilter === 'all' || po.hub_id === hubFilter;
       const matchSearch =
         !q ||
         po.poNumber.toLowerCase().includes(q) ||
         po.vendorName.toLowerCase().includes(q) ||
         po.items.some(i => i.itemName.toLowerCase().includes(q));
-      return matchDate && matchStatus && matchSearch;
+      return matchDate && matchStatus && matchHubFilter && matchSearch;
     });
-  }, [allPOs, dateFrom, dateTo, search, statusFilter]);
+  }, [allPOs, dateFrom, dateTo, search, statusFilter, hubFilter]);
 
   // ── Stats ───────────────────────────────────────────────────────────────────
   const stats = useMemo(() => ({
@@ -102,6 +181,7 @@ export default function PurchaseReportPage() {
             'Delivery Date':    po.deliveryDate || '—',
             'Status':           statusLabel,
             'Vendor Name':      po.vendorName,
+            'Hub':              po.hub_name || '—',
             'GSTIN':            vendor?.gstin || '—',
             'PAN':              vendor?.pan   || '—',
             'Bank Name':        vendor?.banks?.[0]?.bankName   || '—',
@@ -127,6 +207,7 @@ export default function PurchaseReportPage() {
               'Delivery Date':    idx === 0 ? (po.deliveryDate || '—') : '',
               'Status':           idx === 0 ? statusLabel : '',
               'Vendor Name':      idx === 0 ? po.vendorName : '',
+              'Hub':              idx === 0 ? (po.hub_name || '—') : '',
               'GSTIN':            idx === 0 ? (vendor?.gstin || '—') : '',
               'PAN':              idx === 0 ? (vendor?.pan   || '—') : '',
               'Bank Name':        idx === 0 ? (vendor?.banks?.[0]?.bankName   || '—') : '',
@@ -150,7 +231,7 @@ export default function PurchaseReportPage() {
 
       const ws = XLSX.utils.json_to_sheet(rows);
       ws['!cols'] = [
-        14, 12, 14, 16, 22, 16, 12, 18, 18, 14,
+        14, 12, 14, 16, 22, 16, 16, 12, 18, 18, 14,
         14, 20, 10, 8, 12, 12, 14, 10, 12, 24, 18,
       ].map(w => ({ wch: w }));
 
@@ -230,6 +311,13 @@ export default function PurchaseReportPage() {
               className="w-full pl-9 pr-4 py-1.5 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50" />
           </div>
 
+          {/* Hub filter */}
+          <select value={hubFilter} onChange={e => setHubFilter(e.target.value)}
+            className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50">
+            <option value="all">All Hubs</option>
+            {hubs.map((h: any) => <option key={h.id} value={h.id}>{h.name}</option>)}
+          </select>
+
           {/* Status filter */}
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
             className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50">
@@ -298,6 +386,7 @@ export default function PurchaseReportPage() {
                   <th className="py-3 px-3 w-8"></th>
                   <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">PO Number</th>
                   <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Vendor</th>
+                  <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Hub</th>
                   <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">GSTIN</th>
                   <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Bank / IFSC</th>
                   <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Products</th>
@@ -340,15 +429,21 @@ export default function PurchaseReportPage() {
                           {vendor?.mobile && <p className="text-[10px] text-gray-400">{vendor.mobile}</p>}
                         </td>
 
+                        {/* Hub */}
+                        <td className="py-3 px-3 text-xs text-gray-600">
+                          {po.hub_name
+                            ? <span className="inline-flex items-center gap-1"><Building2 className="w-3 h-3 text-gray-300" />{po.hub_name}</span>
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+
                         {/* GSTIN */}
                         <td className="py-3 px-3 font-mono text-gray-600 text-xs">
                           {vendor?.gstin || <span className="text-gray-300">—</span>}
                         </td>
 
-                        {/* Bank / IFSC */}
-                        <td className="py-3 px-3 text-xs">
-                          <p className="text-gray-700">{vendor?.banks?.[0]?.bankName || '—'}</p>
-                          <p className="font-mono text-gray-400">{vendor?.banks?.[0]?.ifscCode || ''}</p>
+                        {/* Bank / IFSC — editable */}
+                        <td className="py-3 px-3 text-xs" onClick={e => e.stopPropagation()}>
+                          <BankDetailsCell vendor={vendor} onSaved={() => qc.invalidateQueries({ queryKey: ['vendors-list'] })} />
                         </td>
 
                         {/* Products */}
@@ -386,7 +481,7 @@ export default function PurchaseReportPage() {
                       {/* Expanded Line Items */}
                       {isExpanded && po.items.length > 0 && (
                         <tr key={`${po.id}-exp`}>
-                          <td colSpan={10} className="px-4 pb-4 pt-0 bg-blue-50/20">
+                          <td colSpan={11} className="px-4 pb-4 pt-0 bg-blue-50/20">
                             <div className="ml-8 mt-2 rounded-xl border border-blue-100 overflow-hidden">
                               <table className="w-full text-xs">
                                 <thead>
