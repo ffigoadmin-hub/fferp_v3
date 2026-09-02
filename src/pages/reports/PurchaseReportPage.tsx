@@ -50,10 +50,18 @@ function BankDetailsCell({ vendor, vendorName, onSaved }: { vendor: any; vendorN
   const save = async () => {
     if (!bankName.trim() && !acct.trim() && !ifsc.trim()) { setEditing(false); return; }
     setSaving(true);
+    // Written to both column pairs the app uses for a vendor's bank details
+    // (bank_account/bank_ifsc — read by vendorStore.ts / this page / the PO
+    // list — and account_number/ifsc_code — read by BuyPage.tsx) so this one
+    // save shows up everywhere for this vendor, not just on these two pages.
+    const acctVal = acct.trim() || null;
+    const ifscVal = ifsc.trim().toUpperCase() || null;
     const payload = {
-      bank_name:    bankName.trim() || null,
-      bank_account: acct.trim() || null,
-      bank_ifsc:    ifsc.trim().toUpperCase() || null,
+      bank_name:      bankName.trim() || null,
+      bank_account:   acctVal,
+      bank_ifsc:      ifscVal,
+      account_number: acctVal,
+      ifsc_code:      ifscVal,
     };
     const { error } = vendor
       ? await supabase.from('vendors').update(payload).eq('id', vendor.id)
