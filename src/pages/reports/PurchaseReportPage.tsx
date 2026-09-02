@@ -11,7 +11,7 @@ import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllPOs, type StoredPO } from '@/lib/purchaseStore';
-import { fetchStoredVendors, vendorDisplayName } from '@/lib/vendorStore';
+import { fetchStoredVendors, vendorDisplayName, rowToVendor } from '@/lib/vendorStore';
 import { matchVendor } from '@/lib/poImportParsers';
 
 // ─── Editable Bank / IFSC cell ──────────────────────────────────────────────
@@ -19,7 +19,11 @@ import { matchVendor } from '@/lib/poImportParsers';
 // there's no match at all (a PO whose vendor name never became a vendor
 // record), the cell still lets someone type bank details in — saving then
 // creates the vendor record on the spot instead of requiring one to exist.
-function BankDetailsCell({ vendor, vendorName, onSaved }: { vendor: any; vendorName: string; onSaved: () => void }) {
+// `onSaved` receives the freshly saved vendor row so the caller can drop it
+// straight into the cached vendor list — waiting on a background refetch to
+// land was leaving this cell (and every other PO row for the same vendor)
+// showing stale/empty details right after a successful save.
+function BankDetailsCell({ vendor, vendorName, onSaved }: { vendor: any; vendorName: string; onSaved: (savedVendor: any) => void }) {
   const bank = vendor?.banks?.[0];
   const [editing, setEditing] = useState(false);
   const [bankName, setBankName] = useState(bank?.bankName || '');
@@ -63,14 +67,15 @@ function BankDetailsCell({ vendor, vendorName, onSaved }: { vendor: any; vendorN
       account_number: acctVal,
       ifsc_code:      ifscVal,
     };
-    const { error } = vendor
-      ? await supabase.from('vendors').update(payload).eq('id', vendor.id)
-      : await supabase.from('vendors').insert({ name: vendorName, type: 'dynamic', is_active: true, ...payload });
+    const selectCols = 'id, name, email, phone, gstin, pan, bank_name, bank_account, bank_ifsc';
+    const { data, error } = vendor
+      ? await supabase.from('vendors').update(payload).eq('id', vendor.id).select(selectCols).single()
+      : await supabase.from('vendors').insert({ name: vendorName, type: 'dynamic', is_active: true, ...payload }).select(selectCols).single();
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success(vendor ? 'Bank details updated' : `Vendor "${vendorName}" created with bank details`);
     setEditing(false);
-    onSaved();
+    onSaved(rowToVendor(data));
   };
 
   return (
@@ -208,6 +213,26 @@ export default function PurchaseReportPage() {
     qc.invalidateQueries({ queryKey: ['purchase-report-pos'] });
     qc.invalidateQueries({ queryKey: ['vendors-list'] });
     toast.success('Refreshed');
+  };
+
+  // Called right after a vendor's bank details are saved from the table.
+  // Patches the cached vendor list immediately (so this row — and every
+  // other PO row for the same vendor, on this page and on /purchase/orders —
+  // reflects the save right away) instead of waiting on a background
+  // refetch to land, which was leaving cells looking like the save did
+  // nothing until the next reload.
+  const handleVendorSaved = (savedVendor: any) => {
+    qc.setQueryData(['vendors-list'], (old: any[] = []) => {
+      const idx = old.findIndex((v: any) => v.id === savedVendor.id);
+      if (idx === -1) return [...old, savedVendor];
+      const copy = [...old];
+      copy[idx] = savedVendor;
+      return copy;
+    });
+    // Keep the /purchase/orders page's own vendor cache (different query
+    // key) in sync too, so the same vendor shows the new bank details there
+    // as well the next time that page is viewed.
+    qc.invalidateQueries({ queryKey: ['vendors-list-po-view'] });
   };
 
   // Fuzzy vendor lookup for bank details — PO vendor names come from free-text
@@ -529,7 +554,7 @@ export default function PurchaseReportPage() {
 
                         {/* Bank / IFSC — editable */}
                         <td className="py-3 px-3 text-xs" onClick={e => e.stopPropagation()}>
-                          <BankDetailsCell vendor={vendor} vendorName={po.vendorName} onSaved={() => qc.invalidateQueries({ queryKey: ['vendors-list'] })} />
+                          <BankDetailsCell vendor={vendor} vendorName={po.vendorName} onSaved={handleVendorSaved} />
                         </td>
 
                         {/* Products */}

@@ -29,7 +29,7 @@ export interface StoredVendor {
 }
 
 // ── DB row → StoredVendor ─────────────────────────────────────
-function rowToVendor(row: any): StoredVendor {
+export function rowToVendor(row: any): StoredVendor {
   return {
     id:           row.id,
     companyName:  row.name ?? '',
