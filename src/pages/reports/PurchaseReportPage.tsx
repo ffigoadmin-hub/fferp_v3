@@ -105,14 +105,20 @@ function BankDetailsCell({ vendor, vendorName, onSaved }: { vendor: any; vendorN
 }
 
 // ─── Status config ────────────────────────────────────────────────────────────
-// Covers both the legacy labels this page used and the literal values the DB
-// actually stores today ('pending', 'approved', 'ordered', 'received' — see
-// purchaseStore.ts's poToPayload) so a plain "pending" status gets a proper
-// styled badge instead of falling back to raw gray text.
+// purchase_orders.status has a DB CHECK constraint allowing only:
+// 'pending' | 'assigned' | 'purchasing' | 'purchased' | 'received' | 'cancelled'
+// (see COMPLETE_SCHEMA_MIGRATION.sql). Offering any other value in the manual
+// status dropdown fails with "violates check constraint
+// purchase_orders_status_check" — the legacy labels below are kept only so
+// an older/out-of-band row using one still gets a styled badge instead of
+// falling back to raw gray text; they're not offered as edit options.
 const STATUS_CFG: Record<string, { cls: string; label: string }> = {
   draft:            { cls: 'bg-gray-100 text-gray-600',    label: 'Draft' },
   pending:          { cls: 'bg-amber-100 text-amber-700',  label: 'Pending' },
   pending_approval: { cls: 'bg-amber-100 text-amber-700',  label: 'Pending Approval' },
+  assigned:         { cls: 'bg-blue-100 text-blue-700',    label: 'Assigned' },
+  purchasing:       { cls: 'bg-indigo-100 text-indigo-700',label: 'Purchasing' },
+  purchased:        { cls: 'bg-violet-100 text-violet-700',label: 'Purchased' },
   approved:         { cls: 'bg-blue-100 text-blue-700',    label: 'Approved' },
   open:             { cls: 'bg-blue-100 text-blue-700',    label: 'Approved' },
   ordered:          { cls: 'bg-indigo-100 text-indigo-700',label: 'Ordered' },
@@ -122,17 +128,16 @@ const STATUS_CFG: Record<string, { cls: string; label: string }> = {
   cancelled:        { cls: 'bg-red-100 text-red-600',      label: 'Cancelled' },
 };
 
-// Manual status-update options shown in the editable dropdown — the
-// business-flow set (Pending → Approved → Ordered → Received) plus the two
-// terminal/out-of-flow states someone might need to set by hand.
+// Manual status-update options shown in the editable dropdown — exactly the
+// values the DB CHECK constraint allows (see note above). Anything else
+// gets rejected by the database.
 const STATUS_OPTIONS = [
-  { value: 'pending',   label: 'Pending' },
-  { value: 'approved',  label: 'Approved' },
-  { value: 'ordered',   label: 'Ordered' },
-  { value: 'received',  label: 'Received' },
-  { value: 'billed',    label: 'Billed' },
-  { value: 'rejected',  label: 'Rejected' },
-  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'pending',    label: 'Pending' },
+  { value: 'assigned',   label: 'Assigned' },
+  { value: 'purchasing', label: 'Purchasing' },
+  { value: 'purchased',  label: 'Purchased' },
+  { value: 'received',   label: 'Received' },
+  { value: 'cancelled',  label: 'Cancelled' },
 ];
 
 // ─── Editable Status cell ───────────────────────────────────────────────────
