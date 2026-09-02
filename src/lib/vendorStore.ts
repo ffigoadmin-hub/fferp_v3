@@ -29,6 +29,12 @@ export interface StoredVendor {
 }
 
 // ── DB row → StoredVendor ─────────────────────────────────────
+// The live `vendors` table has no `gstin`/`pan` columns (the real GST
+// column is `gst_number`, and there's no PAN column at all) — selecting
+// `gstin`/`pan` used to make the whole query error out and silently
+// return zero rows, which is why vendor bank details never showed up
+// anywhere that read from this store. `gstin` here is sourced from the
+// real `gst_number` column; `pan` has nothing to source from yet.
 export function rowToVendor(row: any): StoredVendor {
   return {
     id:           row.id,
@@ -37,7 +43,7 @@ export function rowToVendor(row: any): StoredVendor {
     email:        row.email ?? '',
     mobile:       row.phone ?? '',
     phone:        row.phone ?? '',
-    gstin:        row.gstin ?? '',
+    gstin:        row.gst_number ?? '',
     pan:          row.pan ?? '',
     bank_name:    row.bank_name ?? '',
     bank_account: row.bank_account ?? '',
@@ -60,7 +66,7 @@ export function vendorDisplayName(v: StoredVendor): string {
 export async function fetchStoredVendors(): Promise<StoredVendor[]> {
   const { data, error } = await supabase
     .from('vendors')
-    .select('id, name, email, phone, gstin, pan, bank_name, bank_account, bank_ifsc')
+    .select('id, name, email, phone, gst_number, bank_name, bank_account, bank_ifsc')
     .order('name');
   if (error) { console.error('[vendorStore] fetchStoredVendors:', error.message); return []; }
   return (data ?? []).map(rowToVendor);

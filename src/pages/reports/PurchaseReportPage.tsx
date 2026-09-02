@@ -67,7 +67,11 @@ function BankDetailsCell({ vendor, vendorName, onSaved }: { vendor: any; vendorN
       account_number: acctVal,
       ifsc_code:      ifscVal,
     };
-    const selectCols = 'id, name, email, phone, gstin, pan, bank_name, bank_account, bank_ifsc';
+    // Matches fetchStoredVendors()'s column list exactly — selecting the
+    // nonexistent gstin/pan columns here made this save's own .select()
+    // throw ("column vendors.gstin does not exist"), even though the write
+    // itself had already gone through.
+    const selectCols = 'id, name, email, phone, gst_number, bank_name, bank_account, bank_ifsc';
     const { data, error } = vendor
       ? await supabase.from('vendors').update(payload).eq('id', vendor.id).select(selectCols).single()
       : await supabase.from('vendors').insert({ name: vendorName, type: 'dynamic', is_active: true, ...payload }).select(selectCols).single();
