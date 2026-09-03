@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   CheckCircle2, XCircle, Clock, RefreshCw, ChevronDown,
-  ChevronUp, CreditCard, AlertTriangle, Shield,
+  ChevronUp, CreditCard, AlertTriangle, Shield, Building2,
 } from 'lucide-react';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; step: number }> = {
@@ -138,8 +138,10 @@ export default function PaymentApprovalQueue() {
           id, payment_type, amount, deduction_total, net_amount,
           payment_method, payment_date, status, rejection_reason, notes,
           reference_no, created_at, created_by,
+          admin_approved_at, director_approved_at,
           vendor:vendors(id, name, account_number, bank_name, ifsc_code),
-          po:purchase_orders(po_number)
+          po:purchase_orders(po_number),
+          deduction_lines:payment_deduction_lines(id, amount, description, deduction_type)
         `)
         .order('created_at', { ascending: false })
         .limit(100);
@@ -331,7 +333,7 @@ export default function PaymentApprovalQueue() {
                         { label: 'Payment Date',   value: payment.payment_date ? format(new Date(payment.payment_date), 'dd MMM yyyy') : '—' },
                         { label: 'Reference No.',  value: payment.reference_no || '—' },
                         { label: 'Submitted By',   value: payment.creator?.name ?? '—' },
-                        { label: 'Bank',           value: payment.vendor?.bank_name ?? '—' },
+                        { label: 'PO Number',      value: payment.po?.po_number || '—' },
                       ].map(({ label, value }) => (
                         <div key={label} className="bg-white rounded-lg p-2.5">
                           <p className="text-[10px] text-gray-400">{label}</p>
@@ -339,6 +341,69 @@ export default function PaymentApprovalQueue() {
                         </div>
                       ))}
                     </div>
+
+                    {/* Bank Transfer Details — shown to approvers so they know where money goes */}
+                    {payment.vendor && (payment.vendor.account_number || payment.vendor.ifsc_code) && (
+                      <div className="p-3 rounded-lg border border-blue-100 bg-blue-50/60">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-500 mb-1.5 flex items-center gap-1">
+                          <Building2 className="w-3 h-3" /> Bank Transfer Details
+                        </p>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <p className="text-gray-400 text-[10px]">Bank</p>
+                            <p className="font-semibold text-gray-800">{payment.vendor.bank_name || '—'}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-400 text-[10px]">Account No.</p>
+                            <p className="font-semibold text-gray-800">{payment.vendor.account_number || '—'}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-400 text-[10px]">IFSC</p>
+                            <p className="font-semibold text-gray-800">{payment.vendor.ifsc_code || '—'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Deduction breakdown — this system tracks lump-sum payments against
+                        deduction memos (payment_deduction_lines), not per-product items like
+                        the FF Payments flow does; this is its equivalent breakdown table. */}
+                    {payment.deduction_lines?.length > 0 && (
+                      <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 px-3 pt-2.5">Deduction Breakdown</p>
+                        <table className="w-full text-xs mt-1.5">
+                          <thead>
+                            <tr className="text-gray-400 border-t border-gray-100">
+                              <th className="text-left font-medium py-1.5 px-3">Description</th>
+                              <th className="text-left font-medium py-1.5 px-3">Type</th>
+                              <th className="text-right font-medium py-1.5 px-3">Amount</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {payment.deduction_lines.map((line: any) => (
+                              <tr key={line.id} className="border-t border-gray-50">
+                                <td className="py-1.5 px-3 text-gray-700">{line.description || '—'}</td>
+                                <td className="py-1.5 px-3 text-gray-500 capitalize">{line.deduction_type?.replace('_', ' ') || '—'}</td>
+                                <td className="py-1.5 px-3 text-right font-medium text-red-500">-{fmt(line.amount)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    {/* Approval History */}
+                    {(payment.admin_approved_at || payment.director_approved_at) && (
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium text-gray-500 mb-1">Approval History</p>
+                        {payment.admin_approved_at && (
+                          <div className="text-xs text-gray-500">✓ Admin: {format(new Date(payment.admin_approved_at), 'dd MMM, h:mm a')}</div>
+                        )}
+                        {payment.director_approved_at && (
+                          <div className="text-xs text-gray-500">✓ Director: {format(new Date(payment.director_approved_at), 'dd MMM, h:mm a')}</div>
+                        )}
+                      </div>
+                    )}
 
                     {payment.notes && (
                       <div className="bg-white rounded-lg p-3">
