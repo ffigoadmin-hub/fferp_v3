@@ -899,9 +899,13 @@ const AppRoutes = () => {
       {/* L1 Manager */}
       <Route path="/l1/payments"           element={<ProtectedRoute allowedRoles={['l1_manager','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
       <Route path="/l1/transport-payments" element={<ProtectedRoute allowedRoles={['l1_manager','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
-      {/* Auditor */}
+      {/* Auditor — retired from the active approval chain (see FFPaymentApprovals.tsx),
+          routes kept only so a stray auditor-role account doesn't 404 */}
       <Route path="/auditor/ff-payments"           element={<ProtectedRoute allowedRoles={['auditor','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
       <Route path="/auditor/ff-transport-payments" element={<ProtectedRoute allowedRoles={['auditor','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
+      {/* Admin — its own stage in the chain (Manager -> L1 -> Admin -> CEO -> Accounts) */}
+      <Route path="/admin/ff-payments"           element={<ProtectedRoute allowedRoles={['admin']}><FFPaymentApprovals /></ProtectedRoute>} />
+      <Route path="/admin/ff-transport-payments" element={<ProtectedRoute allowedRoles={['admin']}><FFPaymentApprovals /></ProtectedRoute>} />
       {/* CEO */}
       <Route path="/ceo/ff-overview"           element={<ProtectedRoute allowedRoles={['ceo','admin']}><CEOFFOverview /></ProtectedRoute>} />
       <Route path="/ceo/ff-payments"           element={<ProtectedRoute allowedRoles={['ceo','admin']}><FFPaymentApprovals /></ProtectedRoute>} />

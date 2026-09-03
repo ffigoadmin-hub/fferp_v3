@@ -129,7 +129,7 @@ export default function PaymentApprovalQueue() {
     return ['all', 'pending_admin', 'approved', 'rejected', 'processed'];
   })();
 
-  const { data: payments = [], isLoading, refetch } = useQuery({
+  const { data: payments = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['payment-approval-queue', filterStatus, role],
     queryFn: async () => {
       let q = supabase
@@ -140,7 +140,7 @@ export default function PaymentApprovalQueue() {
           reference_no, created_at,
           vendor:vendors(id, name, account_number, bank_name, ifsc_code),
           po:purchase_orders(po_number),
-          creator:profiles(full_name)
+          creator:profiles(name)
         `)
         .order('created_at', { ascending: false })
         .limit(100);
@@ -149,7 +149,8 @@ export default function PaymentApprovalQueue() {
         q = q.eq('status', filterStatus);
       }
 
-      const { data } = await q;
+      const { data, error } = await q;
+      if (error) { console.error('[PaymentApprovalQueue]', error.message); throw error; }
       return data ?? [];
     },
   });
@@ -260,6 +261,11 @@ export default function PaymentApprovalQueue() {
       <div className="zoho-card">
         {isLoading ? (
           <div className="p-8 text-center text-sm text-gray-400">Loading…</div>
+        ) : isError ? (
+          <div className="p-12 text-center">
+            <AlertTriangle className="h-10 w-10 text-red-200 mx-auto mb-2" />
+            <p className="text-sm text-red-500">Couldn't load payments — check the console and try Refresh</p>
+          </div>
         ) : (payments as any[]).length === 0 ? (
           <div className="p-12 text-center">
             <CheckCircle2 className="h-10 w-10 text-gray-200 mx-auto mb-2" />
@@ -312,7 +318,7 @@ export default function PaymentApprovalQueue() {
                         { label: 'Method',         value: payment.payment_method?.replace('_', ' ') ?? '—' },
                         { label: 'Payment Date',   value: payment.payment_date ? format(new Date(payment.payment_date), 'dd MMM yyyy') : '—' },
                         { label: 'Reference No.',  value: payment.reference_no || '—' },
-                        { label: 'Submitted By',   value: payment.creator?.full_name ?? '—' },
+                        { label: 'Submitted By',   value: payment.creator?.name ?? '—' },
                         { label: 'Bank',           value: payment.vendor?.bank_name ?? '—' },
                       ].map(({ label, value }) => (
                         <div key={label} className="bg-white rounded-lg p-2.5">

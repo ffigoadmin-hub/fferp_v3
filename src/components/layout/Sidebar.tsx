@@ -549,22 +549,22 @@ const navigationConfig: NavGroup[] = [
     roles: ['admin'],
     items: [
       {
+        // Chain: Manager -> L1 -> Admin -> CEO -> Accounts (GM/Auditor retired
+        // — see FFPaymentApprovals.tsx for the full rationale).
         icon: Banknote, label: 'Vendor Payments', path: '/ff-operations/payment-approvals',
         children: [
-          { label: 'FF Ops Review',      path: '/ff-operations/payment-approvals' },
-          { label: 'GM Approval',        path: '/gm/ff-payments' },
+          { label: 'Manager Review',     path: '/ff-operations/payment-approvals' },
           { label: 'L1 Approval',        path: '/l1/payments' },
-          { label: 'Auditor Approval',   path: '/auditor/ff-payments' },
+          { label: 'Admin Approval',     path: '/admin/ff-payments' },
           { label: 'CEO Final Approval', path: '/ceo/ff-payments' },
           { label: 'Accounts Payout',    path: '/accounts/ff-payments' },
         ],
       },
       {
-        icon: Truck, label: 'Transport Payments', path: '/gm/ff-transport-payments',
+        icon: Truck, label: 'Transport Payments', path: '/l1/transport-payments',
         children: [
-          { label: 'GM Approval',        path: '/gm/ff-transport-payments' },
           { label: 'L1 Approval',        path: '/l1/transport-payments' },
-          { label: 'Auditor Approval',   path: '/auditor/ff-transport-payments' },
+          { label: 'Admin Approval',     path: '/admin/ff-transport-payments' },
           { label: 'CEO Final Approval', path: '/ceo/ff-transport-payments' },
           { label: 'Accounts Payout',    path: '/accounts/ff-transport-payments' },
         ],
