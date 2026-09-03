@@ -170,9 +170,11 @@ const PAYMENT_STATUS_CFG: Record<string, { cls: string; label: string }> = {
 // Accounts' stage still routes to the full page since marking paid needs a
 // UTR/proof form that doesn't fit a table cell.
 function ApprovalCell({
-  payment, userRole, userId, onApproved, navigate,
+  payment, po, vendor, userRole, userId, onApproved, navigate,
 }: {
   payment: { id: string; status: string } | undefined;
+  po: StoredPO;
+  vendor: any;
   userRole: string;
   userId: string | undefined;
   onApproved: () => void;
@@ -180,8 +182,50 @@ function ApprovalCell({
 }) {
   const [approving, setApproving] = useState(false);
 
+  // Nothing raised yet — the Manager can raise AND approve it in one click
+  // right from this row (their approval is what's raising it in the first
+  // place), instead of separately filling out New Vendor Payment first.
+  // Anyone else just sees "Not raised" — raising is the Manager's call.
   if (!payment) {
-    return <span className="text-[10px] text-gray-300">Not raised</span>;
+    if (userRole !== 'ff_operations_manager') {
+      return <span className="text-[10px] text-gray-300">Not raised</span>;
+    }
+    const canRaise = !!vendor?.id && po.items.length > 0;
+    const raiseAndApprove = async (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (!canRaise) return;
+      setApproving(true);
+      const { error } = await supabase.from('ff_vendor_payments').insert({
+        vendor_id: vendor.id,
+        purchase_order_id: po.id,
+        hub_id: po.hub_id || null,
+        items: po.items.map(i => ({
+          product_name: i.itemName, qty: i.quantity, unit: 'kg',
+          rate: i.rate, amount: i.quantity * i.rate,
+          qc_grade: 'A', deduction_reason: '',
+        })),
+        gross_amount: po.total || po.subTotal || 0,
+        deduction_amount: 0,
+        payment_status: 'pending_l1',
+        ff_ops_approved_by: userId,
+        ff_ops_approved_at: new Date().toISOString(),
+        created_by: userId,
+      });
+      setApproving(false);
+      if (error) { toast.error(error.message); return; }
+      toast.success('Payment raised and approved — moved to L1');
+      onApproved();
+    };
+    return (
+      <button
+        onClick={raiseAndApprove}
+        disabled={approving || !canRaise}
+        title={!vendor?.id ? 'Add this vendor\'s bank details first (Bank/IFSC column)' : !canRaise ? 'PO has no items' : 'Raise this PO as a vendor payment, already approved as Manager'}
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-600 text-white hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+      >
+        {approving ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <CheckCircle2 className="w-2.5 h-2.5" />} Raise & Approve
+      </button>
+    );
   }
 
   const { id, status } = payment;
@@ -729,6 +773,8 @@ export default function PurchaseReportPage() {
                         <td className="py-3 px-3 text-center">
                           <ApprovalCell
                             payment={paymentByPO[po.id]}
+                            po={po}
+                            vendor={vendor}
                             userRole={userRole}
                             userId={user?.id}
                             onApproved={() => qc.invalidateQueries({ queryKey: ['ff-vendor-payments-by-po'] })}
