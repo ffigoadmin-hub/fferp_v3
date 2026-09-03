@@ -56,6 +56,7 @@ import {
   MessageSquare,
   ShieldAlert,
   Home,
+  X,
   Coffee,
   Zap,
   ChefHat,
@@ -1161,6 +1162,7 @@ export function Sidebar() {
   const { isCoreHead } = useIsCoreHead();
   const pendingCounts = useFFPaymentCount();
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Auto-expand if a child route is active
   useEffect(() => {
@@ -1248,14 +1250,65 @@ export function Sidebar() {
     });
   }
 
+  // Live filter — matches item labels, and (for items with a sub-menu)
+  // child labels too; a matching child keeps its parent item (trimmed to
+  // just the matching children) even if the parent's own label doesn't
+  // match. A group survives only if at least one item still has something.
+  const search = searchQuery.trim().toLowerCase();
+  const searchedGroups = search
+    ? filteredGroups
+        .map(group => ({
+          ...group,
+          items: group.items
+            .map(item => {
+              const selfMatches = item.label.toLowerCase().includes(search);
+              if (item.children && item.children.length > 0) {
+                if (selfMatches) return item;
+                const childMatches = item.children.filter(c => c.label.toLowerCase().includes(search));
+                return childMatches.length > 0 ? { ...item, children: childMatches } : null;
+              }
+              return selfMatches ? item : null;
+            })
+            .filter((i): i is typeof group.items[number] => i !== null),
+        }))
+        .filter(group => group.items.length > 0)
+    : filteredGroups;
+
   return (
     <aside className="flex flex-col w-[240px] h-full shrink-0"
       style={{ background: '#FFFFFF', borderRight: '1px solid #E5E7EB' }}>
 
+      {/* Module search */}
+      <div className="px-3 pt-3 pb-2 shrink-0" style={{ borderBottom: '1px solid #F3F4F6' }}>
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5" style={{ color: '#9CA3AF' }} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search menu…"
+            className="w-full text-[13px] rounded-lg pl-8 pr-8 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', color: '#374151' }}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2"
+              style={{ color: '#9CA3AF' }}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+        {search && searchedGroups.length === 0 && (
+          <p className="text-[11px] mt-1.5 px-0.5" style={{ color: '#9CA3AF' }}>No matching pages</p>
+        )}
+      </div>
+
       {/* Scrollable nav */}
       <div className="flex-1 overflow-y-auto py-3">
         <nav>
-          {filteredGroups.map((group, groupIdx) => {
+          {searchedGroups.map((group, groupIdx) => {
             const GroupIcon = group.icon;
             const isFirst = groupIdx === 0;
 
@@ -1287,7 +1340,7 @@ export function Sidebar() {
 
                     // ── Expandable item with children ──────────────────────
                     if (item.children && item.children.length > 0) {
-                      const isExpanded = expandedItems.has(item.path);
+                      const isExpanded = search ? true : expandedItems.has(item.path);
                       const isParentActive = location.pathname === item.path || item.children.some(c => location.pathname.startsWith(c.path));
 
                       return (
@@ -1317,6 +1370,7 @@ export function Sidebar() {
                                 <NavLink
                                   key={child.path}
                                   to={child.path}
+                                  onClick={() => search && setSearchQuery('')}
                                   className={({ isActive }) => cn(
                                     'flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg text-[12px] font-medium transition-all duration-150',
                                     isActive
@@ -1348,6 +1402,7 @@ export function Sidebar() {
                       <NavLink
                         key={item.path}
                         to={item.path}
+                        onClick={() => search && setSearchQuery('')}
                         className={({ isActive }) => cn(
                           'flex items-center gap-2.5 py-2 pr-3 rounded-xl text-[13px] font-medium transition-all duration-150 border-l-[3px]',
                           isActive

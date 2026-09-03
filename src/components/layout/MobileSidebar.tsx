@@ -876,6 +876,7 @@ export function MobileSidebar({ onClose }: MobileSidebarProps) {
   const { dayStart } = useDayStart(new Date());
   const { isCoreHead } = useIsCoreHead();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [searchQuery, setSearchQuery] = useState('');
 
   if (!user) return null;
 
@@ -942,7 +943,20 @@ export function MobileSidebar({ onClose }: MobileSidebarProps) {
     }));
   };
 
+  // Live filter — matches against each item's label; a group is kept (and
+  // trimmed to only its matching items) when at least one item matches.
+  const search = searchQuery.trim().toLowerCase();
+  const searchedGroups = search
+    ? filteredGroups
+        .map(group => ({
+          ...group,
+          items: group.items.filter(item => item.label.toLowerCase().includes(search)),
+        }))
+        .filter(group => group.items.length > 0)
+    : filteredGroups;
+
   const isGroupOpen = (group: NavGroup) => {
+    if (search) return true; // auto-expand every matching group while searching
     if (openGroups[group.title] !== undefined) {
       return openGroups[group.title];
     }
@@ -980,10 +994,35 @@ export function MobileSidebar({ onClose }: MobileSidebarProps) {
         </div>
       </div>
 
+      {/* Search */}
+      <div className="px-3 py-2.5 border-b border-[#1e3a5f]">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#4a6fa5]" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search menu…"
+            className="w-full bg-[#1a3450] text-white placeholder:text-[#4a6fa5] text-[13px] rounded-md pl-8 pr-8 py-1.5 focus:outline-none focus:ring-1 focus:ring-green-500"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[#4a6fa5] hover:text-white"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+        {search && searchedGroups.length === 0 && (
+          <p className="text-[11px] text-[#4a6fa5] mt-1.5 px-0.5">No matching pages</p>
+        )}
+      </div>
+
       {/* Navigation */}
       <ScrollArea className="flex-1 px-2 py-3">
         <nav className="space-y-0.5">
-          {filteredGroups.map((group) => {
+          {searchedGroups.map((group) => {
             const isOpen = isGroupOpen(group);
             const GroupIcon = group.icon;
 
