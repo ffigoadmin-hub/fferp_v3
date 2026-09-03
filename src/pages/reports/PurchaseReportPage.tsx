@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchAllPOs, type StoredPO } from '@/lib/purchaseStore';
 import { fetchStoredVendors, vendorDisplayName, rowToVendor } from '@/lib/vendorStore';
-import { matchVendor } from '@/lib/poImportParsers';
+import { matchVendor, normName } from '@/lib/poImportParsers';
 import { NEXT_STATUS, APPROVED_BY_COL, MY_PENDING_STATUS } from '@/pages/ff-operations/FFPaymentApprovals';
 
 // ─── Editable Bank / IFSC cell ──────────────────────────────────────────────
@@ -417,15 +417,32 @@ export default function PurchaseReportPage() {
   // entry / PDF import ("MS. KRP TRADERS") and rarely match a vendor record's
   // stored name exactly, so this reuses the same tolerant matching the PO
   // import review screen uses instead of an exact-string key lookup.
+  //
+  // A batch PO import that repeats the same vendor name across many rows can
+  // end up creating several duplicate vendor rows for that one name (each
+  // row not knowing about a duplicate another row in the same batch just
+  // created) — when that happens, only one of those duplicates usually has
+  // bank details filled in. Among same-named vendors, prefer whichever one
+  // actually has bank details instead of an arbitrary/empty duplicate, so
+  // this keeps showing the right data even before the duplicates get
+  // cleaned up in the database.
   const findVendor = useMemo(() => {
-    const candidates = vendorList.map((v: any) => ({ id: v.id, name: vendorDisplayName(v) }));
     const cache = new Map<string, any>();
     return (rawName: string) => {
+      if (!rawName) return null;
       if (cache.has(rawName)) return cache.get(rawName);
-      const m = matchVendor(rawName, candidates);
-      const full = m ? vendorList.find((v: any) => v.id === m.id) ?? null : null;
-      cache.set(rawName, full);
-      return full;
+      const norm = normName(rawName);
+      const exactMatches = vendorList.filter((v: any) => normName(vendorDisplayName(v)) === norm);
+      let result: any = null;
+      if (exactMatches.length) {
+        result = exactMatches.find((v: any) => v.banks?.[0]?.accountNumber) ?? exactMatches[0];
+      } else {
+        const candidates = vendorList.map((v: any) => ({ id: v.id, name: vendorDisplayName(v) }));
+        const m = matchVendor(rawName, candidates);
+        result = m ? vendorList.find((v: any) => v.id === m.id) ?? null : null;
+      }
+      cache.set(rawName, result);
+      return result;
     };
   }, [vendorList]);
 

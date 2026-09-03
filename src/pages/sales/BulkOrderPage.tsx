@@ -154,6 +154,11 @@ function ImportSalesOrderDialog({
     const today = format(new Date(), 'yyyy-MM-dd');
     const isRealUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user?.id ?? '');
     let created = 0, failed = 0;
+    // Same fix as the PO import: a repeated unmatched customer name across
+    // many rows in one batch would otherwise create a duplicate customer
+    // per row instead of reusing the one an earlier row in this batch just
+    // created.
+    const createdCustomerCache = new Map<string, string>();
 
     for (const row of rows) {
       if (!row.include) continue;
@@ -164,12 +169,18 @@ function ImportSalesOrderDialog({
         const custName = row.customerNameOverride.trim();
         if (!customerId) {
           if (!custName) throw new Error('No customer name');
-          const { data: newCust, error: cErr } = await supabase
-            .from('customers')
-            .insert({ customer_type: 'shop', shop_name: custName, name: custName, is_active: true })
-            .select('id').single();
-          if (cErr) throw cErr;
-          customerId = newCust.id;
+          const cacheKey = normCustName(custName);
+          if (createdCustomerCache.has(cacheKey)) {
+            customerId = createdCustomerCache.get(cacheKey)!;
+          } else {
+            const { data: newCust, error: cErr } = await supabase
+              .from('customers')
+              .insert({ customer_type: 'shop', shop_name: custName, name: custName, is_active: true })
+              .select('id').single();
+            if (cErr) throw cErr;
+            customerId = newCust.id;
+            createdCustomerCache.set(cacheKey, customerId);
+          }
         }
 
         const hub = hubs.find(h => h.id === row.hubId);

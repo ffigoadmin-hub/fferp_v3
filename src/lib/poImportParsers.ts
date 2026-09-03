@@ -229,7 +229,7 @@ export async function parsePOFile(file: File): Promise<ParsedPO[]> {
 
 // ── Vendor / Hub fuzzy matching ───────────────────────────────
 
-function normName(s: string): string {
+export function normName(s: string): string {
   return (s ?? '')
     .toLowerCase()
     .replace(/^ms\.?\s*/i, '')

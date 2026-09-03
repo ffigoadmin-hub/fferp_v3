@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { savePOToStore, fetchMaxPOSerial, type StoredPO } from '@/lib/purchaseStore';
-import { parsePOFile, matchVendor, matchHub, type ParsedPO } from '@/lib/poImportParsers';
+import { parsePOFile, matchVendor, matchHub, normName, type ParsedPO } from '@/lib/poImportParsers';
 import { fetchStoredVendors, vendorDisplayName } from '@/lib/vendorStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -387,6 +387,14 @@ function ImportPODialog({
     setImporting(true);
     let serial = await fetchMaxPOSerial();
     let created = 0, failed = 0;
+    // A batch often repeats the same unmatched vendor name across many rows
+    // (e.g. 9 POs for the same supplier in one file). Each row's vendorId
+    // was resolved once at parse time against the vendor list as it stood
+    // then, so without this cache every one of those rows would insert its
+    // own duplicate "new vendor" row here — this makes rows later in the
+    // same batch reuse whichever vendor an earlier row in this batch just
+    // created, instead of creating a fresh duplicate every time.
+    const createdVendorCache = new Map<string, string>();
 
     for (const row of rows) {
       if (!row.include) continue;
@@ -401,13 +409,19 @@ function ImportPODialog({
         if (!vendorId) {
           const name = row.vendorNameOverride.trim();
           if (!name) throw new Error('No vendor name');
-          const { data: newVendor, error: vErr } = await supabase
-            .from('vendors')
-            .insert({ name, type: 'dynamic', is_active: true })
-            .select('id')
-            .single();
-          if (vErr) throw vErr;
-          vendorId = newVendor.id;
+          const cacheKey = normName(name);
+          if (createdVendorCache.has(cacheKey)) {
+            vendorId = createdVendorCache.get(cacheKey)!;
+          } else {
+            const { data: newVendor, error: vErr } = await supabase
+              .from('vendors')
+              .insert({ name, type: 'dynamic', is_active: true })
+              .select('id')
+              .single();
+            if (vErr) throw vErr;
+            vendorId = newVendor.id;
+            createdVendorCache.set(cacheKey, vendorId);
+          }
         }
 
         serial += 1;
@@ -811,16 +825,27 @@ export default function PurchaseOrdersPage() {
     queryKey: ['vendors-list-po-view'],
     queryFn: fetchStoredVendors,
   });
+  // A batch PO import repeating the same vendor name across many rows can
+  // create several duplicate vendor rows for that one name — only one of
+  // which usually has bank details. Prefer whichever same-named vendor
+  // actually has bank details instead of an arbitrary/empty duplicate.
   const vendorMap = useMemo(() => {
-    const candidates = vendorList.map((v: any) => ({ id: v.id, name: vendorDisplayName(v) }));
     const cache = new Map<string, any>();
     return (rawName: string) => {
       if (!rawName) return null;
       if (cache.has(rawName)) return cache.get(rawName);
-      const m = matchVendor(rawName, candidates);
-      const full = m ? vendorList.find((v: any) => v.id === m.id) ?? null : null;
-      cache.set(rawName, full);
-      return full;
+      const norm = normName(rawName);
+      const exactMatches = vendorList.filter((v: any) => normName(vendorDisplayName(v)) === norm);
+      let result: any = null;
+      if (exactMatches.length) {
+        result = exactMatches.find((v: any) => v.banks?.[0]?.accountNumber) ?? exactMatches[0];
+      } else {
+        const candidates = vendorList.map((v: any) => ({ id: v.id, name: vendorDisplayName(v) }));
+        const m = matchVendor(rawName, candidates);
+        result = m ? vendorList.find((v: any) => v.id === m.id) ?? null : null;
+      }
+      cache.set(rawName, result);
+      return result;
     };
   }, [vendorList]);
 
