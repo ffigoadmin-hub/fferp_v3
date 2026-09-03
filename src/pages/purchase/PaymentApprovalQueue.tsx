@@ -132,16 +132,20 @@ export default function PaymentApprovalQueue() {
   const { data: payments = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['payment-approval-queue', filterStatus, role],
     queryFn: async () => {
+      // Only columns confirmed live via information_schema (see
+      // CHECK_VENDOR_PAYMENTS_COLUMNS.sql / CHECK_VENDOR_PAYMENTS_FKS.sql) —
+      // admin_approved_at/director_approved_at do NOT exist on this table
+      // despite being in some of the SQL migration files, and
+      // payment_deduction_lines hasn't been confirmed to exist live either;
+      // both are left out until confirmed, rather than guessed again.
       let q = supabase
         .from('vendor_payments')
         .select(`
           id, payment_type, amount, deduction_total, net_amount,
           payment_method, payment_date, status, rejection_reason, notes,
           reference_no, created_at, created_by,
-          admin_approved_at, director_approved_at,
           vendor:vendors(id, name, account_number, bank_name, ifsc_code),
-          po:purchase_orders(po_number),
-          deduction_lines:payment_deduction_lines(id, amount, description, deduction_type)
+          po:purchase_orders(po_number)
         `)
         .order('created_at', { ascending: false })
         .limit(100);
