@@ -459,18 +459,29 @@ function PaymentCard({
 // approval goes through markPaidMutation (approving IS disbursing), not
 // this generic "advance to next stage" mutation. GM/auditor intentionally
 // have no entry — they're retired from the chain (see status-helpers note).
-const NEXT_STATUS: Record<string, string> = {
+export const NEXT_STATUS: Record<string, string> = {
   ff_operations_manager: 'pending_l1',
   l1_manager: 'pending_admin',
   admin:      'pending_ceo',
   ceo:        'pending_accounts',
 };
 
-const APPROVED_BY_COL: Record<string, string> = {
+export const APPROVED_BY_COL: Record<string, string> = {
   ff_operations_manager: 'ff_ops',
   l1_manager: 'l1',
   admin:      'admin',
   ceo:        'ceo',
+};
+
+// Which pending_* status each role acts on — shared with the Purchase
+// Report page's inline Approval column so both pages agree on whose turn
+// it is without duplicating the chain definition.
+export const MY_PENDING_STATUS: Record<string, string> = {
+  ff_operations_manager: 'pending_ff_ops',
+  l1_manager: 'pending_l1',
+  admin:      'pending_admin',
+  ceo:        'pending_ceo',
+  accounts:   'pending_accounts',
 };
 
 // ── Main page ─────────────────────────────────────────────────
@@ -498,13 +509,7 @@ export default function FFPaymentApprovals() {
   const col = APPROVED_BY_COL[approvalRole];
 
   // Determine which status to filter for "my queue"
-  const myPendingStatus: Record<string, string> = {
-    ff_operations_manager: 'pending_ff_ops',
-    l1_manager: 'pending_l1',
-    admin:      'pending_admin',
-    ceo:        'pending_ceo',
-    accounts:   'pending_accounts',
-  };
+  const myPendingStatus = MY_PENDING_STATUS;
 
   // Fetch vendor payments
   const { data: vendorPayments = [], isLoading: vLoading, refetch: vRefetch } = useQuery({

@@ -5,14 +5,16 @@ import { format } from 'date-fns';
 import {
   ArrowLeft, Download, FileText, Search, RefreshCw,
   ChevronDown, ChevronUp, ChevronsUpDown, Package,
-  TrendingUp, ShoppingBag, CheckCircle2, Pencil, Building2, Banknote,
+  TrendingUp, ShoppingBag, CheckCircle2, Pencil, Building2, Banknote, Loader2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { fetchAllPOs, type StoredPO } from '@/lib/purchaseStore';
 import { fetchStoredVendors, vendorDisplayName, rowToVendor } from '@/lib/vendorStore';
 import { matchVendor } from '@/lib/poImportParsers';
+import { NEXT_STATUS, APPROVED_BY_COL, MY_PENDING_STATUS } from '@/pages/ff-operations/FFPaymentApprovals';
 
 // ─── Editable Bank / IFSC cell ──────────────────────────────────────────────
 // `vendor` is the fuzzy-matched vendor record, if one was found. Even when
@@ -160,12 +162,50 @@ const PAYMENT_STATUS_CFG: Record<string, { cls: string; label: string }> = {
   pending_auditor:  { cls: 'bg-cyan-100 text-cyan-700',    label: 'Pending Auditor' },
 };
 
-function ApprovalCell({ status, navigate }: { status: string | undefined; navigate: (path: string) => void }) {
-  if (!status) {
+// Interactive: when the payment sitting on this PO is waiting on the
+// viewer's own stage, they can approve it right here — Manager approves →
+// it becomes pending_l1, so it now shows up on the L1 approver's own queue
+// (FFPaymentApprovals / their sidebar badge count), same chain, same rules,
+// just actioned from this report instead of navigating to a separate page.
+// Accounts' stage still routes to the full page since marking paid needs a
+// UTR/proof form that doesn't fit a table cell.
+function ApprovalCell({
+  payment, userRole, userId, onApproved, navigate,
+}: {
+  payment: { id: string; status: string } | undefined;
+  userRole: string;
+  userId: string | undefined;
+  onApproved: () => void;
+  navigate: (path: string) => void;
+}) {
+  const [approving, setApproving] = useState(false);
+
+  if (!payment) {
     return <span className="text-[10px] text-gray-300">Not raised</span>;
   }
+
+  const { id, status } = payment;
   const cfg = PAYMENT_STATUS_CFG[status] ?? { cls: 'bg-gray-100 text-gray-600', label: status };
-  return (
+  const myTurn = MY_PENDING_STATUS[userRole] === status;
+  const nextStatus = NEXT_STATUS[userRole];
+  const col = APPROVED_BY_COL[userRole];
+
+  const approve = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!nextStatus || !col) return;
+    setApproving(true);
+    const { error } = await supabase.from('ff_vendor_payments').update({
+      payment_status: nextStatus,
+      [`${col}_approved_by`]: userId,
+      [`${col}_approved_at`]: new Date().toISOString(),
+    }).eq('id', id);
+    setApproving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Approved — moved to ${PAYMENT_STATUS_CFG[nextStatus]?.label ?? nextStatus}`);
+    onApproved();
+  };
+
+  const badge = (
     <button
       onClick={(e) => { e.stopPropagation(); navigate('/ff-operations/payment-approvals'); }}
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold hover:opacity-75 transition-opacity ${cfg.cls}`}
@@ -173,6 +213,33 @@ function ApprovalCell({ status, navigate }: { status: string | undefined; naviga
     >
       <Banknote className="w-2.5 h-2.5" />{cfg.label}
     </button>
+  );
+
+  if (!myTurn) return badge;
+
+  // Accounts: approving IS disbursing, needs UTR/proof — send to the full page.
+  if (userRole === 'accounts') {
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); navigate('/accounts/ff-payments'); }}
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-600 text-white hover:bg-green-700 transition-colors"
+      >
+        <CheckCircle2 className="w-2.5 h-2.5" /> Mark Paid →
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-1">
+      {badge}
+      <button
+        onClick={approve}
+        disabled={approving}
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition-colors"
+      >
+        {approving ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <CheckCircle2 className="w-2.5 h-2.5" />} Approve
+      </button>
+    </div>
   );
 }
 
@@ -227,6 +294,8 @@ function fmt(n: number) {
 export default function PurchaseReportPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const userRole = (user as any)?.role ?? '';
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo]     = useState('');
   const [search, setSearch]     = useState('');
@@ -264,11 +333,11 @@ export default function PurchaseReportPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('ff_vendor_payments')
-        .select('purchase_order_id, payment_status')
+        .select('id, purchase_order_id, payment_status')
         .not('purchase_order_id', 'is', null);
       if (error) { console.error('[PurchaseReportPage] ff_vendor_payments:', error.message); return {}; }
-      const map: Record<string, string> = {};
-      (data ?? []).forEach((row: any) => { map[row.purchase_order_id] = row.payment_status; });
+      const map: Record<string, { id: string; status: string }> = {};
+      (data ?? []).forEach((row: any) => { map[row.purchase_order_id] = { id: row.id, status: row.payment_status }; });
       return map;
     },
   });
@@ -352,7 +421,7 @@ export default function PurchaseReportPage() {
       filtered.forEach(po => {
         const vendor = findVendor(po.vendorName);
         const statusLabel = STATUS_CFG[po.status]?.label ?? po.status;
-        const paymentStatus = paymentByPO[po.id];
+        const paymentStatus = paymentByPO[po.id]?.status;
         const approvalLabel = paymentStatus ? (PAYMENT_STATUS_CFG[paymentStatus]?.label ?? paymentStatus) : 'Not raised';
 
         if (po.items.length === 0) {
@@ -658,7 +727,13 @@ export default function PurchaseReportPage() {
 
                         {/* Approval — this PO's actual payment-approval progress */}
                         <td className="py-3 px-3 text-center">
-                          <ApprovalCell status={paymentByPO[po.id]} navigate={navigate} />
+                          <ApprovalCell
+                            payment={paymentByPO[po.id]}
+                            userRole={userRole}
+                            userId={user?.id}
+                            onApproved={() => qc.invalidateQueries({ queryKey: ['ff-vendor-payments-by-po'] })}
+                            navigate={navigate}
+                          />
                         </td>
                       </tr>
 
