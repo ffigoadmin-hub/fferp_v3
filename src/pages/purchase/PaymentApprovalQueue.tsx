@@ -137,10 +137,9 @@ export default function PaymentApprovalQueue() {
         .select(`
           id, payment_type, amount, deduction_total, net_amount,
           payment_method, payment_date, status, rejection_reason, notes,
-          reference_no, created_at,
+          reference_no, created_at, created_by,
           vendor:vendors(id, name, account_number, bank_name, ifsc_code),
-          po:purchase_orders(po_number),
-          creator:profiles(name)
+          po:purchase_orders(po_number)
         `)
         .order('created_at', { ascending: false })
         .limit(100);
@@ -151,7 +150,20 @@ export default function PaymentApprovalQueue() {
 
       const { data, error } = await q;
       if (error) { console.error('[PaymentApprovalQueue]', error.message); throw error; }
-      return data ?? [];
+      const rows = data ?? [];
+
+      // created_by has no FK constraint to profiles (confirmed via
+      // information_schema — only hub_id/po_id/purchase_entry_id/vendor_id
+      // do), so PostgREST can't embed creator:profiles(...) directly; that
+      // was making this whole query error out. Fetch names separately and
+      // merge them in instead.
+      const creatorIds = [...new Set(rows.map((r: any) => r.created_by).filter(Boolean))];
+      let creatorMap: Record<string, string> = {};
+      if (creatorIds.length) {
+        const { data: creators } = await supabase.from('profiles').select('id, name').in('id', creatorIds);
+        creatorMap = Object.fromEntries((creators ?? []).map((c: any) => [c.id, c.name]));
+      }
+      return rows.map((r: any) => ({ ...r, creator: r.created_by ? { name: creatorMap[r.created_by] } : null }));
     },
   });
 
