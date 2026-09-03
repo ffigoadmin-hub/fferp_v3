@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import {
   ArrowLeft, Download, FileText, Search, RefreshCw,
   ChevronDown, ChevronUp, ChevronsUpDown, Package,
-  TrendingUp, ShoppingBag, CheckCircle2, Pencil, Building2,
+  TrendingUp, ShoppingBag, CheckCircle2, Pencil, Building2, Banknote,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
@@ -140,6 +140,42 @@ const STATUS_OPTIONS = [
   { value: 'cancelled',  label: 'Cancelled' },
 ];
 
+// ─── Approval column — this PO's actual payment-approval progress ──────────
+// purchase_orders.status (above) tracks the procurement lifecycle (has it
+// been bought/received); this tracks the separate financial approval chain
+// on ff_vendor_payments for actually paying the vendor — Manager → L1 →
+// Admin → CEO → Accounts → Paid (see FFPaymentApprovals.tsx). Linked via
+// ff_vendor_payments.purchase_order_id.
+const PAYMENT_STATUS_CFG: Record<string, { cls: string; label: string }> = {
+  pending_ff_ops:   { cls: 'bg-amber-100 text-amber-700',  label: 'Pending Manager' },
+  pending_l1:       { cls: 'bg-purple-100 text-purple-700',label: 'Pending L1' },
+  pending_admin:    { cls: 'bg-indigo-100 text-indigo-700',label: 'Pending Admin' },
+  pending_ceo:      { cls: 'bg-orange-100 text-orange-700',label: 'Pending CEO' },
+  pending_accounts: { cls: 'bg-teal-100 text-teal-700',    label: 'Pending Accounts' },
+  approved:         { cls: 'bg-teal-100 text-teal-700',    label: 'Approved' },
+  paid:             { cls: 'bg-green-100 text-green-700',  label: 'Paid' },
+  rejected:         { cls: 'bg-red-100 text-red-600',      label: 'Rejected' },
+  // Retired stages — kept only so an older row still gets a real label.
+  pending_gm:       { cls: 'bg-blue-100 text-blue-700',    label: 'Pending GM' },
+  pending_auditor:  { cls: 'bg-cyan-100 text-cyan-700',    label: 'Pending Auditor' },
+};
+
+function ApprovalCell({ status, navigate }: { status: string | undefined; navigate: (path: string) => void }) {
+  if (!status) {
+    return <span className="text-[10px] text-gray-300">Not raised</span>;
+  }
+  const cfg = PAYMENT_STATUS_CFG[status] ?? { cls: 'bg-gray-100 text-gray-600', label: status };
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); navigate('/ff-operations/payment-approvals'); }}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold hover:opacity-75 transition-opacity ${cfg.cls}`}
+      title="Open Payment Approvals"
+    >
+      <Banknote className="w-2.5 h-2.5" />{cfg.label}
+    </button>
+  );
+}
+
 // ─── Editable Status cell ───────────────────────────────────────────────────
 function StatusCell({ po, onSaved }: { po: StoredPO; onSaved: () => void }) {
   const [editing, setEditing] = useState(false);
@@ -218,9 +254,29 @@ export default function PurchaseReportPage() {
     },
   });
 
+  // Each PO's actual payment-approval progress (separate from its own
+  // procurement status above) — see the Approval column note. RLS scopes
+  // this to payment-approver roles + whatever the viewer personally raised,
+  // so a viewer outside that chain may see "Not raised" for a PO that does
+  // have one; the approvers themselves see it correctly.
+  const { data: paymentByPO = {} } = useQuery({
+    queryKey: ['ff-vendor-payments-by-po'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ff_vendor_payments')
+        .select('purchase_order_id, payment_status')
+        .not('purchase_order_id', 'is', null);
+      if (error) { console.error('[PurchaseReportPage] ff_vendor_payments:', error.message); return {}; }
+      const map: Record<string, string> = {};
+      (data ?? []).forEach((row: any) => { map[row.purchase_order_id] = row.payment_status; });
+      return map;
+    },
+  });
+
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['purchase-report-pos'] });
     qc.invalidateQueries({ queryKey: ['vendors-list'] });
+    qc.invalidateQueries({ queryKey: ['ff-vendor-payments-by-po'] });
     toast.success('Refreshed');
   };
 
@@ -296,6 +352,8 @@ export default function PurchaseReportPage() {
       filtered.forEach(po => {
         const vendor = findVendor(po.vendorName);
         const statusLabel = STATUS_CFG[po.status]?.label ?? po.status;
+        const paymentStatus = paymentByPO[po.id];
+        const approvalLabel = paymentStatus ? (PAYMENT_STATUS_CFG[paymentStatus]?.label ?? paymentStatus) : 'Not raised';
 
         if (po.items.length === 0) {
           rows.push({
@@ -303,6 +361,7 @@ export default function PurchaseReportPage() {
             'PO Date':          po.date,
             'Delivery Date':    po.deliveryDate || '—',
             'Status':           statusLabel,
+            'Approval':         approvalLabel,
             'Vendor Name':      po.vendorName,
             'Hub':              po.hub_name || '—',
             'GSTIN':            vendor?.gstin || '—',
@@ -329,6 +388,7 @@ export default function PurchaseReportPage() {
               'PO Date':          idx === 0 ? po.date : '',
               'Delivery Date':    idx === 0 ? (po.deliveryDate || '—') : '',
               'Status':           idx === 0 ? statusLabel : '',
+              'Approval':         idx === 0 ? approvalLabel : '',
               'Vendor Name':      idx === 0 ? po.vendorName : '',
               'Hub':              idx === 0 ? (po.hub_name || '—') : '',
               'GSTIN':            idx === 0 ? (vendor?.gstin || '—') : '',
@@ -354,7 +414,7 @@ export default function PurchaseReportPage() {
 
       const ws = XLSX.utils.json_to_sheet(rows);
       ws['!cols'] = [
-        14, 12, 14, 16, 22, 16, 16, 12, 18, 18, 14,
+        14, 12, 14, 16, 16, 22, 16, 16, 12, 18, 18, 14,
         14, 20, 10, 8, 12, 12, 14, 10, 12, 24, 18,
       ].map(w => ({ wch: w }));
 
@@ -515,6 +575,7 @@ export default function PurchaseReportPage() {
                   <th className="text-right py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Amount (₹)</th>
                   <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Date</th>
                   <th className="text-center py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Status</th>
+                  <th className="text-center py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Approval</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -594,12 +655,17 @@ export default function PurchaseReportPage() {
                             <p className="text-[9px] text-gray-400 mt-0.5">{po.approvedBy}</p>
                           )}
                         </td>
+
+                        {/* Approval — this PO's actual payment-approval progress */}
+                        <td className="py-3 px-3 text-center">
+                          <ApprovalCell status={paymentByPO[po.id]} navigate={navigate} />
+                        </td>
                       </tr>
 
                       {/* Expanded Line Items */}
                       {isExpanded && po.items.length > 0 && (
                         <tr key={`${po.id}-exp`}>
-                          <td colSpan={11} className="px-4 pb-4 pt-0 bg-blue-50/20">
+                          <td colSpan={12} className="px-4 pb-4 pt-0 bg-blue-50/20">
                             <div className="ml-8 mt-2 rounded-xl border border-blue-100 overflow-hidden">
                               <table className="w-full text-xs">
                                 <thead>

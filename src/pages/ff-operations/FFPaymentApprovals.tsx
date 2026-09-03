@@ -13,34 +13,44 @@ import {
 } from 'lucide-react';
 
 // ── Status helpers ────────────────────────────────────────────
+// Chain (2026 refinement): Manager → L1 → Admin → CEO → Accounts → Paid.
+// "Manager" reuses the pre-existing pending_ff_ops status/ff_ops_* columns
+// (only the label changed) so every other reader of that literal status
+// string didn't need touching. GM and Auditor are retired from the active
+// chain — their status values/columns stay valid for historical rows, but
+// nothing routes into them anymore (see REFINE_PAYMENT_APPROVAL_CHAIN.sql).
 const STATUS_COLORS: Record<string, string> = {
   pending_ff_ops:   'bg-amber-100 text-amber-700 border-amber-200',
   pending_gm:       'bg-blue-100 text-blue-700 border-blue-200',
   pending_l1:       'bg-purple-100 text-purple-700 border-purple-200',
   pending_auditor:  'bg-cyan-100 text-cyan-700 border-cyan-200',
+  pending_admin:    'bg-indigo-100 text-indigo-700 border-indigo-200',
   pending_ceo:      'bg-orange-100 text-orange-700 border-orange-200',
+  pending_accounts: 'bg-teal-100 text-teal-700 border-teal-200',
   approved:         'bg-teal-100 text-teal-700 border-teal-200',
   paid:             'bg-green-100 text-green-700 border-green-200',
   rejected:         'bg-red-100 text-red-700 border-red-200',
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  pending_ff_ops:  'Pending FF Ops',
-  pending_gm:      'Pending GM',
-  pending_l1:      'Pending L1',
-  pending_auditor: 'Pending Auditor',
-  pending_ceo:     'Pending CEO',
-  approved:        'Approved',
-  paid:            'Paid',
-  rejected:        'Rejected',
+  pending_ff_ops:   'Pending Manager',
+  pending_gm:       'Pending GM',
+  pending_l1:       'Pending L1',
+  pending_auditor:  'Pending Auditor',
+  pending_admin:    'Pending Admin',
+  pending_ceo:      'Pending CEO',
+  pending_accounts: 'Pending Accounts',
+  approved:         'Approved',
+  paid:             'Paid',
+  rejected:         'Rejected',
 };
 
 const APPROVAL_CHAIN = [
-  'pending_ff_ops', 'pending_l1', 'pending_gm', 'pending_auditor', 'pending_ceo', 'approved',
+  'pending_ff_ops', 'pending_l1', 'pending_admin', 'pending_ceo', 'pending_accounts',
 ];
 
 function ApprovalProgress({ status }: { status: string }) {
-  const steps = ['FF Ops', 'L1', 'GM', 'Auditor', 'CEO', 'Done'];
+  const steps = ['Manager', 'L1', 'Admin', 'CEO', 'Accounts'];
   const idx = APPROVAL_CHAIN.indexOf(status);
   if (status === 'paid') return <span className="text-xs text-green-600 font-semibold">✓ Paid</span>;
   if (status === 'rejected') return <span className="text-xs text-red-500 font-semibold">✗ Rejected</span>;
@@ -213,18 +223,19 @@ function PaymentCard({
   const [showReject, setShowReject] = useState(false);
   const [showPaid, setShowPaid] = useState(false);
 
-  const canAct = (
+  // Manager → L1 → Admin → CEO → Accounts. Each role can only act on the
+  // one stage that's actually theirs — admin is a real stage now (after
+  // L1, before CEO), not a bypass-everything override like it used to be.
+  const canApproveNext = (
     (userRole === 'ff_operations_manager' && payment.payment_status === 'pending_ff_ops') ||
-    (userRole === 'gm'                    && payment.payment_status === 'pending_gm') ||
     (userRole === 'l1_manager'            && payment.payment_status === 'pending_l1') ||
-    (userRole === 'auditor'               && payment.payment_status === 'pending_auditor') ||
-    (userRole === 'ceo'                   && payment.payment_status === 'pending_ceo') ||
-    (userRole === 'admin')
+    (userRole === 'admin'                 && payment.payment_status === 'pending_admin') ||
+    (userRole === 'ceo'                   && payment.payment_status === 'pending_ceo')
   );
-  // Only Accounts actually disburses/marks paid — CEO's role in this chain
-  // ends at approval, matching separation of duties (admin kept as override).
-  const canMarkPaid = payment.payment_status === 'approved' &&
-    (userRole === 'admin' || userRole === 'accounts');
+  // Accounts is the final stage — its "approval" IS disbursement, so it
+  // goes through Mark Paid (collects UTR/proof) rather than a plain Approve.
+  const canMarkPaid = payment.payment_status === 'pending_accounts' && userRole === 'accounts';
+  const canReject = canApproveNext || canMarkPaid;
 
   const amount = type === 'vendor'
     ? payment.net_amount ?? payment.gross_amount
@@ -285,23 +296,23 @@ function PaymentCard({
                 <CheckCircle2 className="w-3.5 h-3.5" /> Mark Paid
               </button>
             )}
-            {canAct && (
-              <>
-                <button
-                  onClick={() => setShowReject(true)}
-                  disabled={isApproving}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 transition"
-                >
-                  <XCircle className="w-3.5 h-3.5" /> Reject
-                </button>
-                <button
-                  onClick={() => onApprove(payment.id)}
-                  disabled={isApproving}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Approve
-                </button>
-              </>
+            {canReject && (
+              <button
+                onClick={() => setShowReject(true)}
+                disabled={isApproving}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 transition"
+              >
+                <XCircle className="w-3.5 h-3.5" /> Reject
+              </button>
+            )}
+            {canApproveNext && (
+              <button
+                onClick={() => onApprove(payment.id)}
+                disabled={isApproving}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 transition"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" /> Approve
+              </button>
             )}
             <button
               onClick={() => setExpanded(v => !v)}
@@ -407,14 +418,16 @@ function PaymentCard({
             </>
           )}
           {/* Approval history */}
-          {(payment.ff_ops_approved_at || payment.gm_approved_at || payment.l1_approved_at || payment.auditor_approved_at || payment.ceo_approved_at) && (
+          {(payment.ff_ops_approved_at || payment.gm_approved_at || payment.l1_approved_at || payment.auditor_approved_at || payment.admin_approved_at || payment.ceo_approved_at || payment.accounts_approved_at) && (
             <div className="mt-2 space-y-1">
               <p className="text-xs font-medium text-gray-500 mb-1">Approval History</p>
-              {payment.ff_ops_approved_at && <div className="text-xs text-gray-500">✓ FF Ops: {format(new Date(payment.ff_ops_approved_at), 'dd MMM, h:mm a')} {payment.ff_ops_remarks && `· "${payment.ff_ops_remarks}"`}</div>}
+              {payment.ff_ops_approved_at && <div className="text-xs text-gray-500">✓ Manager: {format(new Date(payment.ff_ops_approved_at), 'dd MMM, h:mm a')} {payment.ff_ops_remarks && `· "${payment.ff_ops_remarks}"`}</div>}
               {payment.gm_approved_at && <div className="text-xs text-gray-500">✓ GM: {format(new Date(payment.gm_approved_at), 'dd MMM, h:mm a')} {payment.gm_remarks && `· "${payment.gm_remarks}"`}</div>}
               {payment.l1_approved_at && <div className="text-xs text-gray-500">✓ L1: {format(new Date(payment.l1_approved_at), 'dd MMM, h:mm a')} {payment.l1_remarks && `· "${payment.l1_remarks}"`}</div>}
               {payment.auditor_approved_at && <div className="text-xs text-gray-500">✓ Auditor: {format(new Date(payment.auditor_approved_at), 'dd MMM, h:mm a')} {payment.auditor_remarks && `· "${payment.auditor_remarks}"`}</div>}
+              {payment.admin_approved_at && <div className="text-xs text-gray-500">✓ Admin: {format(new Date(payment.admin_approved_at), 'dd MMM, h:mm a')} {payment.admin_remarks && `· "${payment.admin_remarks}"`}</div>}
               {payment.ceo_approved_at && <div className="text-xs text-gray-500">✓ CEO: {format(new Date(payment.ceo_approved_at), 'dd MMM, h:mm a')} {payment.ceo_remarks && `· "${payment.ceo_remarks}"`}</div>}
+              {payment.accounts_approved_at && <div className="text-xs text-gray-500">✓ Accounts: {format(new Date(payment.accounts_approved_at), 'dd MMM, h:mm a')} {payment.accounts_remarks && `· "${payment.accounts_remarks}"`}</div>}
             </div>
           )}
           {payment.rejection_reason && (
@@ -442,22 +455,22 @@ function PaymentCard({
 }
 
 // ── Next status map ───────────────────────────────────────────
+// Manager → L1 → Admin → CEO → Accounts. Accounts isn't listed here — its
+// approval goes through markPaidMutation (approving IS disbursing), not
+// this generic "advance to next stage" mutation. GM/auditor intentionally
+// have no entry — they're retired from the chain (see status-helpers note).
 const NEXT_STATUS: Record<string, string> = {
   ff_operations_manager: 'pending_l1',
-  l1_manager: 'pending_gm',
-  gm:         'pending_auditor',
-  auditor: 'pending_ceo',
-  ceo:     'approved',
-  admin:   'approved',
+  l1_manager: 'pending_admin',
+  admin:      'pending_ceo',
+  ceo:        'pending_accounts',
 };
 
 const APPROVED_BY_COL: Record<string, string> = {
   ff_operations_manager: 'ff_ops',
-  gm:         'gm',
   l1_manager: 'l1',
-  auditor:    'auditor',
+  admin:      'admin',
   ceo:        'ceo',
-  admin:      'ceo',
 };
 
 // ── Main page ─────────────────────────────────────────────────
@@ -487,10 +500,10 @@ export default function FFPaymentApprovals() {
   // Determine which status to filter for "my queue"
   const myPendingStatus: Record<string, string> = {
     ff_operations_manager: 'pending_ff_ops',
-    gm:         'pending_gm',
     l1_manager: 'pending_l1',
-    auditor:    'pending_auditor',
+    admin:      'pending_admin',
     ceo:        'pending_ceo',
+    accounts:   'pending_accounts',
   };
 
   // Fetch vendor payments
@@ -503,7 +516,7 @@ export default function FFPaymentApprovals() {
         .order('created_at', { ascending: false });
 
       if (statusFilter === 'pending') {
-        q = q.in('payment_status', ['pending_ff_ops','pending_gm','pending_l1','pending_auditor','pending_ceo']);
+        q = q.in('payment_status', ['pending_ff_ops','pending_l1','pending_admin','pending_ceo','pending_accounts']);
       } else if (statusFilter === 'my_queue') {
         const s = myPendingStatus[approvalRole];
         if (s) q = q.eq('payment_status', s);
@@ -528,7 +541,7 @@ export default function FFPaymentApprovals() {
         .order('created_at', { ascending: false });
 
       if (statusFilter === 'pending') {
-        q = q.in('payment_status', ['pending_ff_ops','pending_gm','pending_l1','pending_auditor','pending_ceo']);
+        q = q.in('payment_status', ['pending_ff_ops','pending_l1','pending_admin','pending_ceo','pending_accounts']);
       } else if (statusFilter === 'my_queue') {
         const s = myPendingStatus[approvalRole];
         if (s) q = q.eq('payment_status', s);
@@ -575,6 +588,9 @@ export default function FFPaymentApprovals() {
         payment_proof_url: proofUrl || null,
         paid_by:          user?.id,
         paid_at:          new Date().toISOString(),
+        // Accounts is the final stage — marking paid IS its approval.
+        accounts_approved_by: user?.id,
+        accounts_approved_at: new Date().toISOString(),
       }).eq('id', id);
       if (error) throw error;
     },
@@ -617,12 +633,11 @@ export default function FFPaymentApprovals() {
 
   // Role-aware title
   const roleTitles: Record<string, string> = {
-    ff_operations_manager: 'FF Operations — Payment Approvals',
-    gm:         'GM — FF Payment Approvals',
+    ff_operations_manager: 'Manager — Payment Approvals',
     l1_manager: 'L1 Manager — Payment Approvals',
-    auditor:    'Auditor — Payment Review',
-    ceo:        'CEO — Final Payment Approvals',
-    admin:      'Admin — All FF Payments',
+    admin:      'Admin — Payment Approvals',
+    ceo:        'CEO — Payment Approvals',
+    accounts:   'Accounts — Payment Disbursement',
   };
   const title = roleTitles[approvalRole] || 'FF Payment Approvals';
 

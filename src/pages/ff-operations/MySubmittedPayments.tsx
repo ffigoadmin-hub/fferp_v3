@@ -12,40 +12,45 @@ import {
 } from '@/components/ui/alert-dialog';
 
 // ── Status config ──────────────────────────────────────────────
+// Chain (2026 refinement): Manager → L1 → Admin → CEO → Accounts → Paid.
+// See FFPaymentApprovals.tsx for the full rationale.
 const STATUS_COLORS: Record<string, string> = {
   pending_ff_ops:   'bg-amber-100 text-amber-700 border-amber-200',
   pending_gm:       'bg-blue-100 text-blue-700 border-blue-200',
   pending_l1:       'bg-purple-100 text-purple-700 border-purple-200',
   pending_auditor:  'bg-cyan-100 text-cyan-700 border-cyan-200',
+  pending_admin:    'bg-indigo-100 text-indigo-700 border-indigo-200',
   pending_ceo:      'bg-orange-100 text-orange-700 border-orange-200',
+  pending_accounts: 'bg-teal-100 text-teal-700 border-teal-200',
   approved:         'bg-teal-100 text-teal-700 border-teal-200',
   paid:             'bg-green-100 text-green-700 border-green-200',
   rejected:         'bg-red-100 text-red-700 border-red-200',
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  pending_ff_ops:  'Pending FF Ops',
-  pending_gm:      'Pending GM',
-  pending_l1:      'Pending L1',
-  pending_auditor: 'Pending Auditor',
-  pending_ceo:     'Pending CEO',
-  approved:        'Approved — Awaiting Payment',
-  paid:            'Paid',
-  rejected:        'Rejected',
+  pending_ff_ops:   'Pending Manager',
+  pending_gm:       'Pending GM',
+  pending_l1:       'Pending L1',
+  pending_auditor:  'Pending Auditor',
+  pending_admin:    'Pending Admin',
+  pending_ceo:      'Pending CEO',
+  pending_accounts: 'Pending Accounts — Awaiting Payment',
+  approved:         'Approved — Awaiting Payment',
+  paid:             'Paid',
+  rejected:         'Rejected',
 };
 
 const APPROVAL_CHAIN = [
-  'pending_ff_ops', 'pending_l1', 'pending_gm', 'pending_auditor', 'pending_ceo', 'approved',
+  'pending_ff_ops', 'pending_l1', 'pending_admin', 'pending_ceo', 'pending_accounts',
 ];
 
 function ApprovalTimeline({ status }: { status: string }) {
   const steps = [
-    { key: 'pending_ff_ops',   label: 'FF Ops' },
+    { key: 'pending_ff_ops',   label: 'Manager' },
     { key: 'pending_l1',       label: 'L1' },
-    { key: 'pending_gm',       label: 'GM' },
-    { key: 'pending_auditor',  label: 'Auditor' },
+    { key: 'pending_admin',    label: 'Admin' },
     { key: 'pending_ceo',      label: 'CEO' },
-    { key: 'approved',         label: 'Approved' },
+    { key: 'pending_accounts', label: 'Accounts' },
   ];
   const idx = APPROVAL_CHAIN.indexOf(status);
   if (status === 'paid')     return <div className="flex items-center gap-1.5 text-xs font-semibold text-green-600"><CheckCircle2 className="w-3.5 h-3.5" /> Fully Paid</div>;
@@ -341,12 +346,11 @@ export default function MySubmittedPayments() {
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
         >
           <option value="all">All Status</option>
-          <option value="pending_ff_ops">Pending FF Ops</option>
-          <option value="pending_gm">Pending GM</option>
+          <option value="pending_ff_ops">Pending Manager</option>
           <option value="pending_l1">Pending L1</option>
-          <option value="pending_auditor">Pending Auditor</option>
+          <option value="pending_admin">Pending Admin</option>
           <option value="pending_ceo">Pending CEO</option>
-          <option value="approved">Approved</option>
+          <option value="pending_accounts">Pending Accounts</option>
           <option value="paid">Paid</option>
           <option value="rejected">Rejected</option>
         </select>

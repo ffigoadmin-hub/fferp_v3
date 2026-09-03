@@ -4,24 +4,24 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-// Maps role → the status value they're responsible for
+// Maps role → the status value they're responsible for.
+// Chain: Manager(ff_operations_manager) → L1 → Admin → CEO → Accounts.
+// gm/auditor are retired from the active chain (see FFPaymentApprovals.tsx).
 const ROLE_STATUS_MAP: Record<string, string> = {
   ff_operations_manager: 'pending_ff_ops',
-  gm:         'pending_gm',
   l1_manager: 'pending_l1',
-  auditor:    'pending_auditor',
+  admin:      'pending_admin',
   ceo:        'pending_ceo',
-  accounts:   'approved',     // accounts sees approved (ready for payment)
+  accounts:   'pending_accounts',
 };
 
 // Badge key (used in NavItem.badgeKey) → the status to count
 const BADGE_KEY_STATUS: Record<string, string> = {
   ff_ops:  'pending_ff_ops',
-  gm:      'pending_gm',
   l1:      'pending_l1',
-  auditor: 'pending_auditor',
+  admin:   'pending_admin',
   ceo:     'pending_ceo',
-  accounts:'approved',
+  accounts:'pending_accounts',
 };
 
 export interface FFPaymentCounts {
