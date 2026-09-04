@@ -611,12 +611,15 @@ export default function FFPaymentApprovals() {
   const rejectMutation = useMutation({
     mutationFn: async ({ id, reason, type }: { id: string; reason: string; type: 'vendor' | 'transport' }) => {
       const table = type === 'vendor' ? 'ff_vendor_payments' : 'ff_transport_payments';
+      // rejection_level/rejected_by/rejected_at don't exist on the live table
+      // (confirmed via information_schema — only rejection_reason does),
+      // despite being in some of the SQL migration files. Folding the level
+      // and who/when into the reason text itself so that audit trail isn't
+      // silently lost, rather than a write that errors on missing columns.
+      const stampedReason = `[Rejected by ${approvalRole} · ${new Date().toLocaleString('en-IN')}] ${reason}`;
       const { error } = await (supabase as any).from(table).update({
         payment_status: 'rejected',
-        rejection_reason: reason,
-        rejection_level: approvalRole,
-        rejected_by: user?.id,
-        rejected_at: new Date().toISOString(),
+        rejection_reason: stampedReason,
       }).eq('id', id);
       if (error) throw error;
     },
