@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import {
   CheckCircle2, XCircle, Clock, ChevronDown, ChevronUp,
   Banknote, Truck, Eye, RefreshCw, Package, AlertCircle,
-  Building2, Filter,
+  Building2, Filter, Loader2,
 } from 'lucide-react';
 
 // ── Status helpers ────────────────────────────────────────────
@@ -639,6 +639,53 @@ export default function FFPaymentApprovals() {
     ? vendorPayments.filter(p => p.payment_status === myPendingStatus[approvalRole]).length
     : transportPayments.filter(p => p.payment_status === myPendingStatus[approvalRole]).length;
 
+  // Bulk-approve every payment (in the current tab) sitting on the viewer's
+  // own stage — same NEXT_STATUS/APPROVED_BY_COL transition approveMutation
+  // uses per row, just run across all of them instead of one at a time.
+  // Not offered to Accounts: their "approval" is disbursement (needs a
+  // UTR/proof per payment), which is what the Execution Desk's batch flow
+  // is for — a plain bulk-approve doesn't make sense for that stage.
+  const [bulkApproving, setBulkApproving] = useState(false);
+  const nextStatus = NEXT_STATUS[approvalRole];
+  const myQueuePayments = payments.filter(p => p.payment_status === myPendingStatus[approvalRole]);
+
+  const handleBulkApprove = async () => {
+    if (!nextStatus || !col || myQueuePayments.length === 0) return;
+    const confirmed = window.confirm(
+      `Approve all ${myQueuePayments.length} payment${myQueuePayments.length > 1 ? 's' : ''} in your queue?\n\nEach moves to ${STATUS_LABELS[nextStatus] ?? nextStatus}. This can't be undone in bulk.`
+    );
+    if (!confirmed) return;
+
+    setBulkApproving(true);
+    const table = tab === 'vendor' ? 'ff_vendor_payments' : 'ff_transport_payments';
+    const update: any = {
+      payment_status: nextStatus,
+      [`${col}_approved_by`]: user?.id,
+      [`${col}_approved_at`]: new Date().toISOString(),
+    };
+
+    let succeeded = 0, failed = 0;
+    // Chunked, not one giant Promise.all — keeps this well-behaved against
+    // Supabase's connection pool when the queue is in the hundreds.
+    const CHUNK = 10;
+    for (let i = 0; i < myQueuePayments.length; i += CHUNK) {
+      const chunk = myQueuePayments.slice(i, i + CHUNK);
+      const results = await Promise.allSettled(
+        chunk.map(p => (supabase as any).from(table).update(update).eq('id', p.id))
+      );
+      results.forEach(r => {
+        if (r.status === 'fulfilled' && !(r.value as any)?.error) succeeded++;
+        else failed++;
+      });
+    }
+
+    setBulkApproving(false);
+    qc.invalidateQueries({ queryKey: ['ff-vendor-payments'] });
+    qc.invalidateQueries({ queryKey: ['ff-transport-payments'] });
+    if (failed === 0) toast.success(`Approved all ${succeeded} payments ✓`);
+    else toast.error(`Approved ${succeeded}, ${failed} failed — check and retry those`);
+  };
+
   // Role-aware title
   const roleTitles: Record<string, string> = {
     ff_operations_manager: 'Manager — Payment Approvals',
@@ -659,12 +706,24 @@ export default function FFPaymentApprovals() {
             Review and action vendor & transport payment requests
           </p>
         </div>
-        <button
-          onClick={() => { vRefetch(); tRefetch(); }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50 transition"
-        >
-          <RefreshCw className="w-3.5 h-3.5" /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {!!nextStatus && myQueuePayments.length > 0 && (
+            <button
+              onClick={handleBulkApprove}
+              disabled={bulkApproving}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700 disabled:opacity-50 transition"
+            >
+              {bulkApproving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+              {bulkApproving ? 'Approving…' : `Approve All (${myQueuePayments.length})`}
+            </button>
+          )}
+          <button
+            onClick={() => { vRefetch(); tRefetch(); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50 transition"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
