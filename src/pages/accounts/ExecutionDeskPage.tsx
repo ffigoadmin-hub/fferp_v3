@@ -23,6 +23,11 @@ import {
 } from '@/lib/ffPaymentBatchExport';
 
 const DEBIT_ACCOUNT_STORAGE_KEY = 'ff-execution-desk-debit-account';
+// Farmers Factory is a brand under IGO Group, sharing the same Kotak CMS
+// account the sibling IGO Group ERP already bulk-pays from — confirmed
+// by the user, not guessed. Still an editable field below, just
+// pre-filled with the right value instead of blank.
+const IGO_GROUP_KOTAK_DEBIT_ACCOUNT = '5949192052';
 
 function fmt(n: number) {
   return '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
@@ -32,7 +37,7 @@ function fmt(n: number) {
 function BatchCreationTab({ onBatchCreated }: { onBatchCreated: () => void }) {
   const { user } = useAuth();
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [debitAccount, setDebitAccount] = useState(() => localStorage.getItem(DEBIT_ACCOUNT_STORAGE_KEY) || '');
+  const [debitAccount, setDebitAccount] = useState(() => localStorage.getItem(DEBIT_ACCOUNT_STORAGE_KEY) || IGO_GROUP_KOTAK_DEBIT_ACCOUNT);
   const [creating, setCreating] = useState(false);
 
   const { data: payments = [], isLoading, refetch } = useQuery({
@@ -128,7 +133,7 @@ function BatchCreationTab({ onBatchCreated }: { onBatchCreated: () => void }) {
           placeholder="Your company's Kotak CMS account number"
           className="mt-1 w-full max-w-xs rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <p className="text-[11px] text-gray-400 mt-1">Remembered on this device — the account money is debited from for the Kotak bulk file.</p>
+        <p className="text-[11px] text-gray-400 mt-1">Pre-filled with the IGO Group Kotak account (Farmers Factory is billed under it) — editable if that ever changes.</p>
       </div>
 
       {missingBank.length > 0 && (
@@ -279,8 +284,7 @@ function BatchCard({ batch, onChanged }: { batch: any; onChanged: () => void }) 
       vendor_account_number: p.vendors?.account_number,
       vendor_ifsc_code: p.vendors?.ifsc_code,
     }));
-    const debitAccount = localStorage.getItem(DEBIT_ACCOUNT_STORAGE_KEY) || '';
-    if (!debitAccount) { toast.error('Debit account number not remembered on this device — re-enter it on Batch Creation first'); return; }
+    const debitAccount = localStorage.getItem(DEBIT_ACCOUNT_STORAGE_KEY) || IGO_GROUP_KOTAK_DEBIT_ACCOUNT;
     generateFFKotakBulkFile(exportRows, batch.batch_ref, debitAccount);
   };
 
