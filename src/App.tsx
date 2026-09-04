@@ -100,6 +100,7 @@ const EODPOEngine           = lazy(() => import('./pages/ff-operations/po-engine
 
 // ── Phase 3: New FF ERP Pages ────────────────────────────────
 const FFPaymentApprovals      = lazy(() => import('./pages/ff-operations/FFPaymentApprovals'));
+const ExecutionDeskPage       = lazy(() => import('./pages/accounts/ExecutionDeskPage'));
 const TaskAssign              = lazy(() => import('./pages/ff-operations/TaskAssign'));
 const TaskToday               = lazy(() => import('./pages/sales/TaskToday'));
 const AppOrdersDashboard      = lazy(() => import('./pages/sales/AppOrdersDashboard'));
@@ -913,6 +914,7 @@ const AppRoutes = () => {
       {/* Accounts — FF payments (mark-as-paid) */}
       <Route path="/accounts/ff-payments"           element={<ProtectedRoute allowedRoles={['accounts','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
       <Route path="/accounts/ff-transport-payments" element={<ProtectedRoute allowedRoles={['accounts','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
+      <Route path="/accounts/execution-desk"        element={<ProtectedRoute allowedRoles={['accounts','admin']}><ExecutionDeskPage /></ProtectedRoute>} />
       {/* My Submitted Payments — raisers only (hub_manager, shift_employee, purchase_manager/head) */}
       <Route path="/my-submitted-payments" element={<ProtectedRoute allowedRoles={['hub_manager','shift_employee','purchase_manager','purchase_head','admin']}><MySubmittedPayments /></ProtectedRoute>} />
 
