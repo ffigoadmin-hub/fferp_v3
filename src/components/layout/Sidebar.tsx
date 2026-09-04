@@ -78,13 +78,13 @@ import {
   Calculator,
 } from 'lucide-react';
 
-interface NavChild {
+export interface NavChild {
   label: string;
   path: string;
   action?: boolean; // shows a + button
 }
 
-interface NavItem {
+export interface NavItem {
   icon: React.ElementType;
   label: string;
   path: string;
@@ -92,16 +92,21 @@ interface NavItem {
   badgeKey?: string; // key into pendingCounts map to show a red badge
 }
 
-interface NavGroup {
+export interface NavGroup {
   title: string;
   icon: React.ElementType;
   roles: string[];
   items: NavItem[];
   departments?: string[];
   excludeDepartments?: string[];
+  defaultOpen?: boolean; // mobile-only: whether this group starts expanded
 }
 
-const navigationConfig: NavGroup[] = [
+// Single source of truth for the app's navigation — both the desktop
+// Sidebar and MobileSidebar render from this same array so they can't
+// drift apart the way they had (22 groups missing from mobile, including
+// the entire FF Payment Pipeline, before this was unified).
+export const navigationConfig: NavGroup[] = [
   // ── Daily Workflow (ALL roles except shift/purchase exec) ───────────────────
   {
     title: 'Daily Workflow',
