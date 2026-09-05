@@ -82,33 +82,43 @@ function poToPayload(po: StoredPO): Record<string, any> {
 
 // ── Async read helpers (used by pages via useQuery) ───────────
 
+// Supabase's PostgREST API silently caps any unbounded query at 1000 rows
+// — an unpaginated .select('*') doesn't error, it just quietly returns the
+// newest 1000 (since these are ordered created_at DESC) and drops
+// everything older. With purchase_orders well past that count from this
+// session's bulk imports, that was making POs from a few days back vanish
+// from the Purchase Report before its own date filter ever ran. This pages
+// through in batches of 1000 until a page comes back short, so nothing
+// gets silently dropped regardless of how large the table grows.
+async function fetchAllRows(table: string, extra?: (q: any) => any): Promise<any[]> {
+  const PAGE_SIZE = 1000;
+  const rows: any[] = [];
+  let page = 0;
+  while (true) {
+    let q = supabase.from(table).select('*').order('created_at', { ascending: false });
+    if (extra) q = extra(q);
+    const { data, error } = await q.range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    if (error) { console.error(`[purchaseStore] fetchAllRows(${table}):`, error.message); break; }
+    rows.push(...(data ?? []));
+    if (!data || data.length < PAGE_SIZE) break;
+    page++;
+  }
+  return rows;
+}
+
 export async function fetchAllPOs(): Promise<StoredPO[]> {
-  const { data, error } = await supabase
-    .from('purchase_orders')
-    .select('*')
-    .order('created_at', { ascending: false });
-  if (error) { console.error('[purchaseStore] fetchAllPOs:', error.message); return []; }
-  return (data ?? []).map(rowToPO);
+  const rows = await fetchAllRows('purchase_orders');
+  return rows.map(rowToPO);
 }
 
 export async function fetchOpenPOs(): Promise<StoredPO[]> {
-  const { data, error } = await supabase
-    .from('purchase_orders')
-    .select('*')
-    .eq('status', 'approved')
-    .order('created_at', { ascending: false });
-  if (error) { console.error('[purchaseStore] fetchOpenPOs:', error.message); return []; }
-  return (data ?? []).map(rowToPO);
+  const rows = await fetchAllRows('purchase_orders', q => q.eq('status', 'approved'));
+  return rows.map(rowToPO);
 }
 
 export async function fetchPendingApprovalPOs(): Promise<StoredPO[]> {
-  const { data, error } = await supabase
-    .from('purchase_orders')
-    .select('*')
-    .eq('status', 'pending_approval')
-    .order('created_at', { ascending: false });
-  if (error) { console.error('[purchaseStore] fetchPendingApprovalPOs:', error.message); return []; }
-  return (data ?? []).map(rowToPO);
+  const rows = await fetchAllRows('purchase_orders', q => q.eq('status', 'pending_approval'));
+  return rows.map(rowToPO);
 }
 
 export async function fetchMaxPOSerial(): Promise<number> {
