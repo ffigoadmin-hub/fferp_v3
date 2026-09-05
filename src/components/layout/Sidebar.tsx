@@ -565,6 +565,7 @@ export const navigationConfig: NavGroup[] = [
           { label: 'CEO Final Approval', path: '/ceo/ff-payments' },
           { label: 'Accounts Payout',    path: '/accounts/ff-payments' },
           { label: 'Execution Desk',     path: '/accounts/execution-desk' },
+          { label: 'Batch History',      path: '/accounts/batch-history' },
         ],
       },
       {
@@ -846,6 +847,7 @@ export const navigationConfig: NavGroup[] = [
       { icon: Banknote,     label: 'FF Vendor Payments',    path: '/accounts/ff-payments' },
       { icon: Truck,        label: 'FF Transport Payments', path: '/accounts/ff-transport-payments' },
       { icon: Layers,       label: 'Execution Desk',        path: '/accounts/execution-desk' },
+      { icon: History,      label: 'Batch History',         path: '/accounts/batch-history' },
       { icon: FileBarChart, label: 'FF Payments Report',    path: '/reports/ff-payments' },
     ],
   },

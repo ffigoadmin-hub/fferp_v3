@@ -39,13 +39,24 @@ function BatchCreationTab({ onBatchCreated }: { onBatchCreated: () => void }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [debitAccount, setDebitAccount] = useState(() => localStorage.getItem(DEBIT_ACCOUNT_STORAGE_KEY) || IGO_GROUP_KOTAK_DEBIT_ACCOUNT);
   const [creating, setCreating] = useState(false);
+  const [hubFilter, setHubFilter] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
-  const { data: payments = [], isLoading, refetch } = useQuery({
+  const { data: hubs = [] } = useQuery({
+    queryKey: ['hubs-list'],
+    queryFn: async () => {
+      const { data } = await supabase.from('hubs').select('id, name').order('name');
+      return data ?? [];
+    },
+  });
+
+  const { data: allPayments = [], isLoading, refetch } = useQuery({
     queryKey: ['pending-accounts-payments'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('ff_vendor_payments')
-        .select('id, gross_amount, net_amount, created_at, vendors(id, name, account_number, bank_name, ifsc_code), hubs(name)')
+        .select('id, gross_amount, net_amount, created_at, hub_id, vendors(id, name, account_number, bank_name, ifsc_code), hubs(name), purchase_orders(po_number, eod_date)')
         .eq('payment_status', 'pending_accounts')
         .is('batch_id', null)
         .order('created_at', { ascending: false });
@@ -54,9 +65,26 @@ function BatchCreationTab({ onBatchCreated }: { onBatchCreated: () => void }) {
     },
   });
 
+  // This whole list is, by definition, every payment that has already
+  // cleared Manager -> L1 -> Admin -> CEO — pending_accounts only ever
+  // means "CEO approved, waiting for Accounts to pay." Filtered client-side
+  // (not in the query) so a hub/date filter never drops an already-checked
+  // row out from under a selection made before the filter was applied.
+  const payments = allPayments.filter((p: any) => {
+    if (hubFilter !== 'all' && p.hub_id !== hubFilter) return false;
+    const eod = p.purchase_orders?.eod_date;
+    if (dateFrom && (!eod || eod < dateFrom)) return false;
+    if (dateTo && (!eod || eod > dateTo)) return false;
+    return true;
+  });
+  const filtersActive = hubFilter !== 'all' || !!dateFrom || !!dateTo;
+  const selectedHubName = hubFilter === 'all' ? null : hubs.find((h: any) => h.id === hubFilter)?.name;
+
   const missingBank = payments.filter((p: any) => !p.vendors?.account_number || !p.vendors?.ifsc_code);
-  const selectedPayments = payments.filter((p: any) => selected.has(p.id));
+  const selectedPayments = allPayments.filter((p: any) => selected.has(p.id));
   const selectedTotal = selectedPayments.reduce((s: number, p: any) => s + Number(p.net_amount ?? p.gross_amount ?? 0), 0);
+  const selectedHubNames = Array.from(new Set(selectedPayments.map((p: any) => p.hubs?.name).filter(Boolean)));
+  const batchScopeLabel = selectedHubNames.length === 1 ? `for ${selectedHubNames[0]}` : selectedHubNames.length > 1 ? `(${selectedHubNames.length} Hubs)` : '';
 
   const toggleAll = () => {
     if (selected.size === payments.length) setSelected(new Set());
@@ -136,6 +164,40 @@ function BatchCreationTab({ onBatchCreated }: { onBatchCreated: () => void }) {
         <p className="text-[11px] text-gray-400 mt-1">Pre-filled with the IGO Group Kotak account (Farmers Factory is billed under it) — editable if that ever changes.</p>
       </div>
 
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-teal-50 border border-teal-200 text-teal-700 text-xs font-semibold w-fit">
+        <CheckCircle2 className="w-3.5 h-3.5" /> CEO Approved · Waiting at Accounts
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-100 p-4 flex flex-wrap items-end gap-3">
+        <div>
+          <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Hub</label>
+          <select value={hubFilter} onChange={e => setHubFilter(e.target.value)}
+            className="mt-1 block rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <option value="all">All Hubs</option>
+            {hubs.map((h: any) => <option key={h.id} value={h.id}>{h.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">PO Date From</label>
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+            className="mt-1 block rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        <div>
+          <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">PO Date To</label>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+            className="mt-1 block rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+        </div>
+        {filtersActive && (
+          <button onClick={() => { setHubFilter('all'); setDateFrom(''); setDateTo(''); }}
+            className="text-xs font-semibold text-blue-600 hover:underline pb-2.5">
+            Clear filters
+          </button>
+        )}
+        <p className="text-[11px] text-gray-500 w-full font-semibold">
+          Batch scope: {selectedHubName ? `${selectedHubName} only` : 'All Hubs'} — "Select All" below selects everything currently shown, so switch the Hub dropdown back to "All Hubs" to batch across every hub instead.
+        </p>
+      </div>
+
       {missingBank.length > 0 && (
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs">
           <AlertCircle className="w-4 h-4 shrink-0" />
@@ -147,7 +209,7 @@ function BatchCreationTab({ onBatchCreated }: { onBatchCreated: () => void }) {
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
           <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
             <input type="checkbox" checked={payments.length > 0 && selected.size === payments.length} onChange={toggleAll} />
-            Select All ({payments.length} ready)
+            Select All ({payments.length} ready{selectedHubName ? ` in ${selectedHubName}` : ''})
           </label>
           <span className="text-sm font-bold text-gray-800">{selected.size} selected · {fmt(selectedTotal)}</span>
         </div>
@@ -155,7 +217,9 @@ function BatchCreationTab({ onBatchCreated }: { onBatchCreated: () => void }) {
         {isLoading ? (
           <div className="p-8 text-center text-sm text-gray-400">Loading…</div>
         ) : payments.length === 0 ? (
-          <div className="p-10 text-center text-sm text-gray-400">No payments waiting at Accounts right now.</div>
+          <div className="p-10 text-center text-sm text-gray-400">
+            {filtersActive ? 'No payments match this hub/date filter.' : 'No payments waiting at Accounts right now.'}
+          </div>
         ) : (
           <div className="divide-y divide-gray-50 max-h-[50vh] overflow-y-auto">
             {payments.map((p: any) => {
@@ -165,7 +229,9 @@ function BatchCreationTab({ onBatchCreated }: { onBatchCreated: () => void }) {
                   <input type="checkbox" checked={selected.has(p.id)} disabled={noBank} onChange={() => toggleOne(p.id)} />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-gray-800 truncate">{p.vendors?.name || 'Unknown vendor'}</p>
-                    <p className="text-[11px] text-gray-400">{p.hubs?.name || '—'} {noBank && '· no bank details'}</p>
+                    <p className="text-[11px] text-gray-400">
+                      {p.hubs?.name || '—'} {p.purchase_orders?.po_number && `· ${p.purchase_orders.po_number}`} {p.purchase_orders?.eod_date && `· ${format(new Date(p.purchase_orders.eod_date), 'dd MMM')}`} {noBank && '· no bank details'}
+                    </p>
                   </div>
                   <span className="font-bold text-gray-800">{fmt(p.net_amount ?? p.gross_amount)}</span>
                 </label>
@@ -181,7 +247,7 @@ function BatchCreationTab({ onBatchCreated }: { onBatchCreated: () => void }) {
         className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 disabled:opacity-50 transition-colors"
       >
         {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-        Create Batch &amp; Download Kotak File
+        Create Batch {batchScopeLabel} &amp; Download Kotak File
       </button>
     </div>
   );

@@ -101,6 +101,7 @@ const EODPOEngine           = lazy(() => import('./pages/ff-operations/po-engine
 // ── Phase 3: New FF ERP Pages ────────────────────────────────
 const FFPaymentApprovals      = lazy(() => import('./pages/ff-operations/FFPaymentApprovals'));
 const ExecutionDeskPage       = lazy(() => import('./pages/accounts/ExecutionDeskPage'));
+const BatchHistoryPage        = lazy(() => import('./pages/accounts/BatchHistoryPage'));
 const TaskAssign              = lazy(() => import('./pages/ff-operations/TaskAssign'));
 const TaskToday               = lazy(() => import('./pages/sales/TaskToday'));
 const AppOrdersDashboard      = lazy(() => import('./pages/sales/AppOrdersDashboard'));
@@ -915,6 +916,7 @@ const AppRoutes = () => {
       <Route path="/accounts/ff-payments"           element={<ProtectedRoute allowedRoles={['accounts','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
       <Route path="/accounts/ff-transport-payments" element={<ProtectedRoute allowedRoles={['accounts','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
       <Route path="/accounts/execution-desk"        element={<ProtectedRoute allowedRoles={['accounts','admin']}><ExecutionDeskPage /></ProtectedRoute>} />
+      <Route path="/accounts/batch-history"         element={<ProtectedRoute allowedRoles={['accounts','admin']}><BatchHistoryPage /></ProtectedRoute>} />
       {/* My Submitted Payments — raisers only (hub_manager, shift_employee, purchase_manager/head) */}
       <Route path="/my-submitted-payments" element={<ProtectedRoute allowedRoles={['hub_manager','shift_employee','purchase_manager','purchase_head','admin']}><MySubmittedPayments /></ProtectedRoute>} />
 
