@@ -41,8 +41,15 @@ function rowToPO(row: any): StoredPO {
     id:           row.id,
     poNumber:     row.po_number,
     vendorName:   row.vendor_name ?? '',
-    date:         row.created_at?.split('T')[0] ?? '',
-    deliveryDate: row.delivery_date ?? '',
+    // The PO's own business date (eod_date, mirrored to delivery_date on
+    // write — see poToPayload) — NOT created_at, which is just when the row
+    // was inserted. A bulk/catch-up import can insert several days' worth
+    // of POs in one sitting, so created_at clusters around the import
+    // moment while eod_date correctly holds each PO's real date. Reading
+    // created_at here was making the Purchase Report's date filter and
+    // displayed "PO date" silently wrong for anything imported late.
+    date:         row.eod_date ?? row.delivery_date ?? row.created_at?.split('T')[0] ?? '',
+    deliveryDate: row.delivery_date ?? row.eod_date ?? '',
     paymentTerms: row.payment_terms ?? 'Due on Receipt',
     status:       row.status === 'approved' ? 'open' : (row.status ?? 'draft'),
     rejectionReason: row.rejection_reason ?? undefined,
