@@ -15,7 +15,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import {
   Layers, PackageCheck, Download, Upload, CheckCircle2, ChevronDown, ChevronUp,
-  Loader2, RefreshCw, Banknote, AlertCircle,
+  Loader2, RefreshCw, Banknote, AlertCircle, RotateCcw,
 } from 'lucide-react';
 import {
   generateFFKotakBulkFile, parseFFBankStatement, matchFFPayments,
@@ -256,9 +256,11 @@ function BatchCreationTab({ onBatchCreated }: { onBatchCreated: () => void }) {
 // ── Batch Processing tab ─────────────────────────────────────────
 function BatchCard({ batch, onChanged }: { batch: any; onChanged: () => void }) {
   const { user } = useAuth();
+  const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [revoking, setRevoking] = useState(false);
   const [matches, setMatches] = useState<MatchResult[] | null>(null);
 
   const { data: linkedPayments = [] } = useQuery({
@@ -342,6 +344,24 @@ function BatchCard({ batch, onChanged }: { batch: any; onChanged: () => void }) 
     }
   };
 
+  const revokeBatch = async () => {
+    if (!window.confirm(`Revoke batch ${batch.batch_ref}? Its ${batch.payment_count} payment(s) will be unlinked and go back to the Batch Creation list — nothing gets marked paid, this just undoes the batch itself.`)) return;
+    setRevoking(true);
+    try {
+      const { error: unlinkErr } = await supabase.from('ff_vendor_payments').update({ batch_id: null }).eq('batch_id', batch.id);
+      if (unlinkErr) throw unlinkErr;
+      const { error: delErr } = await supabase.from('ff_payment_batches').delete().eq('id', batch.id);
+      if (delErr) throw delErr;
+      toast.success(`Batch ${batch.batch_ref} revoked — payments are back in Batch Creation`);
+      qc.invalidateQueries({ queryKey: ['pending-accounts-payments'] });
+      onChanged();
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to revoke batch');
+    } finally {
+      setRevoking(false);
+    }
+  };
+
   const redownload = () => {
     const exportRows: BatchPaymentForExport[] = linkedPayments.map((p: any) => ({
       id: p.id,
@@ -388,6 +408,11 @@ function BatchCard({ batch, onChanged }: { batch: any; onChanged: () => void }) 
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleStatementUpload(f); e.target.value = ''; }} />
             </label>
           )}
+          <button onClick={revokeBatch} disabled={revoking}
+            title="Undo this batch — payments go back to Batch Creation, nothing is marked paid"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs font-semibold hover:bg-red-50 disabled:opacity-50">
+            {revoking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />} Revoke
+          </button>
           <button onClick={() => setExpanded(v => !v)} className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50">
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
