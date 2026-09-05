@@ -496,6 +496,16 @@ export default function FFPaymentApprovals() {
   const isTransportRoute = location.pathname.includes('transport');
   const [tab, setTab] = useState<'vendor' | 'transport'>(isTransportRoute ? 'transport' : 'vendor');
   const [statusFilter, setStatusFilter] = useState<string>('pending');
+  const [hubFilter, setHubFilter] = useState<string>('all');
+
+  const { data: hubs = [] } = useQuery({
+    queryKey: ['hubs-active-ff-payments'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('hubs').select('id, name').eq('is_active', true).order('name');
+      if (error) { console.error('[FFPaymentApprovals] hubs:', error.message); return []; }
+      return data ?? [];
+    },
+  });
 
   useEffect(() => {
     setTab(location.pathname.includes('transport') ? 'transport' : 'vendor');
@@ -631,23 +641,21 @@ export default function FFPaymentApprovals() {
     onError: (e: any) => toast.error(e.message || 'Reject failed'),
   });
 
-  const payments = tab === 'vendor' ? vendorPayments : transportPayments;
+  const payments = (tab === 'vendor' ? vendorPayments : transportPayments)
+    .filter((p: any) => hubFilter === 'all' || p.hub_id === hubFilter);
   const isLoading = tab === 'vendor' ? vLoading : tLoading;
   const refetch = tab === 'vendor' ? vRefetch : tRefetch;
 
-  const myQueueCount = tab === 'vendor'
-    ? vendorPayments.filter(p => p.payment_status === myPendingStatus[approvalRole]).length
-    : transportPayments.filter(p => p.payment_status === myPendingStatus[approvalRole]).length;
-
-  // Bulk-approve every payment (in the current tab) sitting on the viewer's
-  // own stage — same NEXT_STATUS/APPROVED_BY_COL transition approveMutation
-  // uses per row, just run across all of them instead of one at a time.
-  // Not offered to Accounts: their "approval" is disbursement (needs a
-  // UTR/proof per payment), which is what the Execution Desk's batch flow
-  // is for — a plain bulk-approve doesn't make sense for that stage.
+  // Bulk-approve every payment (in the current tab, respecting the hub
+  // filter) sitting on the viewer's own stage — same NEXT_STATUS/
+  // APPROVED_BY_COL transition approveMutation uses per row, just run
+  // across all of them instead of one at a time. Not offered to Accounts:
+  // their "approval" is disbursement (needs a UTR/proof per payment),
+  // which is what the Execution Desk's batch flow is for.
   const [bulkApproving, setBulkApproving] = useState(false);
   const nextStatus = NEXT_STATUS[approvalRole];
   const myQueuePayments = payments.filter(p => p.payment_status === myPendingStatus[approvalRole]);
+  const myQueueCount = myQueuePayments.length;
 
   const handleBulkApprove = async () => {
     if (!nextStatus || !col || myQueuePayments.length === 0) return;
@@ -771,6 +779,15 @@ export default function FFPaymentApprovals() {
             {f.label}
           </button>
         ))}
+
+        <select
+          value={hubFilter}
+          onChange={e => setHubFilter(e.target.value)}
+          className="ml-auto rounded-full border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">All Hubs</option>
+          {hubs.map((h: any) => <option key={h.id} value={h.id}>{h.name}</option>)}
+        </select>
       </div>
 
       {/* Cards */}
