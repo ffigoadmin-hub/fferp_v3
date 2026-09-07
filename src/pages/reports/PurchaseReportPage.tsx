@@ -619,7 +619,7 @@ export default function PurchaseReportPage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
+    <div className="max-w-[1800px] mx-auto px-4 py-6 space-y-5">
 
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -753,7 +753,7 @@ export default function PurchaseReportPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[1500px] text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
                   {canDelete && (
@@ -775,7 +775,7 @@ export default function PurchaseReportPage() {
                   <th className="text-right py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Amount (₹)</th>
                   <th className="text-left py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">PO / Delivery Date</th>
                   <th className="text-center py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Status</th>
-                  <th className="text-center py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Approval</th>
+                  <th className="sticky right-0 z-10 bg-gray-50 border-l border-gray-100 text-center py-3 px-3 text-[11px] font-black uppercase tracking-wider text-gray-400">Approval</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -866,8 +866,9 @@ export default function PurchaseReportPage() {
                           )}
                         </td>
 
-                        {/* Approval — this PO's actual payment-approval progress */}
-                        <td className="py-3 px-3 text-center">
+                        {/* Approval — this PO's actual payment-approval progress. Pinned to the
+                            right edge of the scrollable table so it's never cut off out of view. */}
+                        <td className={`sticky right-0 z-10 border-l border-gray-100 py-3 px-3 text-center ${isExpanded ? 'bg-blue-50' : 'bg-white'}`}>
                           <ApprovalCell
                             payment={paymentByPO[po.id]}
                             po={po}
