@@ -39,7 +39,17 @@ export async function parseSalesOrdersFromPDF(file: File): Promise<ParsedSalesOr
     // these depending on which Zoho doc type it is (Sales Order / Invoice).
     const custLabelLine = lines.find(l => /(bill to|customer address|ship to|vendor address)/i.test(l.text));
     const custIdx       = custLabelLine ? lines.indexOf(custLabelLine) : -1;
-    const customerMatch = custIdx >= 0 ? lines[custIdx + 1]?.text : undefined;
+    let customerMatch = custIdx >= 0 ? lines[custIdx + 1]?.text : undefined;
+    // When the source doc's Bill To / Ship To block is blank, pdfjs's text
+    // extraction skips straight to the next real text on the page — which
+    // is often the "Order Date : DD/MM/YYYY" line from elsewhere in the
+    // layout. Blindly taking "the next line" then stores that date string
+    // as the customer's name. Reject anything that looks like a date/label
+    // line here so a blank customer block surfaces as blank (caught by the
+    // "No customer name" check below) instead of silently importing junk.
+    if (customerMatch && /^\s*(order\s*)?date\s*:/i.test(customerMatch)) {
+      customerMatch = undefined;
+    }
     const subTotalMatch = fullText.match(/Sub\s*Total\s*([\d,]+\.\d{2})/i);
     const totalMatch    = fullText.match(/(?<!Sub )Total\s*₹?\s*([\d,]+\.\d{2})/i);
 
