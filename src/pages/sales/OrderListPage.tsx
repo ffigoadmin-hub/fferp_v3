@@ -62,7 +62,7 @@ function ExpandedOrderDetail({ orderId, onRepeat }: { orderId: string; onRepeat:
         .select(`
           *,
           customer:customers(shop_name, first_name, last_name, owner_name, phone, mobile, area, city, gst_number, credit_limit, outstanding_balance),
-          items:sales_order_items(id, qty_kg, unit_price, total_price, qc_grade, unit, notes, product:products(name, category, unit))
+          items:sales_order_items(id, product_name, qty_kg, unit_price, total_price, qc_grade, unit, notes, product:products(name, category, unit))
         `)
         .eq('id', orderId).single();
       return data;
@@ -130,7 +130,7 @@ function ExpandedOrderDetail({ orderId, onRepeat }: { orderId: string; onRepeat:
               {items.map((item: any) => (
                 <div key={item.id} className="flex items-center justify-between text-xs">
                   <div className="flex-1 min-w-0">
-                    <span className="font-medium text-slate-700 truncate">{item.product?.name ?? 'Custom item'}</span>
+                    <span className="font-medium text-slate-700 truncate">{item.product?.name || item.product_name || 'Custom item'}</span>
                     <span className="text-slate-400 ml-1.5">
                       {item.qty_kg} {item.unit || item.product?.unit || 'kg'}
                       {Number(item.discount_pct) > 0 && <span className="text-green-600 ml-1">-{item.discount_pct}%</span>}
