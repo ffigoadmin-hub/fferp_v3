@@ -39,22 +39,41 @@ export async function parseSalesOrdersFromPDF(file: File): Promise<ParsedSalesOr
     // these depending on which Zoho doc type it is (Sales Order / Invoice).
     const custLabelLine = lines.find(l => /(bill to|customer address|ship to|vendor address)/i.test(l.text));
     const custIdx       = custLabelLine ? lines.indexOf(custLabelLine) : -1;
-    let customerMatch = custIdx >= 0 ? lines[custIdx + 1]?.text : undefined;
-    // When the source doc's Bill To / Ship To block is blank, pdfjs's text
-    // extraction skips straight to the next real text on the page — which
-    // is often the "Order Date : DD/MM/YYYY" line from elsewhere in the
-    // layout. Blindly taking "the next line" then stores that date string
-    // as the customer's name. Reject anything that looks like a date/label
-    // line here so a blank customer block surfaces as blank (caught by the
-    // "No customer name" check below) instead of silently importing junk.
-    if (customerMatch && /^\s*(order\s*)?date\s*:/i.test(customerMatch)) {
-      customerMatch = undefined;
+    // This template's header is two columns (Bill To block on the left,
+    // Order Date/meta on the right) that the Y-sorted text extraction
+    // interleaves onto separate lines — so the real customer name is NOT
+    // reliably "the very next line" after the label, it's consistently one
+    // line further down in this export (Bill To -> Order Date : ... ->
+    // customer name). Walk forward skipping any date/label line from that
+    // other column, stopping at the item-table header so a genuinely blank
+    // Bill To block surfaces as blank (caught by the "No customer name"
+    // check below) instead of grabbing junk from further down the page.
+    let customerMatch: string | undefined;
+    for (let i = custIdx + 1; custIdx >= 0 && i < lines.length; i++) {
+      const text = lines[i].text;
+      if (/^#\s*item/i.test(text)) break;
+      if (/^\s*(order\s*)?date\s*:/i.test(text)) continue;
+      customerMatch = text;
+      break;
     }
     const subTotalMatch = fullText.match(/Sub\s*Total\s*([\d,]+\.\d{2})/i);
     const totalMatch    = fullText.match(/(?<!Sub )Total\s*₹?\s*([\d,]+\.\d{2})/i);
 
     const items = parseItemRows(lines);
     if (!items.length) continue;
+
+    // A multi-page order repeats the item-table header on its continuation
+    // pages but not the Bill To block — that page has real items and no
+    // customer label at all (custIdx === -1), as opposed to a label that's
+    // present but genuinely blank. Merge those rows into the previous
+    // order instead of creating a second, customer-less phantom order for
+    // what is really one order split across pages.
+    if (custIdx === -1 && results.length > 0) {
+      const prev = results[results.length - 1];
+      prev.items.push(...items);
+      prev.parsedTotal += items.reduce((s, i) => s + i.amount, 0);
+      continue;
+    }
 
     results.push({
       sourceRef:     refMatch?.[1] ?? `page-${p}`,
