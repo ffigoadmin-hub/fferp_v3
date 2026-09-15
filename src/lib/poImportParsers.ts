@@ -80,20 +80,32 @@ export function parseItemRows(lines: Line[]): ParsedPOItem[] {
   const flush = () => {
     if (!current) return;
     const body = current.text.replace(/^\d+\s*/, '');
-    // Amount: the last well-formed "1,234.56" style number in the row.
-    const amountMatch = [...body.matchAll(/(\d[\d,]*\.\d{2})/g)];
-    // Qty: the first standalone number (with or without decimals) in the row.
-    const qtyMatch = body.match(/(\d[\d,]*\.?\d*)/);
-    if (amountMatch.length && qtyMatch) {
-      const amount = parseAmount(amountMatch[amountMatch.length - 1][1]);
-      const qty = parseAmount(qtyMatch[1]);
-      const unitFound = UNIT_WORDS.find(u => new RegExp(`\\b${u}\\b`, 'i').test(body));
-      // Name = everything before the qty number, trimmed of trailing item-code noise.
-      const nameEnd = body.indexOf(qtyMatch[1]);
-      let name = (nameEnd > 0 ? body.slice(0, nameEnd) : body).trim();
-      name = name.replace(/^\d{4}-/, ''); // strip a leading "2023-" style catalog prefix
+    // Zoho prints every numeric column (Qty, Rate, Amount) with exactly two
+    // decimals, so those are the only "1,234.56"-shaped tokens in a row. The
+    // item name itself starts with a bare-integer catalog prefix
+    // ("2023-TOMATO(BANGALORE)" — 2023 is a Zoho item-group code, not a year
+    // and not a quantity), which is why the row is split on decimal numbers
+    // rather than on "the first number": that rule read 2023 as the qty and
+    // pushed the real qty/rate/amount into the item name.
+    const nums = [...body.matchAll(/(?<![\w.-])(\d[\d,]*\.\d{2})(?![\w.])/g)];
+    if (nums.length >= 2) {
+      const qtyTok = nums[0];
+      const qty    = parseAmount(qtyTok[1]);
+      const amount = parseAmount(nums[nums.length - 1][1]);
+      // Use the printed Rate column when the row has one and it agrees with
+      // qty × rate = amount; otherwise derive it, as before.
+      const printedRate = nums.length >= 3 ? parseAmount(nums[nums.length - 2][1]) : null;
+      const rate = printedRate !== null && Math.abs(qty * printedRate - amount) < 0.05
+        ? printedRate
+        : (qty > 0 ? amount / qty : 0);
+      // The unit sits right after the qty in this template; searching only
+      // the tail keeps a product called "APPLE BOX" from reading as unit=box.
+      const tail = body.slice((qtyTok.index ?? 0) + qtyTok[0].length);
+      const unitFound = UNIT_WORDS.find(u => new RegExp(`\\b${u}\\b`, 'i').test(tail));
+      let name = body.slice(0, qtyTok.index).trim();
+      name = name.replace(/^\d{4}\s*-\s*/, ''); // strip the "2023-" catalog prefix
       if (name && qty > 0) {
-        items.push({ name, qty, unit: unitFound ?? 'unit', rate: amount / qty, amount });
+        items.push({ name, qty, unit: unitFound ?? 'unit', rate, amount });
       }
     }
     current = null;
