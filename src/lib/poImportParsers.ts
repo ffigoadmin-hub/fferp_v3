@@ -20,6 +20,7 @@ export interface ParsedPOItem {
   unit: string;
   rate: number;
   amount: number;
+  discountPct?: number; // only ever set for the Zoho Sales Order template's Disc% column
 }
 
 export interface ParsedPO {
@@ -92,12 +93,35 @@ export function parseItemRows(lines: Line[]): ParsedPOItem[] {
       const qtyTok = nums[0];
       const qty    = parseAmount(qtyTok[1]);
       const amount = parseAmount(nums[nums.length - 1][1]);
-      // Use the printed Rate column when the row has one and it agrees with
-      // qty × rate = amount; otherwise derive it, as before.
-      const printedRate = nums.length >= 3 ? parseAmount(nums[nums.length - 2][1]) : null;
-      const rate = printedRate !== null && Math.abs(qty * printedRate - amount) < 0.05
-        ? printedRate
-        : (qty > 0 ? amount / qty : 0);
+      let rate = 0;
+      let discountPct: number | undefined;
+      // The Zoho Sales Order template has a 4th numeric column between rate
+      // and amount — Disc% (printed as "5.00%" or "0.00" with no sign) — so
+      // a row like "ASH GOURD 100.00 25.00 5.00% 2,375.00" has 4 two-decimal
+      // tokens, not 3. Try that shape first: qty × rate × (1 − disc/100) =
+      // amount. Checking this before the plain 3-number case matters because
+      // otherwise nums[length-2] (the discount, "5.00") gets mistaken for
+      // the rate, silently baking the discount into a wrong derived rate
+      // with no discount ever recorded.
+      if (nums.length === 4) {
+        const candRate = parseAmount(nums[1][1]);
+        const candDisc = parseAmount(nums[2][1]);
+        if (qty > 0 && Math.abs(qty * candRate * (1 - candDisc / 100) - amount) < 0.5) {
+          rate = candRate;
+          discountPct = candDisc;
+        }
+      }
+      if (discountPct === undefined) {
+        // Plain qty/rate/amount (3 numbers) — or a Rate column Zoho printed
+        // with more than 2 decimals ("211.1111"), which this regex can't
+        // capture at all (it only matches exactly-2-decimal tokens), leaving
+        // just qty and amount here; deriving the rate from those two is
+        // exact either way since amount = qty × rate by construction.
+        const printedRate = nums.length >= 3 ? parseAmount(nums[nums.length - 2][1]) : null;
+        rate = printedRate !== null && Math.abs(qty * printedRate - amount) < 0.05
+          ? printedRate
+          : (qty > 0 ? amount / qty : 0);
+      }
       // The unit sits right after the qty in this template; searching only
       // the tail keeps a product called "APPLE BOX" from reading as unit=box.
       const tail = body.slice((qtyTok.index ?? 0) + qtyTok[0].length);
@@ -105,7 +129,7 @@ export function parseItemRows(lines: Line[]): ParsedPOItem[] {
       let name = body.slice(0, qtyTok.index).trim();
       name = name.replace(/^\d{4}\s*-\s*/, ''); // strip the "2023-" catalog prefix
       if (name && qty > 0) {
-        items.push({ name, qty, unit: unitFound ?? 'unit', rate, amount });
+        items.push({ name, qty, unit: unitFound ?? 'unit', rate, amount, ...(discountPct !== undefined ? { discountPct } : {}) });
       }
     }
     current = null;

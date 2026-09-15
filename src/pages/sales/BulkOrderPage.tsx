@@ -203,7 +203,7 @@ function ImportSalesOrderDialog({
           order_id: order.id, product_name: it.name,
           quantity: it.qty, qty_kg: it.qty, quantity_kg: it.qty,
           unit: (it.unit || 'KG').toUpperCase(),
-          unit_price: it.rate, total_price: it.amount, subtotal: it.amount,
+          unit_price: it.rate, discount_pct: it.discountPct ?? 0, total_price: it.amount, subtotal: it.amount,
           qc_grade: 'A', grade: 'A',
         }));
         if (itemRows.length) {
