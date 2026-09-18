@@ -718,6 +718,7 @@ export const navigationConfig: NavGroup[] = [
           { label: 'Vendors',             path: '/purchase/vendors' },
           { label: 'New Vendor Payment',   path: '/ff/vendor-payment/new' },
           { label: 'New Transport Payment', path: '/ff/transport-payment/new' },
+          { label: 'Vendor Bulk Payment',  path: '/ff-operations/vendor-bulk-payment' },
           { label: 'Payment Approvals',   path: '/ff-operations/payment-approvals', action: false },
           { label: '🏷️ Box Labels',       path: '/ff-operations/labels', action: true },
         ],

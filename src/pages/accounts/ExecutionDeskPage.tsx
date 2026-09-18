@@ -42,6 +42,7 @@ function BatchCreationTab({ onBatchCreated }: { onBatchCreated: () => void }) {
   const [hubFilter, setHubFilter] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [bulkOnly, setBulkOnly] = useState(false);
 
   const { data: hubs = [] } = useQuery({
     queryKey: ['hubs-list'],
@@ -56,7 +57,7 @@ function BatchCreationTab({ onBatchCreated }: { onBatchCreated: () => void }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('ff_vendor_payments')
-        .select('id, gross_amount, net_amount, created_at, hub_id, vendors(id, name, account_number, bank_name, ifsc_code), hubs(name), purchase_orders(po_number, eod_date)')
+        .select('id, gross_amount, net_amount, created_at, hub_id, is_bulk, purchase_order_ids, po_breakdown, vendors(id, name, account_number, bank_name, ifsc_code), hubs(name), purchase_orders(po_number, eod_date)')
         .eq('payment_status', 'pending_accounts')
         .is('batch_id', null)
         .order('created_at', { ascending: false });
@@ -70,14 +71,28 @@ function BatchCreationTab({ onBatchCreated }: { onBatchCreated: () => void }) {
   // means "CEO approved, waiting for Accounts to pay." Filtered client-side
   // (not in the query) so a hub/date filter never drops an already-checked
   // row out from under a selection made before the filter was applied.
+  //
+  // A Vendor Bulk Payment (is_bulk) has purchase_order_id = NULL (see
+  // ADD_VENDOR_BULK_PAYMENTS.sql), so its purchase_orders embed above is
+  // always null and it has no single eod_date — filtering by that column
+  // would silently exclude every bulk payment the moment a date range is
+  // set. Its real date range lives in po_breakdown instead; a bulk payment
+  // matches the date filter if ANY of its covered days falls inside it,
+  // so narrowing to one day still surfaces a bulk payment that includes it.
   const payments = allPayments.filter((p: any) => {
     if (hubFilter !== 'all' && p.hub_id !== hubFilter) return false;
+    if (bulkOnly && !p.is_bulk) return false;
+    if (p.is_bulk) {
+      if (!dateFrom && !dateTo) return true;
+      const dates: string[] = (p.po_breakdown ?? []).map((b: any) => b.po_date);
+      return dates.some((d: string) => (!dateFrom || d >= dateFrom) && (!dateTo || d <= dateTo));
+    }
     const eod = p.purchase_orders?.eod_date;
     if (dateFrom && (!eod || eod < dateFrom)) return false;
     if (dateTo && (!eod || eod > dateTo)) return false;
     return true;
   });
-  const filtersActive = hubFilter !== 'all' || !!dateFrom || !!dateTo;
+  const filtersActive = hubFilter !== 'all' || !!dateFrom || !!dateTo || bulkOnly;
   const selectedHubName = hubFilter === 'all' ? null : hubs.find((h: any) => h.id === hubFilter)?.name;
 
   const missingBank = payments.filter((p: any) => !p.vendors?.account_number || !p.vendors?.ifsc_code);
@@ -187,8 +202,19 @@ function BatchCreationTab({ onBatchCreated }: { onBatchCreated: () => void }) {
           <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
             className="mt-1 block rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
+        <div>
+          <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide block mb-1">&nbsp;</label>
+          <button
+            onClick={() => setBulkOnly(v => !v)}
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition border flex items-center gap-1 ${
+              bulkOnly ? 'bg-fuchsia-600 text-white border-fuchsia-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            🔗 Bulk Vendor Payments Only
+          </button>
+        </div>
         {filtersActive && (
-          <button onClick={() => { setHubFilter('all'); setDateFrom(''); setDateTo(''); }}
+          <button onClick={() => { setHubFilter('all'); setDateFrom(''); setDateTo(''); setBulkOnly(false); }}
             className="text-xs font-semibold text-blue-600 hover:underline pb-2.5">
             Clear filters
           </button>
@@ -224,13 +250,32 @@ function BatchCreationTab({ onBatchCreated }: { onBatchCreated: () => void }) {
           <div className="divide-y divide-gray-50 max-h-[50vh] overflow-y-auto">
             {payments.map((p: any) => {
               const noBank = !p.vendors?.account_number || !p.vendors?.ifsc_code;
+              // Sort po_breakdown's dates (never trust insertion order) to
+              // get the true earliest→latest span this bulk payment covers.
+              const bulkDates = (p.po_breakdown ?? []).map((b: any) => b.po_date).filter(Boolean).sort();
+              const bulkDateRange = bulkDates.length
+                ? (bulkDates[0] === bulkDates[bulkDates.length - 1] ? bulkDates[0] : `${bulkDates[0]} → ${bulkDates[bulkDates.length - 1]}`)
+                : '';
               return (
                 <label key={p.id} className={`flex items-center gap-3 px-4 py-2.5 text-sm ${noBank ? 'opacity-50' : 'hover:bg-gray-50 cursor-pointer'}`}>
                   <input type="checkbox" checked={selected.has(p.id)} disabled={noBank} onChange={() => toggleOne(p.id)} />
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-800 truncate">{p.vendors?.name || 'Unknown vendor'}</p>
+                    <p className="font-semibold text-gray-800 truncate flex items-center gap-1.5">
+                      {p.vendors?.name || 'Unknown vendor'}
+                      {p.is_bulk && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-fuchsia-100 text-fuchsia-700 font-bold shrink-0">
+                          🔗 Bulk · {p.po_breakdown?.length ?? p.purchase_order_ids?.length ?? '?'} POs
+                        </span>
+                      )}
+                    </p>
                     <p className="text-[11px] text-gray-400">
-                      {p.hubs?.name || '—'} {p.purchase_orders?.po_number && `· ${p.purchase_orders.po_number}`} {p.purchase_orders?.eod_date && `· ${format(new Date(p.purchase_orders.eod_date), 'dd MMM')}`} {noBank && '· no bank details'}
+                      {p.hubs?.name || '—'}
+                      {' '}
+                      {p.is_bulk
+                        ? (bulkDateRange ? `· ${bulkDateRange}` : '')
+                        : (p.purchase_orders?.po_number ? `· ${p.purchase_orders.po_number}` : '')}
+                      {!p.is_bulk && p.purchase_orders?.eod_date && ` · ${format(new Date(p.purchase_orders.eod_date), 'dd MMM')}`}
+                      {noBank && ' · no bank details'}
                     </p>
                   </div>
                   <span className="font-bold text-gray-800">{fmt(p.net_amount ?? p.gross_amount)}</span>

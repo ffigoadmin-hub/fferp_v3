@@ -144,6 +144,51 @@ function RejectModal({ onClose, onConfirm }: { onClose: () => void; onConfirm: (
   );
 }
 
+// ── Vendor Bulk Payment breakdown ──────────────────────────────
+// A payment raised from VendorBulkPaymentPage.tsx covers several days'
+// purchase orders for one vendor in one go (payment.is_bulk +
+// payment.po_breakdown, see ADD_VENDOR_BULK_PAYMENTS.sql). Every approver
+// in the chain — L1, Admin, CEO, Accounts — needs to see exactly which POs
+// and days make up the combined total, not just one lump sum, so a large
+// bulk figure is always traceable back to its source days.
+function PoBreakdownTable({ poBreakdown }: { poBreakdown: any[] }) {
+  if (!poBreakdown?.length) return null;
+  const total = poBreakdown.reduce((s, p) => s + Number(p.subtotal || 0), 0);
+  return (
+    <div className="mb-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">
+        Vendor Bulk Payment — covers {poBreakdown.length} purchase order{poBreakdown.length > 1 ? 's' : ''}
+      </p>
+      <table className="w-full text-xs border-collapse">
+        <thead>
+          <tr className="bg-fuchsia-50">
+            <th className="text-left px-2 py-1.5 font-medium text-gray-500 border-b">PO Number</th>
+            <th className="text-left px-2 py-1.5 font-medium text-gray-500 border-b">Date</th>
+            <th className="text-right px-2 py-1.5 font-medium text-gray-500 border-b">Items</th>
+            <th className="text-right px-2 py-1.5 font-medium text-gray-500 border-b">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {poBreakdown.map((p, i) => (
+            <tr key={p.po_id ?? i} className="border-b border-gray-100">
+              <td className="px-2 py-1.5 font-medium text-gray-800">{p.po_number}</td>
+              <td className="px-2 py-1.5 text-gray-600">{p.po_date}</td>
+              <td className="px-2 py-1.5 text-right text-gray-600">{p.item_count}</td>
+              <td className="px-2 py-1.5 text-right text-gray-800">₹{Number(p.subtotal || 0).toLocaleString('en-IN')}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colSpan={3} className="px-2 py-1.5 text-right font-semibold text-gray-600">Total</td>
+            <td className="px-2 py-1.5 text-right font-bold text-gray-800">₹{total.toLocaleString('en-IN')}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
+
 // ── Items detail expand ───────────────────────────────────────
 // Two different flows write `items` with different field names:
 //   FFVendorPaymentForm.tsx (manual raise)   → qty, rate, amount, qc_grade, deduction_reason
@@ -245,8 +290,19 @@ function PaymentCard({
     ? (payment.vendors?.name || 'Vendor Payment')
     : (payment.vehicle_number ? `Vehicle: ${payment.vehicle_number}` : 'Transport Payment');
 
+  // Bulk payments cover several days' POs — sort po_breakdown's dates
+  // (never trust insertion order) to get the true earliest→latest span,
+  // shown as a single date when every PO happens to share one day.
+  const bulkDateRange = (() => {
+    const dates = (payment.po_breakdown ?? []).map((p: any) => p.po_date).filter(Boolean).sort();
+    if (!dates.length) return '';
+    return dates[0] === dates[dates.length - 1] ? dates[0] : `${dates[0]} → ${dates[dates.length - 1]}`;
+  })();
+
   const subtitle = type === 'vendor'
-    ? `PO · ${payment.hubs?.name || '—'}`
+    ? (payment.is_bulk
+        ? `Vendor Bulk Payment · ${payment.po_breakdown?.length ?? payment.purchase_order_ids?.length ?? ''} POs${bulkDateRange ? ` · ${bulkDateRange}` : ''} · ${payment.hubs?.name || '—'}`
+        : `PO · ${payment.hubs?.name || '—'}`)
     : `${payment.origin || '—'} → ${payment.destination || '—'} · ${payment.hubs?.name || '—'}`;
 
   return (
@@ -382,6 +438,7 @@ function PaymentCard({
                   </div>
                 );
               })()}
+              {payment.is_bulk && <PoBreakdownTable poBreakdown={payment.po_breakdown || []} />}
               <ItemsTable items={payment.items || []} />
             </>
           )}
@@ -497,6 +554,12 @@ export default function FFPaymentApprovals() {
   const [tab, setTab] = useState<'vendor' | 'transport'>(isTransportRoute ? 'transport' : 'vendor');
   const [statusFilter, setStatusFilter] = useState<string>('pending');
   const [hubFilter, setHubFilter] = useState<string>('all');
+  // Isolates payments raised from VendorBulkPaymentPage.tsx (one payment
+  // covering several days' POs for one vendor). This page is the single
+  // shared component behind every approval-stage route — Manager, L1,
+  // Admin, CEO, and Accounts' own view — so this one toggle covers the
+  // whole chain, not just one stage's dashboard.
+  const [bulkOnly, setBulkOnly] = useState(false);
 
   const { data: hubs = [] } = useQuery({
     queryKey: ['hubs-active-ff-payments'],
@@ -642,7 +705,11 @@ export default function FFPaymentApprovals() {
   });
 
   const payments = (tab === 'vendor' ? vendorPayments : transportPayments)
-    .filter((p: any) => hubFilter === 'all' || p.hub_id === hubFilter);
+    .filter((p: any) => hubFilter === 'all' || p.hub_id === hubFilter)
+    .filter((p: any) => !bulkOnly || p.is_bulk);
+  const bulkCount = (tab === 'vendor' ? vendorPayments : transportPayments)
+    .filter((p: any) => hubFilter === 'all' || p.hub_id === hubFilter)
+    .filter((p: any) => p.is_bulk).length;
   const isLoading = tab === 'vendor' ? vLoading : tLoading;
   const refetch = tab === 'vendor' ? vRefetch : tRefetch;
 
@@ -779,6 +846,21 @@ export default function FFPaymentApprovals() {
             {f.label}
           </button>
         ))}
+
+        {/* Isolates Vendor Bulk Payments (is_bulk) from ordinary per-PO
+            payments — the same shared page renders Manager, L1, Admin,
+            CEO, and Accounts' own view, so this one toggle works
+            identically at every stage of the chain. */}
+        <button
+          onClick={() => setBulkOnly(v => !v)}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium transition border flex items-center gap-1 ${
+            bulkOnly
+              ? 'bg-fuchsia-600 text-white border-fuchsia-600'
+              : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+          }`}
+        >
+          🔗 Bulk Vendor Payments{bulkCount > 0 ? ` (${bulkCount})` : ''}
+        </button>
 
         <select
           value={hubFilter}
