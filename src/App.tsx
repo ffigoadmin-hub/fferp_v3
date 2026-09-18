@@ -126,6 +126,7 @@ const AutoPOPage               = lazy(() => import('./pages/ff-operations/purcha
 const AutoBillPage             = lazy(() => import('./pages/ff-operations/purchase/AutoBillPage'));
 const BuyPage                  = lazy(() => import('./pages/ff-operations/purchase/BuyPage'));
 const POBuysReview             = lazy(() => import('./pages/ff-operations/purchase/POBuysReview'));
+const VendorBulkPaymentPage    = lazy(() => import('./pages/ff-operations/purchase/VendorBulkPaymentPage'));
 
 // FF Operations — Sales sub-pages
 const SalesCustomersPage       = lazy(() => import('./pages/ff-operations/sales/SalesCustomersPage'));
@@ -890,6 +891,7 @@ const AppRoutes = () => {
       {/* FF Ops Manager */}
       <Route path="/ff-operations/task-assign"        element={<ProtectedRoute allowedRoles={['ff_operations_manager','admin']}><TaskAssign /></ProtectedRoute>} />
       <Route path="/ff-operations/payment-approvals"  element={<ProtectedRoute allowedRoles={['ff_operations_manager','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
+      <Route path="/ff-operations/vendor-bulk-payment" element={<ProtectedRoute allowedRoles={['ff_operations_manager','admin']}><VendorBulkPaymentPage /></ProtectedRoute>} />
       {/* Phase 4: Payment submission forms */}
       <Route path="/ff/vendor-payment/new"    element={<ProtectedRoute allowedRoles={['hub_manager','shift_employee','purchase_manager','purchase_head','ff_operations_manager','admin']}><FFVendorPaymentForm /></ProtectedRoute>} />
       <Route path="/ff/transport-payment/new" element={<ProtectedRoute allowedRoles={['hub_manager','shift_employee','purchase_manager','purchase_head','ff_operations_manager','admin']}><FFTransportPaymentForm /></ProtectedRoute>} />

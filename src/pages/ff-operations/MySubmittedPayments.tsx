@@ -90,8 +90,19 @@ function PaymentRow({ payment, type, onDelete, isDeleting }: { payment: any; typ
     ? (payment.vendors?.name || 'Vendor Payment')
     : `Vehicle: ${payment.vehicle_number || '—'}`;
 
+  // Bulk payments cover several days' POs — sort po_breakdown's dates
+  // (never trust insertion order) to get the true earliest→latest span,
+  // shown as a single date when every PO happens to share one day.
+  const bulkDateRange = (() => {
+    const dates = (payment.po_breakdown ?? []).map((p: any) => p.po_date).filter(Boolean).sort();
+    if (!dates.length) return '';
+    return dates[0] === dates[dates.length - 1] ? dates[0] : `${dates[0]} → ${dates[dates.length - 1]}`;
+  })();
+
   const subtitle = type === 'vendor'
-    ? `Hub: ${payment.hubs?.name || '—'} · PO ref`
+    ? (payment.is_bulk
+        ? `Vendor Bulk Payment · ${payment.po_breakdown?.length ?? payment.purchase_order_ids?.length ?? ''} POs${bulkDateRange ? ` · ${bulkDateRange}` : ''} · Hub: ${payment.hubs?.name || '—'}`
+        : `Hub: ${payment.hubs?.name || '—'} · PO ref`)
     : `${payment.origin || '—'} → ${payment.destination || '—'} · ${payment.hubs?.name || '—'}`;
 
   return (
@@ -160,6 +171,17 @@ function PaymentRow({ payment, type, onDelete, isDeleting }: { payment: any; typ
                 <span><b>Deduction:</b> ₹{Number(payment.deduction_amount || 0).toLocaleString('en-IN')}</span>
                 <span className="font-semibold text-gray-800"><b>Net:</b> ₹{Number(payment.net_amount || 0).toLocaleString('en-IN')}</span>
               </div>
+              {/* Vendor Bulk Payment — the PO-by-PO makeup of the combined
+                  total above, so the submitter can see exactly which days
+                  this payment covers (see ADD_VENDOR_BULK_PAYMENTS.sql). */}
+              {payment.is_bulk && payment.po_breakdown?.length > 0 && (
+                <div className="text-[11px] text-gray-500 space-y-0.5">
+                  <p className="font-medium text-gray-600">Covers {payment.po_breakdown.length} PO(s):</p>
+                  {payment.po_breakdown.map((p: any, i: number) => (
+                    <p key={p.po_id ?? i}>· {p.po_number} ({p.po_date}) — ₹{Number(p.subtotal || 0).toLocaleString('en-IN')}</p>
+                  ))}
+                </div>
+              )}
               {payment.bill_url && (
                 <a href={payment.bill_url} target="_blank" rel="noopener noreferrer"
                   className="text-xs text-blue-600 underline">📎 View Bill</a>
@@ -205,6 +227,7 @@ export default function MySubmittedPayments() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<'vendor' | 'transport'>('vendor');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [bulkOnly, setBulkOnly] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
 
   const userId = user?.id;
@@ -266,7 +289,8 @@ export default function MySubmittedPayments() {
     enabled: !!userId,
   });
 
-  const payments = tab === 'vendor' ? vendorPayments : transportPayments;
+  const payments = (tab === 'vendor' ? vendorPayments : transportPayments)
+    .filter((p: any) => !bulkOnly || p.is_bulk);
   const isLoading = tab === 'vendor' ? vLoading : tLoading;
   const refetch   = tab === 'vendor' ? vRefetch  : tRefetch;
 
@@ -354,6 +378,14 @@ export default function MySubmittedPayments() {
           <option value="paid">Paid</option>
           <option value="rejected">Rejected</option>
         </select>
+        <button
+          onClick={() => setBulkOnly(v => !v)}
+          className={`px-3 py-2 rounded-lg text-sm font-medium transition border flex items-center gap-1 ${
+            bulkOnly ? 'bg-fuchsia-600 text-white border-fuchsia-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+          }`}
+        >
+          🔗 Bulk Only
+        </button>
       </div>
 
       {/* Payment list */}

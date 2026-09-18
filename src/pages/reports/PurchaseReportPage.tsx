@@ -228,7 +228,8 @@ function ApprovalCell({
     );
   }
 
-  const { id, status } = payment;
+  const { id, status, poCount } = payment;
+  const isBulk = (poCount ?? 1) > 1;
   const cfg = PAYMENT_STATUS_CFG[status] ?? { cls: 'bg-gray-100 text-gray-600', label: status };
   const myTurn = MY_PENDING_STATUS[userRole] === status;
   const nextStatus = NEXT_STATUS[userRole];
@@ -253,9 +254,9 @@ function ApprovalCell({
     <button
       onClick={(e) => { e.stopPropagation(); navigate('/ff-operations/payment-approvals'); }}
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold hover:opacity-75 transition-opacity ${cfg.cls}`}
-      title="Open Payment Approvals"
+      title={isBulk ? `Part of a Vendor Bulk Payment covering ${poCount} POs — open Payment Approvals` : 'Open Payment Approvals'}
     >
-      <Banknote className="w-2.5 h-2.5" />{cfg.label}
+      <Banknote className="w-2.5 h-2.5" />{cfg.label}{isBulk && <span className="opacity-60">·{poCount}PO</span>}
     </button>
   );
 
@@ -378,16 +379,28 @@ export default function PurchaseReportPage() {
   // this to payment-approver roles + whatever the viewer personally raised,
   // so a viewer outside that chain may see "Not raised" for a PO that does
   // have one; the approvers themselves see it correctly.
+  //
+  // A PO's payment can be linked two ways: the legacy singular
+  // purchase_order_id (one PO, one payment), or purchase_order_ids (a
+  // Vendor Bulk Payment covering several POs — see VendorBulkPaymentPage.tsx
+  // and ADD_VENDOR_BULK_PAYMENTS.sql). Both are folded into one lookup map
+  // here so a PO absorbed into a bulk payment shows its real stage instead
+  // of falling back to "Not raised". `poCount` is the number of POs the
+  // matched payment covers — used below to decide whether this PO is safe
+  // to delete on its own (see isPOLocked).
   const { data: paymentByPO = {} } = useQuery({
     queryKey: ['ff-vendor-payments-by-po'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('ff_vendor_payments')
-        .select('id, purchase_order_id, payment_status')
-        .not('purchase_order_id', 'is', null);
+        .select('id, purchase_order_id, purchase_order_ids, payment_status')
+        .or('purchase_order_id.not.is.null,purchase_order_ids.not.is.null');
       if (error) { console.error('[PurchaseReportPage] ff_vendor_payments:', error.message); return {}; }
-      const map: Record<string, { id: string; status: string }> = {};
-      (data ?? []).forEach((row: any) => { map[row.purchase_order_id] = { id: row.id, status: row.payment_status }; });
+      const map: Record<string, { id: string; status: string; poCount: number }> = {};
+      (data ?? []).forEach((row: any) => {
+        const ids: string[] = row.purchase_order_ids?.length ? row.purchase_order_ids : (row.purchase_order_id ? [row.purchase_order_id] : []);
+        ids.forEach((poId: string) => { map[poId] = { id: row.id, status: row.payment_status, poCount: ids.length }; });
+      });
       return map;
     },
   });
@@ -485,7 +498,24 @@ export default function PurchaseReportPage() {
   // same failure mode as the MS. AK MANI ₹8,300 orphan found & cleaned up
   // separately). Anything not yet paid is fair game: deleting the PO also
   // removes its (unpaid) payment and line items so nothing dangles behind.
-  const isPOLocked = (po: StoredPO) => paymentByPO[po.id]?.status === 'paid';
+  //
+  // Also locked: a PO that's part of a multi-PO Vendor Bulk Payment
+  // (poCount > 1). deleteSelected below deletes the PO's payment via
+  // `.in('purchase_order_id', ids)`, which only matches the legacy
+  // singular column — a bulk payment covering several POs is stored with
+  // that column NULL, so it would never be deleted alongside the PO. That
+  // means naively allowing this would silently leave the bulk payment
+  // referencing a PO that no longer exists, still billing the vendor for a
+  // day whose PO was just deleted. A single-PO bulk payment (poCount === 1,
+  // still populates purchase_order_id for exactly this reason) behaves like
+  // any other unpaid payment and can still be deleted along with its PO.
+  const isPOLocked = (po: StoredPO) => {
+    const p = paymentByPO[po.id];
+    if (!p) return false;
+    if (p.status === 'paid') return true;
+    if (p.poCount > 1) return true;
+    return false;
+  };
   const selectableFiltered = filtered.filter(po => !isPOLocked(po));
   const toggleSelectAll = () => {
     if (selectedPOs.size === selectableFiltered.length && selectableFiltered.length > 0) setSelectedPOs(new Set());
@@ -798,7 +828,11 @@ export default function PurchaseReportPage() {
                               checked={selectedPOs.has(po.id)}
                               disabled={isPOLocked(po)}
                               onChange={() => toggleSelectOne(po.id)}
-                              title={isPOLocked(po) ? 'Already paid — cannot delete' : 'Select for delete'} />
+                              title={
+                                paymentByPO[po.id]?.status === 'paid' ? 'Already paid — cannot delete'
+                                : (paymentByPO[po.id]?.poCount ?? 0) > 1 ? 'Part of a Vendor Bulk Payment covering several POs — cannot delete individually'
+                                : 'Select for delete'
+                              } />
                           </td>
                         )}
                         {/* Expand toggle */}
