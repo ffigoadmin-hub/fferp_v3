@@ -217,8 +217,13 @@ function rowsToPOs(rows: Record<string, any>[]): ParsedPO[] {
       const rateRaw = pick(r, 'rate', 'price');
       const amount = amountRaw ? parseAmount(amountRaw) : (parseAmount(rateRaw) * qty);
       const rate = qty > 0 ? amount / qty : parseAmount(rateRaw);
+      // Strip the same Zoho item-group catalog prefix ("2023-TOMATO") the
+      // PDF path strips in parseItemRows — a CSV/XLSX export has real
+      // separate Qty/Rate/Amount columns so this never corrupts the
+      // numbers here, but the raw prefix otherwise leaks into product_name.
+      const rawName = pick(r, 'item', 'item & description', 'item name', 'product');
       return {
-        name: pick(r, 'item', 'item & description', 'item name', 'product'),
+        name: rawName.replace(/^\d+\s*-\s*/, ''),
         qty, unit: pick(r, 'unit') || 'unit', rate, amount,
       };
     }).filter(i => i.name && i.qty > 0);
