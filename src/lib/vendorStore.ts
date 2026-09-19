@@ -35,7 +35,16 @@ export interface StoredVendor {
 // return zero rows, which is why vendor bank details never showed up
 // anywhere that read from this store. `gstin` here is sourced from the
 // real `gst_number` column; `pan` has nothing to source from yet.
+//
+// Bank details live in TWO independent column pairs on `vendors` —
+// bank_account/bank_ifsc (written by PurchaseOrdersPage/PurchaseReportPage)
+// and account_number/ifsc_code (written by BuyPage.tsx's inline "New /
+// Dynamic Vendor" flow, the most common way a field vendor gets created).
+// Reading only one pair made every BuyPage-created vendor look bank-detail-
+// less here even when real bank info existed under the other name.
 export function rowToVendor(row: any): StoredVendor {
+  const bankAccount = row.bank_account || row.account_number || '';
+  const bankIfsc     = row.bank_ifsc || row.ifsc_code || '';
   return {
     id:           row.id,
     companyName:  row.name ?? '',
@@ -46,12 +55,12 @@ export function rowToVendor(row: any): StoredVendor {
     gstin:        row.gst_number ?? '',
     pan:          row.pan ?? '',
     bank_name:    row.bank_name ?? '',
-    bank_account: row.bank_account ?? '',
-    bank_ifsc:    row.bank_ifsc ?? '',
+    bank_account: bankAccount,
+    bank_ifsc:    bankIfsc,
     banks: row.bank_name ? [{
       bankName:      row.bank_name,
-      accountNumber: row.bank_account,
-      ifscCode:      row.bank_ifsc,
+      accountNumber: bankAccount,
+      ifscCode:      bankIfsc,
     }] : [],
   };
 }
@@ -66,7 +75,8 @@ export function vendorDisplayName(v: StoredVendor): string {
 export async function fetchStoredVendors(): Promise<StoredVendor[]> {
   const { data, error } = await supabase
     .from('vendors')
-    .select('id, name, email, phone, gst_number, bank_name, bank_account, bank_ifsc')
+    .select('id, name, email, phone, gst_number, bank_name, bank_account, bank_ifsc, account_number, ifsc_code, is_active')
+    .eq('is_active', true)
     .order('name');
   if (error) { console.error('[vendorStore] fetchStoredVendors:', error.message); return []; }
   return (data ?? []).map(rowToVendor);
