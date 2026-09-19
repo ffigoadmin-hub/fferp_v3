@@ -44,6 +44,27 @@ interface VendorGroup {
   alsoKnownAs: string[];
 }
 
+// A normalized bank-account identity for a vendor, or null if it has no
+// real bank details on file (or the value looks like placeholder junk,
+// e.g. "0"/"NA" — guarded by requiring at least 6 digits).
+function bankKey(vendor: any): string | null {
+  const acct = (vendor?.bank_account || '').replace(/\s+/g, '').toUpperCase();
+  const ifsc = (vendor?.bank_ifsc || '').replace(/\s+/g, '').toUpperCase();
+  if (acct.replace(/\D/g, '').length < 6) return null;
+  return `${acct}::${ifsc}`;
+}
+
+// A shared bank account is only trusted as "this is really one vendor" up
+// to a small number of distinct vendor rows. Confirmed live via
+// CHECK_VENDOR_BANK_ACCOUNT_DUPES.sql: genuine same-vendor spelling/typo
+// clusters (Kabur Fruits / Kabur Furits / Kabur Salman Fruits; Vijayakanth
+// Traders; Sekar / Shekar; Baskar / Bhaskar; KRP Traders duplicate; K.V.
+// Palani / KVP) all top out at 2-4 rows. Two accounts used as a shared
+// "local cash market" placeholder for vendors with no real bank transfer
+// jumped to 18 and 52 completely unrelated names on the exact same
+// account+IFSC — those must never auto-merge.
+const MAX_TRUSTED_BANK_KEY_VENDORS = 4;
+
 // Sorted earliest→latest span the group's POs cover (never trust
 // insertion order) — a single date when every PO happens to share one day.
 function computeDateRange(pos: StoredPO[]): string {
@@ -125,6 +146,19 @@ export default function VendorBulkPaymentPage() {
     };
   }, [vendorList]);
 
+  // How many distinct vendor rows share each bank key, computed over the
+  // whole vendor list (not just matched ones) — this must be known before
+  // grouping POs, so a shared-placeholder account can be rejected outright
+  // rather than merging the first few POs before the count grows too large.
+  const bankKeyVendorCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const v of vendorList as any[]) {
+      const k = bankKey(v);
+      if (k) counts.set(k, (counts.get(k) || 0) + 1);
+    }
+    return counts;
+  }, [vendorList]);
+
   const eligiblePOs = useMemo(() => {
     return allPOs.filter(po => {
       if (coveredPOIds.has(po.id)) return false;
@@ -139,23 +173,18 @@ export default function VendorBulkPaymentPage() {
 
   // Group by vendor + hub together — never merge two hubs' POs into one
   // payment, since ff_vendor_payments.hub_id is a single scalar column.
-  // Preferred key is the vendor's bank account (immune to name spelling/OCR
-  // variance across POs); vendors with no bank details on file fall back to
-  // today's name-based key, so that case is unchanged.
+  // Preferred key is the vendor's bank account when it's shared by only a
+  // handful of vendor rows (real same-vendor spelling variance); vendors
+  // with no bank details, or whose account is one of the shared "local
+  // cash market" placeholders, fall back to today's name-based key.
   const vendorGroups = useMemo<VendorGroup[]>(() => {
     const map = new Map<string, VendorGroup>();
     for (const po of eligiblePOs) {
       const vendor = findVendor(po.vendorName);
-      // Bank-account-based grouping was reverted (see git history) — a
-      // production check found dozens of unrelated vendors sharing the
-      // exact same bank_account/bank_ifsc value (almost certainly a
-      // placeholder/default entered during import, not a real shared
-      // account), which was silently merging unrelated vendors' payments
-      // into one bulk group. Grouping by name only until that's diagnosed
-      // and a real vendor-identity signal (not just "same digits on file")
-      // can be trusted.
+      const bkey = bankKey(vendor);
+      const trustedBankKey = bkey && (bankKeyVendorCounts.get(bkey) ?? 0) <= MAX_TRUSTED_BANK_KEY_VENDORS;
       const hubKey = po.hub_id || 'nohub';
-      const key = `name::${normName(po.vendorName) || po.vendorName}::${hubKey}`;
+      const key = `${trustedBankKey ? `bank::${bkey}` : `name::${normName(po.vendorName) || po.vendorName}`}::${hubKey}`;
       if (!map.has(key)) {
         map.set(key, {
           key,
@@ -181,7 +210,7 @@ export default function VendorBulkPaymentPage() {
     // groups are still shown (nothing hidden) but sort last since that
     // case is already served by Purchase Report's per-PO Raise & Approve.
     return Array.from(map.values()).sort((a, b) => b.pos.length - a.pos.length || b.total - a.total);
-  }, [eligiblePOs, findVendor]);
+  }, [eligiblePOs, findVendor, bankKeyVendorCounts]);
 
   const raiseBulk = async (group: VendorGroup) => {
     if (!group.vendor?.id) {
