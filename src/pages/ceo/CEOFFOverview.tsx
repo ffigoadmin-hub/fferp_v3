@@ -59,6 +59,10 @@ function PaymentPipelineBar({ label, counts }: { label: string; counts: Record<s
     { key: 'paid',           label: 'Paid',   color: '#16A34A' },
     { key: 'rejected',       label: 'Rejected',color:'#EF4444' },
   ];
+  // Bar heights are relative to the largest count, not a fixed px-per-unit
+  // scale — a fixed 6px/unit made a 262-count "Paid" bar render at 1572px
+  // tall, blowing out the whole page layout once payment volume grew.
+  const maxCount = Math.max(1, ...stages.map(s => counts[s.key] || 0));
   return (
     <div>
       <p className="text-xs font-medium text-gray-500 mb-2">{label}</p>
@@ -69,8 +73,7 @@ function PaymentPipelineBar({ label, counts }: { label: string; counts: Record<s
               className="w-full rounded-t-sm transition-all"
               style={{
                 background: s.color,
-                height: `${Math.max((counts[s.key] || 0) * 6, counts[s.key] ? 4 : 0)}px`,
-                minHeight: counts[s.key] ? '4px' : '0',
+                height: counts[s.key] ? `${Math.max((counts[s.key] / maxCount) * 56, 4)}px` : '0',
               }}
             />
             <span className="text-xs text-gray-400">{counts[s.key] || 0}</span>
