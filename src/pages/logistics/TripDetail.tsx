@@ -231,7 +231,7 @@ export default function TripDetail() {
         })}
       </div>
 
-      {(trip as any).status === 'planned' && (
+      {(trip as any).status === 'scheduled' && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t px-4 py-3">
           <button
             onClick={() => updateTripStatus.mutate('in_progress')}

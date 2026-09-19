@@ -80,7 +80,14 @@ function poToPayload(po: StoredPO): Record<string, any> {
     delivery_date:   po.deliveryDate || null,
     payment_terms:   po.paymentTerms || null,
   };
-  if (po.deliveryDate) payload.eod_date = po.deliveryDate;
+  if (po.deliveryDate) {
+    payload.eod_date = po.deliveryDate;
+    // VendorPerformance.tsx's on-time-delivery rate needs this — it was
+    // otherwise only ever set by the legacy PurchaseOrderForm.tsx, so POs
+    // created through the normal EOD flow had no expected date to compare
+    // actual_delivery_date against, and every vendor showed a 0% OTD rate.
+    payload.expected_delivery_date = po.deliveryDate;
+  }
   if (po.hub_id && po.hub_id !== 'unassigned')    payload.hub_id    = po.hub_id;
   if (po.hub_name)  payload.hub_name  = po.hub_name;
   if (po.vendor_id) payload.vendor_id = po.vendor_id;

@@ -15,11 +15,14 @@ const DELIVERY_COLORS: Record<string, string> = {
   returned:   'bg-purple-100 text-purple-700',
 };
 
+// logistics_trips.status is written as 'scheduled' -> 'in_progress' ->
+// 'completed' by LogisticsDashboard.tsx — must match, not the
+// pending/active vocabulary this page used to filter on.
 const TRIP_COLORS: Record<string, string> = {
-  pending:    'bg-amber-100 text-amber-700',
-  active:     'bg-blue-100 text-blue-700',
-  completed:  'bg-green-100 text-green-700',
-  cancelled:  'bg-red-100 text-red-600',
+  scheduled:   'bg-amber-100 text-amber-700',
+  in_progress: 'bg-blue-100 text-blue-700',
+  completed:   'bg-green-100 text-green-700',
+  cancelled:   'bg-red-100 text-red-600',
 };
 
 export default function DeliveryReportPage() {
@@ -139,8 +142,8 @@ export default function DeliveryReportPage() {
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
             className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50">
             <option value="all">All Status</option>
-            {['pending','active','completed','cancelled'].map(s => (
-              <option key={s} value={s}>{s.charAt(0).toUpperCase()+s.slice(1)}</option>
+            {['scheduled','in_progress','completed','cancelled'].map(s => (
+              <option key={s} value={s}>{s.replace('_',' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
             ))}
           </select>
           <button onClick={() => refetch()} disabled={isFetching}

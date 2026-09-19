@@ -5,7 +5,8 @@ import { format, startOfMonth, endOfMonth } from 'date-fns';
 import {
   TrendingUp, Banknote, Truck, ShoppingCart, Warehouse,
   Users, ArrowUpRight, ArrowDownRight, Clock, CheckCircle2,
-  AlertCircle, BarChart3, Activity,
+  AlertCircle, BarChart3, Activity, Package, Boxes, ClipboardCheck,
+  Gauge, Building2, PackageCheck, Timer, ListChecks, Wallet,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid, Legend } from 'recharts';
 
@@ -28,6 +29,21 @@ function KPICard({ label, value, sub, icon: Icon, iconBg, iconColor, trend }: an
           {Math.abs(trend)}% vs last month
         </div>
       )}
+    </div>
+  );
+}
+
+function CompactKPICard({ label, value, sub, icon: Icon, iconBg, iconColor, notAvailable }: any) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-sm">
+      <div className="flex items-start justify-between mb-2">
+        <div className="p-1.5 rounded-lg" style={{ background: iconBg }}>
+          <Icon className="w-3.5 h-3.5" style={{ color: iconColor }} />
+        </div>
+      </div>
+      <p className={`text-lg font-bold leading-tight ${notAvailable ? 'text-gray-300' : 'text-gray-900'}`}>{value}</p>
+      <p className="text-[11px] text-gray-500 font-medium mt-0.5 leading-tight">{label}</p>
+      {sub && <p className="text-[10px] text-gray-400 mt-0.5 leading-tight">{sub}</p>}
     </div>
   );
 }
@@ -77,9 +93,140 @@ export default function CEOFFOverview() {
     queryFn: async () => {
       const { data } = await (supabase as any)
         .from('sales_orders')
-        .select('id, total_amount, status, source, created_at')
+        .select('id, total_amount, status, source, hub_id, created_at')
         .gte('created_at', monthStart)
         .lte('created_at', monthEnd + 'T23:59:59');
+      return data || [];
+    },
+  });
+
+  // ── CEO Control (Top 15) — additional sources ──────────────────────────
+
+  // #2 SO Quantity — sales_order_items.quantity for this month's orders
+  const { data: soItems } = useQuery({
+    queryKey: ['ceo-top15-so-items', monthStart],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('sales_order_items')
+        .select('quantity, sales_orders!inner(created_at)')
+        .gte('sales_orders.created_at', monthStart)
+        .lte('sales_orders.created_at', monthEnd + 'T23:59:59');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // #4 PO Quantity — purchase_order_items.ordered_qty (actually bought) for this month's POs
+  const { data: poItemsMonth } = useQuery({
+    queryKey: ['ceo-top15-po-items-month', monthStart],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('purchase_order_items')
+        .select('ordered_qty, purchase_orders!inner(created_at)')
+        .gte('purchase_orders.created_at', monthStart)
+        .lte('purchase_orders.created_at', monthEnd + 'T23:59:59');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // #7 Purchase Requirement — required_qty on today's POs (daily, like the EOD engine's own shortfall calc)
+  const { data: poItemsToday } = useQuery({
+    queryKey: ['ceo-top15-po-items-today', today],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('purchase_order_items')
+        .select('required_qty, purchase_orders!inner(created_at)')
+        .gte('purchase_orders.created_at', `${today}T00:00:00`)
+        .lte('purchase_orders.created_at', `${today}T23:59:59`);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // #6 Available Inventory — total quantity across all hubs
+  const { data: inventoryAll } = useQuery({
+    queryKey: ['ceo-top15-inventory'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from('inventory').select('quantity');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // #10 Hub Distribution — hub names for the sales_orders.hub_id breakdown above
+  const { data: hubsList } = useQuery({
+    queryKey: ['ceo-top15-hubs'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from('hubs').select('id, name').eq('is_active', true);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // #8 QC Pass % — qc_inspections.status is written as accepted/partial/rejected (see QCInspection.tsx)
+  const { data: qcMonth } = useQuery({
+    queryKey: ['ceo-top15-qc', monthStart],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('qc_inspections')
+        .select('status')
+        .gte('created_at', `${monthStart}T00:00:00`)
+        .lte('created_at', monthEnd + 'T23:59:59');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // #11 Packing Completion % — same delivery_packs pattern as GMOperationsDashboard, scoped to the month
+  const { data: packsMonth } = useQuery({
+    queryKey: ['ceo-top15-packs', monthStart],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('delivery_packs')
+        .select('status')
+        .gte('created_at', `${monthStart}T00:00:00`)
+        .lte('created_at', monthEnd + 'T23:59:59');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // #12 Dispatch Completion % — same boxes.status pattern as GMOperationsDashboard, scoped to the month
+  const { data: boxesMonth } = useQuery({
+    queryKey: ['ceo-top15-boxes', monthStart],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('boxes')
+        .select('status')
+        .gte('created_at', `${monthStart}T00:00:00`)
+        .lte('created_at', monthEnd + 'T23:59:59');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // #13 On-Time Delivery % — trip_orders.delivered_at vs the order's promised sales_orders.delivery_date
+  const { data: otdRows } = useQuery({
+    queryKey: ['ceo-top15-otd', monthStart],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('trip_orders')
+        .select('delivered_at, delivery_status, sales_orders(delivery_date)')
+        .eq('delivery_status', 'delivered')
+        .gte('delivered_at', `${monthStart}T00:00:00`)
+        .lte('delivered_at', monthEnd + 'T23:59:59');
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // #15 Outstanding / Collection — customers.outstanding_balance (confirmed live in CustomerManagement.tsx)
+  const { data: customersBalance } = useQuery({
+    queryKey: ['ceo-top15-outstanding'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any).from('customers').select('outstanding_balance');
+      if (error) throw error;
       return data || [];
     },
   });
@@ -153,6 +300,51 @@ export default function CEOFFOverview() {
     }, new Map<string,number>()).entries()
   );
 
+  // ── CEO Control (Top 15) — derived values ───────────────────────────────
+
+  const soQuantity = (soItems || []).reduce((s: number, i: any) => s + Number(i.quantity || 0), 0);
+  const poQuantity = (poItemsMonth || []).reduce((s: number, i: any) => s + Number(i.ordered_qty || 0), 0);
+  const purchaseRequirement = (poItemsToday || []).reduce((s: number, i: any) => s + Number(i.required_qty || 0), 0);
+  const availableInventory = (inventoryAll || []).reduce((s: number, i: any) => s + Number(i.quantity || 0), 0);
+
+  const qcTotal = (qcMonth || []).length;
+  const qcAccepted = (qcMonth || []).filter((q: any) => q.status === 'accepted').length;
+  const qcPassRate = qcTotal > 0 ? Math.round((qcAccepted / qcTotal) * 100) : null;
+
+  const hubOrderCounts = new Map<string, number>();
+  (salesData || []).forEach((o: any) => {
+    if (!o.hub_id) return;
+    hubOrderCounts.set(o.hub_id, (hubOrderCounts.get(o.hub_id) || 0) + 1);
+  });
+  const hubDistribution = (hubsList || [])
+    .map((h: any) => ({ name: h.name, count: hubOrderCounts.get(h.id) || 0 }))
+    .filter((h: any) => h.count > 0)
+    .sort((a: any, b: any) => b.count - a.count);
+  const hubDistributionTotal = hubDistribution.reduce((s: number, h: any) => s + h.count, 0);
+
+  const packsTotal = (packsMonth || []).length;
+  const packsDone = (packsMonth || []).filter((p: any) => ['dispatched', 'delivered'].includes(p.status)).length;
+  const packingCompletion = packsTotal > 0 ? Math.round((packsDone / packsTotal) * 100) : null;
+
+  const boxesTotal = (boxesMonth || []).length;
+  const boxesDone = (boxesMonth || []).filter((b: any) => ['dispatched', 'delivered'].includes(b.status)).length;
+  const dispatchCompletion = boxesTotal > 0 ? Math.round((boxesDone / boxesTotal) * 100) : null;
+
+  // Only count deliveries that actually had a promised date — otherwise a
+  // missing delivery_date would silently count as "late" or "on time"
+  // instead of just being data we don't have.
+  const otdEligible = (otdRows || []).filter((r: any) => r.sales_orders?.delivery_date && r.delivered_at);
+  const otdOnTime = otdEligible.filter((r: any) =>
+    r.delivered_at.split('T')[0] <= r.sales_orders.delivery_date
+  ).length;
+  const onTimeDeliveryRate = otdEligible.length > 0 ? Math.round((otdOnTime / otdEligible.length) * 100) : null;
+
+  const soClearanceTotal = (salesData || []).length;
+  const soCleared = (salesData || []).filter((o: any) => o.status !== 'pending').length;
+  const soClearanceRate = soClearanceTotal > 0 ? Math.round((soCleared / soClearanceTotal) * 100) : null;
+
+  const totalOutstanding = (customersBalance || []).reduce((s: number, c: any) => s + Number(c.outstanding_balance || 0), 0);
+
   // Hub-wise sales chart data (from sales orders)
   const hubSalesChart = [
     { name: 'Apr', sales: 0, purchase: 0 },
@@ -167,6 +359,89 @@ export default function CEOFFOverview() {
         <p className="text-xs text-gray-500 mt-0.5">
           Month to date · {format(new Date(), 'MMMM yyyy')}
         </p>
+      </div>
+
+      {/* CEO Control (Top 15) */}
+      <div>
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">CEO Control — Top 15</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <CompactKPICard
+            label="Total Orders" value={(salesData || []).length} sub="This month"
+            icon={ShoppingCart} iconBg="#EFF6FF" iconColor="#2563EB"
+          />
+          <CompactKPICard
+            label="SO Quantity"
+            value={(soItems || []).length > 0 ? `${soQuantity.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg` : '—'}
+            sub={(soItems || []).length > 0 ? 'This month' : 'No order items this month'}
+            icon={Package} iconBg="#EFF6FF" iconColor="#2563EB"
+          />
+          <CompactKPICard
+            label="SO Value"
+            value={(salesData || []).length > 0 ? `₹${(totalSales / 1000).toFixed(0)}k` : '—'}
+            sub={(salesData || []).length > 0 ? 'This month' : 'No orders this month'}
+            icon={TrendingUp} iconBg="#DCFCE7" iconColor="#16A34A"
+          />
+          <CompactKPICard
+            label="PO Quantity"
+            value={(poItemsMonth || []).length > 0 ? `${poQuantity.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg` : '—'}
+            sub={(poItemsMonth || []).length > 0 ? 'Actually bought this month' : 'No PO items this month'}
+            icon={ShoppingCart} iconBg="#F5F3FF" iconColor="#7C3AED"
+          />
+          <CompactKPICard
+            label="PO Value"
+            value={(poData || []).length > 0 ? `₹${(totalPO / 1000).toFixed(0)}k` : '—'}
+            sub={(poData || []).length > 0 ? 'This month' : 'No POs this month'}
+            icon={Banknote} iconBg="#F5F3FF" iconColor="#7C3AED"
+          />
+          <CompactKPICard
+            label="Available Inventory"
+            value={(inventoryAll || []).length > 0 ? `${availableInventory.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg` : '—'}
+            sub={(inventoryAll || []).length > 0 ? 'All hubs' : 'No inventory rows found'}
+            icon={Boxes} iconBg="#EEF2FF" iconColor="#4F46E5"
+          />
+          <CompactKPICard
+            label="Purchase Requirement"
+            value={(poItemsToday || []).length > 0 ? `${purchaseRequirement.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg` : '—'}
+            sub={(poItemsToday || []).length > 0 ? 'Today' : 'No POs raised today'}
+            icon={ClipboardCheck} iconBg="#FEF3C7" iconColor="#D97706"
+          />
+          <CompactKPICard
+            label="QC Pass %" value={qcPassRate !== null ? `${qcPassRate}%` : '—'} sub={qcTotal > 0 ? `${qcAccepted}/${qcTotal} accepted` : 'No inspections this month'}
+            icon={CheckCircle2} iconBg="#DCFCE7" iconColor="#16A34A"
+          />
+          <CompactKPICard
+            label="Inventory Accuracy %" value="—" sub="No stocktake source configured"
+            icon={Gauge} iconBg="#F3F4F6" iconColor="#9CA3AF" notAvailable
+          />
+          <CompactKPICard
+            label="Hub Distribution" value={hubDistribution[0]?.name ?? '—'}
+            sub={hubDistributionTotal > 0 ? `${Math.round((hubDistribution[0]?.count / hubDistributionTotal) * 100)}% of orders` : 'No orders this month'}
+            icon={Building2} iconBg="#EEF2FF" iconColor="#4F46E5"
+          />
+          <CompactKPICard
+            label="Packing Completion %" value={packingCompletion !== null ? `${packingCompletion}%` : '—'} sub={packsTotal > 0 ? `${packsDone}/${packsTotal} packs` : 'No packs this month'}
+            icon={PackageCheck} iconBg="#F0FDFA" iconColor="#0D9488"
+          />
+          <CompactKPICard
+            label="Dispatch Completion %" value={dispatchCompletion !== null ? `${dispatchCompletion}%` : '—'} sub={boxesTotal > 0 ? `${boxesDone}/${boxesTotal} boxes` : 'No boxes this month'}
+            icon={Truck} iconBg="#EEF2FF" iconColor="#4F46E5"
+          />
+          <CompactKPICard
+            label="On-Time Delivery %" value={onTimeDeliveryRate !== null ? `${onTimeDeliveryRate}%` : '—'}
+            sub={otdEligible.length > 0 ? `${otdOnTime}/${otdEligible.length} on time` : 'No dated deliveries this month'}
+            icon={Timer} iconBg="#FFF7ED" iconColor="#EA580C"
+          />
+          <CompactKPICard
+            label="SO Clearance %" value={soClearanceRate !== null ? `${soClearanceRate}%` : '—'} sub={`${soCleared}/${soClearanceTotal} cleared`}
+            icon={ListChecks} iconBg="#DCFCE7" iconColor="#16A34A"
+          />
+          <CompactKPICard
+            label="Outstanding / Collection"
+            value={(customersBalance || []).length > 0 ? `₹${(totalOutstanding / 1000).toFixed(0)}k` : '—'}
+            sub={(customersBalance || []).length > 0 ? 'All customers' : 'No customer records found'}
+            icon={Wallet} iconBg="#FEF2F2" iconColor="#DC2626"
+          />
+        </div>
       </div>
 
       {/* KPIs */}

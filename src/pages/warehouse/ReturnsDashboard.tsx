@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import {
   PackageMinus, RotateCcw, CheckCircle2,
-  Loader2, RefreshCw, MessageSquare, IndianRupee
+  Loader2, RefreshCw, MessageSquare
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -16,50 +16,29 @@ export default function ReturnsDashboard() {
   const qc = useQueryClient();
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
+  // order_returns only has id/order_id/reason/quantity/status/created_at
+  // (see SCHEMA_PART2_REMAINING.sql) — there is no product_id, warehouse_id,
+  // or credit_amount column, and nothing in this app currently inserts rows
+  // here. Hub scoping goes through the linked sales_orders.hub_id instead.
   const { data: returns = [], isLoading, refetch } = useQuery({
     queryKey: ['order-returns', hubId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('order_returns')
         .select(`
           id,
-          quantity_returned,
-          return_reason,
-          return_date,
+          reason,
+          quantity,
           status,
-          credit_amount,
-          customer:customers(name, shop_name),
-          product:products(name),
-          order:sales_orders(order_number)
+          created_at,
+          order:sales_orders!inner(order_number, hub_id, customer:customers(name, shop_name))
         `)
-        .eq('warehouse_id', hubId || '00000000-0000-0000-0000-000000000000')
-        .order('return_date', { ascending: false });
+        .order('created_at', { ascending: false });
 
-      if (error) {
-        return [
-          {
-            id: 'mock-1',
-            quantity_returned: 10,
-            return_reason: 'Quality issue',
-            return_date: new Date().toISOString(),
-            status: 'PENDING',
-            customer: { shop_name: 'Fresh Mart' },
-            product: { name: 'Tomato' },
-            order: { order_number: 'ORD-1001' }
-          },
-          {
-            id: 'mock-2',
-            quantity_returned: 5,
-            return_reason: 'Wrong item',
-            return_date: new Date().toISOString(),
-            status: 'PROCESSED',
-            credit_amount: 150,
-            customer: { shop_name: 'Green Grocers' },
-            product: { name: 'Onion' },
-            order: { order_number: 'ORD-1002' }
-          }
-        ];
-      }
+      if (hubId) query = query.eq('order.hub_id', hubId);
+
+      const { data, error } = await query;
+      if (error) throw error;
       return data || [];
     },
   });
@@ -68,7 +47,7 @@ export default function ReturnsDashboard() {
     mutationFn: async (returnId: string) => {
       const { error } = await supabase
         .from('order_returns')
-        .update({ status: 'PROCESSED', credit_amount: 0 })
+        .update({ status: 'processed' })
         .eq('id', returnId);
       if (error) throw error;
       return returnId;
@@ -99,7 +78,7 @@ export default function ReturnsDashboard() {
       </div>
 
       <div className="flex gap-2 mb-2">
-        {['all', 'PENDING', 'PROCESSED'].map((s) => (
+        {['all', 'pending', 'processed'].map((s) => (
           <button
             key={s}
             onClick={() => setFilterStatus(s)}
@@ -115,12 +94,11 @@ export default function ReturnsDashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {[
           { label: 'Total Returns', value: returns.length, icon: PackageMinus, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-          { label: 'Pending Returns', value: (returns as any[]).filter((r: any) => r.status === 'PENDING').length, icon: RotateCcw, color: 'text-amber-600', bg: 'bg-amber-50' },
-          { label: 'Processed Returns', value: (returns as any[]).filter((r: any) => r.status === 'PROCESSED').length, icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50' },
-          { label: 'Total Credit', value: `₹${(returns as any[]).reduce((sum: number, r: any) => sum + (r.credit_amount || 0), 0).toLocaleString()}`, icon: IndianRupee, color: 'text-blue-600', bg: 'bg-blue-50' },
+          { label: 'Pending Returns', value: (returns as any[]).filter((r: any) => r.status === 'pending').length, icon: RotateCcw, color: 'text-amber-600', bg: 'bg-amber-50' },
+          { label: 'Processed Returns', value: (returns as any[]).filter((r: any) => r.status === 'processed').length, icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50' },
         ].map(card => (
           <div key={card.label} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
             <div className="px-6 pt-5 pb-4 flex-1 flex flex-col">
@@ -151,40 +129,29 @@ export default function ReturnsDashboard() {
             <div key={r.id} className="bg-white rounded-xl shadow-sm overflow-hidden p-4 border border-gray-100">
               <div className="flex justify-between items-start mb-3">
                 <div>
-                  <h3 className="font-bold text-gray-900">{r.customer?.shop_name || r.customer?.name}</h3>
-                  <p className="text-xs text-gray-500">Order: {r.order?.order_number} · {format(new Date(r.return_date), 'dd MMM yyyy')}</p>
+                  <h3 className="font-bold text-gray-900">{r.order?.customer?.shop_name || r.order?.customer?.name || '—'}</h3>
+                  <p className="text-xs text-gray-500">Order: {r.order?.order_number} · {format(new Date(r.created_at), 'dd MMM yyyy')}</p>
                 </div>
-                <span className={`px-2 py-1 rounded text-xs font-bold ${
-                  r.status === 'PROCESSED' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                <span className={`px-2 py-1 rounded text-xs font-bold capitalize ${
+                  r.status === 'processed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
                 }`}>
                   {r.status}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between py-2 border-t border-b border-gray-50 my-3">
-                <div className="flex items-center gap-2">
-                  <div className="bg-gray-100 p-1.5 rounded">
-                    <PackageMinus className="h-4 w-4 text-gray-600" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{r.product?.name}</p>
-                    <p className="text-xs text-gray-500">{r.quantity_returned} kg</p>
-                  </div>
+              <div className="flex items-center gap-2 py-2 border-t border-b border-gray-50 my-3">
+                <div className="bg-gray-100 p-1.5 rounded">
+                  <PackageMinus className="h-4 w-4 text-gray-600" />
                 </div>
-                {r.credit_amount > 0 && (
-                  <div className="text-right">
-                    <p className="text-xs text-gray-500">Credit Issued</p>
-                    <p className="text-sm font-bold text-green-600">₹{r.credit_amount}</p>
-                  </div>
-                )}
+                <p className="text-sm font-medium text-gray-900">{r.quantity} kg returned</p>
               </div>
 
               <div className="flex justify-between items-end">
                 <div className="flex items-start gap-1.5 text-xs text-gray-600">
                   <MessageSquare className="h-3.5 w-3.5 mt-0.5 text-gray-400" />
-                  <span className="max-w-[200px] truncate">{r.return_reason}</span>
+                  <span className="max-w-[200px] truncate">{r.reason || '—'}</span>
                 </div>
-                {r.status === 'PENDING' && (
+                {r.status === 'pending' && (
                   <button
                     onClick={() => processReturn.mutate(r.id)}
                     disabled={processReturn.isPending}

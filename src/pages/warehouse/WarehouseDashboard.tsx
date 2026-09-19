@@ -32,25 +32,34 @@ export default function WarehouseDashboard() {
     },
   });
 
+  // qc_inspections.insert (QCInspection.tsx) never writes a `grade` or
+  // `inspection_date` column — only `overall_grade`, with `created_at` as
+  // the timestamp. Filtering/reading the old names silently returned zero
+  // rows here every day. Fixed to match the real insert shape.
   const { data: qcToday = [] } = useQuery({
     queryKey: ['qc-today', today],
     queryFn: async () => {
       const { data } = await supabase
         .from('qc_inspections')
         .select('*, product:products(name)')
-        .eq('inspection_date', today)
+        .gte('created_at', `${today}T00:00:00`)
+        .lte('created_at', `${today}T23:59:59`)
         .order('created_at', { ascending: false });
       return data ?? [];
     },
   });
 
+  // Standardized on inventory.quantity / min_threshold — the columns the
+  // EOD PO Engine, GMOperationsDashboard, and SmartInventoryPage already
+  // rely on for real restocking decisions. min_stock_level is a stale
+  // column from an earlier schema version.
   const { data: inventory = [] } = useQuery({
     queryKey: ['inventory-snapshot', (user as any)?.hub_id],
     queryFn: async () => {
       const query = supabase
         .from('inventory')
         .select('*, product:products(name, unit, sku_code)')
-        .order('current_stock', { ascending: false })
+        .order('quantity', { ascending: false })
         .limit(20);
 
       if ((user as any)?.hub_id) {
@@ -62,11 +71,11 @@ export default function WarehouseDashboard() {
     },
   });
 
-  const gradeA = (qcToday as any[]).filter(q => q.grade === 'A').length;
-  const gradeB = (qcToday as any[]).filter(q => q.grade === 'B').length;
-  const gradeC = (qcToday as any[]).filter(q => q.grade === 'C').length;
-  const gradeD = (qcToday as any[]).filter(q => q.grade === 'D').length;
-  const lowStock = (inventory as any[]).filter(i => i.current_stock < (i.min_stock_level ?? 50));
+  const gradeA = (qcToday as any[]).filter(q => q.overall_grade === 'A').length;
+  const gradeB = (qcToday as any[]).filter(q => q.overall_grade === 'B').length;
+  const gradeC = (qcToday as any[]).filter(q => q.overall_grade === 'C').length;
+  const gradeD = (qcToday as any[]).filter(q => q.overall_grade === 'D').length;
+  const lowStock = (inventory as any[]).filter(i => i.quantity < (i.min_threshold ?? 50));
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12 pt-4">
@@ -214,7 +223,7 @@ export default function WarehouseDashboard() {
             </div>
             <div className="p-5 space-y-5">
               {(inventory as any[]).slice(0, 6).map((item: any) => {
-                const isLow = item.current_stock < (item.min_stock_level ?? 50);
+                const isLow = item.quantity < (item.min_threshold ?? 50);
                 return (
                   <div key={item.id} className="space-y-2">
                     <div className="flex items-center justify-between">
@@ -224,7 +233,7 @@ export default function WarehouseDashboard() {
                       </div>
                       <div className="text-right">
                         <p className={cn('text-xs font-black', isLow ? 'text-red-600' : 'text-slate-800')}>
-                          {item.current_stock} <span className="text-[9px] font-normal text-slate-400">{item.product?.unit}</span>
+                          {item.quantity} <span className="text-[9px] font-normal text-slate-400">{item.product?.unit}</span>
                         </p>
                       </div>
                     </div>
@@ -250,7 +259,7 @@ export default function WarehouseDashboard() {
                   {lowStock.slice(0, 3).map((item: any) => (
                     <div key={item.id} className="flex items-center justify-between text-[11px] font-bold text-red-800">
                       <span>{item.product?.name}</span>
-                      <span>{item.current_stock} kg</span>
+                      <span>{item.quantity} kg</span>
                     </div>
                   ))}
                   {lowStock.length > 3 && (

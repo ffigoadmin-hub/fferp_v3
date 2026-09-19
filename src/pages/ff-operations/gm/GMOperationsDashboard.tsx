@@ -173,9 +173,12 @@ export default function GMOperationsDashboard() {
 
   // ── Realtime: auto-refresh on key table changes ──────────────────────────
   useEffect(() => {
+    // Was subscribed to table 'orders', which doesn't exist — the real
+    // table is 'sales_orders'. Order-change auto-refresh silently never
+    // fired; only the boxes/inventory_log listeners below ever worked.
     const channel = supabase
       .channel('gm-dashboard-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sales_orders' }, refresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'boxes' }, refresh)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'inventory_log' }, refresh)
       .subscribe();
