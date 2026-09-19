@@ -370,27 +370,39 @@ export default function CEOFFOverview() {
             icon={ShoppingCart} iconBg="#EFF6FF" iconColor="#2563EB"
           />
           <CompactKPICard
-            label="SO Quantity" value={`${soQuantity.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg`} sub="This month"
+            label="SO Quantity"
+            value={(soItems || []).length > 0 ? `${soQuantity.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg` : '—'}
+            sub={(soItems || []).length > 0 ? 'This month' : 'No order items this month'}
             icon={Package} iconBg="#EFF6FF" iconColor="#2563EB"
           />
           <CompactKPICard
-            label="SO Value" value={`₹${(totalSales / 1000).toFixed(0)}k`} sub="This month"
+            label="SO Value"
+            value={(salesData || []).length > 0 ? `₹${(totalSales / 1000).toFixed(0)}k` : '—'}
+            sub={(salesData || []).length > 0 ? 'This month' : 'No orders this month'}
             icon={TrendingUp} iconBg="#DCFCE7" iconColor="#16A34A"
           />
           <CompactKPICard
-            label="PO Quantity" value={`${poQuantity.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg`} sub="This month"
+            label="PO Quantity"
+            value={(poItemsMonth || []).length > 0 ? `${poQuantity.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg` : '—'}
+            sub={(poItemsMonth || []).length > 0 ? 'Actually bought this month' : 'No PO items this month'}
             icon={ShoppingCart} iconBg="#F5F3FF" iconColor="#7C3AED"
           />
           <CompactKPICard
-            label="PO Value" value={`₹${(totalPO / 1000).toFixed(0)}k`} sub="This month"
+            label="PO Value"
+            value={(poData || []).length > 0 ? `₹${(totalPO / 1000).toFixed(0)}k` : '—'}
+            sub={(poData || []).length > 0 ? 'This month' : 'No POs this month'}
             icon={Banknote} iconBg="#F5F3FF" iconColor="#7C3AED"
           />
           <CompactKPICard
-            label="Available Inventory" value={`${availableInventory.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg`} sub="All hubs"
+            label="Available Inventory"
+            value={(inventoryAll || []).length > 0 ? `${availableInventory.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg` : '—'}
+            sub={(inventoryAll || []).length > 0 ? 'All hubs' : 'No inventory rows found'}
             icon={Boxes} iconBg="#EEF2FF" iconColor="#4F46E5"
           />
           <CompactKPICard
-            label="Purchase Requirement" value={`${purchaseRequirement.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg`} sub="Today"
+            label="Purchase Requirement"
+            value={(poItemsToday || []).length > 0 ? `${purchaseRequirement.toLocaleString('en-IN', { maximumFractionDigits: 0 })} kg` : '—'}
+            sub={(poItemsToday || []).length > 0 ? 'Today' : 'No POs raised today'}
             icon={ClipboardCheck} iconBg="#FEF3C7" iconColor="#D97706"
           />
           <CompactKPICard
@@ -424,7 +436,9 @@ export default function CEOFFOverview() {
             icon={ListChecks} iconBg="#DCFCE7" iconColor="#16A34A"
           />
           <CompactKPICard
-            label="Outstanding / Collection" value={`₹${(totalOutstanding / 1000).toFixed(0)}k`} sub="All customers"
+            label="Outstanding / Collection"
+            value={(customersBalance || []).length > 0 ? `₹${(totalOutstanding / 1000).toFixed(0)}k` : '—'}
+            sub={(customersBalance || []).length > 0 ? 'All customers' : 'No customer records found'}
             icon={Wallet} iconBg="#FEF2F2" iconColor="#DC2626"
           />
         </div>
