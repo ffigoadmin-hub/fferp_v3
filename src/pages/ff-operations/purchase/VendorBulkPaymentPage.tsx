@@ -41,6 +41,22 @@ interface VendorGroup {
   pos: StoredPO[];
   total: number;
   dateRange: string;
+  alsoKnownAs: string[];
+}
+
+// A normalized bank-account identity for a vendor, or null if it has no
+// real bank details on file (or the value looks like placeholder junk,
+// e.g. "0"/"NA" — guarded by requiring at least 6 digits). Two vendor DB
+// rows for the same real vendor (created from name spelling/OCR variance
+// across different POs) commonly share the same real bank account even
+// though `findVendor()`'s fuzzy name match never links them — grouping on
+// this instead of the name is what actually reflects "one payment, one
+// destination account".
+function bankKey(vendor: any): string | null {
+  const acct = (vendor?.bank_account || '').replace(/\s+/g, '').toUpperCase();
+  const ifsc = (vendor?.bank_ifsc || '').replace(/\s+/g, '').toUpperCase();
+  if (acct.replace(/\D/g, '').length < 6) return null;
+  return `${acct}::${ifsc}`;
 }
 
 // Sorted earliest→latest span the group's POs cover (never trust
@@ -138,27 +154,33 @@ export default function VendorBulkPaymentPage() {
 
   // Group by vendor + hub together — never merge two hubs' POs into one
   // payment, since ff_vendor_payments.hub_id is a single scalar column.
+  // Preferred key is the vendor's bank account (immune to name spelling/OCR
+  // variance across POs); vendors with no bank details on file fall back to
+  // today's name-based key, so that case is unchanged.
   const vendorGroups = useMemo<VendorGroup[]>(() => {
     const map = new Map<string, VendorGroup>();
     for (const po of eligiblePOs) {
-      const vendorKey = normName(po.vendorName) || po.vendorName;
+      const vendor = findVendor(po.vendorName);
+      const bkey = bankKey(vendor);
       const hubKey = po.hub_id || 'nohub';
-      const key = `${vendorKey}::${hubKey}`;
+      const key = `${bkey ? `bank::${bkey}` : `name::${normName(po.vendorName) || po.vendorName}`}::${hubKey}`;
       if (!map.has(key)) {
         map.set(key, {
           key,
           vendorName: po.vendorName,
           hubId: po.hub_id || null,
           hubName: po.hub_name || 'Unassigned',
-          vendor: findVendor(po.vendorName),
+          vendor,
           pos: [],
           total: 0,
           dateRange: '',
+          alsoKnownAs: [],
         });
       }
       const g = map.get(key)!;
       g.pos.push(po);
       g.total += po.total || po.subTotal || 0;
+      if (!g.alsoKnownAs.includes(po.vendorName)) g.alsoKnownAs.push(po.vendorName);
     }
     // dateRange depends on every PO in the group, so compute it after the
     // loop above has finished assembling each group's full pos[] array.
@@ -270,11 +292,18 @@ export default function VendorBulkPaymentPage() {
                   <div className="flex items-center gap-3">
                     {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
                     <div>
-                      <div className="font-semibold text-sm text-slate-800">{group.vendorName}</div>
+                      <div className="font-semibold text-sm text-slate-800">
+                        {canRaise ? vendorDisplayName(group.vendor) : group.vendorName}
+                      </div>
                       <div className="text-[11px] text-gray-400">
                         {group.pos.length} PO{group.pos.length > 1 ? 's' : ''} · {group.dateRange} · {group.hubName}
                         {!canRaise && <span className="text-amber-500 ml-2">No vendor bank details on file</span>}
                       </div>
+                      {group.alsoKnownAs.length > 1 && (
+                        <div className="text-[10px] text-blue-500 mt-0.5">
+                          Matched from: {group.alsoKnownAs.join(', ')}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
