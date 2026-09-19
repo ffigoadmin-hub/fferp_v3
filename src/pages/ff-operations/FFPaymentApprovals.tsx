@@ -151,7 +151,7 @@ function RejectModal({ onClose, onConfirm }: { onClose: () => void; onConfirm: (
 // in the chain — L1, Admin, CEO, Accounts — needs to see exactly which POs
 // and days make up the combined total, not just one lump sum, so a large
 // bulk figure is always traceable back to its source days.
-function PoBreakdownTable({ poBreakdown }: { poBreakdown: any[] }) {
+export function PoBreakdownTable({ poBreakdown }: { poBreakdown: any[] }) {
   if (!poBreakdown?.length) return null;
   const total = poBreakdown.reduce((s, p) => s + Number(p.subtotal || 0), 0);
   return (
@@ -194,7 +194,7 @@ function PoBreakdownTable({ poBreakdown }: { poBreakdown: any[] }) {
 //   FFVendorPaymentForm.tsx (manual raise)   → qty, rate, amount, qc_grade, deduction_reason
 //   BuyPage.tsx (vendor-cart Buy flow)       → quantity, unit_price, total, item_photo_url, scale_photo_url
 // Read both shapes so items show correctly regardless of which flow raised the payment.
-function ItemsTable({ items }: { items: any[] }) {
+export function ItemsTable({ items }: { items: any[] }) {
   if (!items?.length) return <p className="text-xs text-gray-400 italic">No items</p>;
   return (
     <table className="w-full text-xs border-collapse mt-2">

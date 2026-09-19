@@ -291,7 +291,32 @@ export default function VendorBulkPaymentPage() {
                   </div>
                 </div>
                 {isExpanded && (
-                  <div className="border-t border-gray-100 bg-gray-50 px-4 py-3">
+                  <div className="border-t border-gray-100 bg-gray-50 px-4 py-3 space-y-3">
+                    {/* Shown before raising so the Ops Manager can verify the
+                        vendor's bank details are correct, exactly as they'll
+                        appear on every approval stage afterward. */}
+                    {canRaise && (
+                      <div className="p-3 rounded-lg border border-blue-100 bg-blue-50/60">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-500 mb-1.5 flex items-center gap-1">
+                          🏦 Bank Transfer Details
+                        </p>
+                        <div className="grid grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <p className="text-gray-400 text-[10px]">Bank</p>
+                            <p className="font-semibold text-gray-800">{group.vendor?.bank_name || '—'}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-400 text-[10px]">Account No.</p>
+                            <p className="font-semibold text-gray-800 font-mono">{group.vendor?.bank_account || '—'}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-400 text-[10px]">IFSC</p>
+                            <p className="font-semibold text-gray-800 font-mono">{group.vendor?.bank_ifsc || '—'}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <table className="w-full text-xs">
                       <thead>
                         <tr className="text-gray-400 text-left">
@@ -311,7 +336,42 @@ export default function VendorBulkPaymentPage() {
                           </tr>
                         ))}
                       </tbody>
+                      <tfoot>
+                        <tr>
+                          <td colSpan={3} className="pt-2 text-right font-semibold text-gray-500">Total</td>
+                          <td className="pt-2 text-right font-bold text-slate-800">{fmt(group.total)}</td>
+                        </tr>
+                      </tfoot>
                     </table>
+
+                    {/* Full product breakdown across every PO in the group —
+                        the same products this Buy actually purchased,
+                        tagged with which PO/day each line came from. */}
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Products</p>
+                      <table className="w-full text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-white">
+                            <th className="text-left px-2 py-1.5 font-medium text-gray-500 border-b">Product</th>
+                            <th className="text-left px-2 py-1.5 font-medium text-gray-500 border-b">PO</th>
+                            <th className="text-right px-2 py-1.5 font-medium text-gray-500 border-b">Qty</th>
+                            <th className="text-right px-2 py-1.5 font-medium text-gray-500 border-b">Rate</th>
+                            <th className="text-right px-2 py-1.5 font-medium text-gray-500 border-b">Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {group.pos.flatMap(po => po.items.map((item, i) => (
+                            <tr key={`${po.id}-${i}`} className="border-b border-gray-100">
+                              <td className="px-2 py-1.5 font-medium text-gray-800">{item.itemName}</td>
+                              <td className="px-2 py-1.5 text-gray-500">{po.poNumber}</td>
+                              <td className="px-2 py-1.5 text-right text-gray-600">{item.quantity}</td>
+                              <td className="px-2 py-1.5 text-right text-gray-600">₹{item.rate}</td>
+                              <td className="px-2 py-1.5 text-right font-semibold text-gray-800">₹{(item.quantity * item.rate).toLocaleString('en-IN')}</td>
+                            </tr>
+                          )))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </div>

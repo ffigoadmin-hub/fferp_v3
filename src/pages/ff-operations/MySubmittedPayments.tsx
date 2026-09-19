@@ -5,11 +5,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { Banknote, Truck, ChevronDown, ChevronUp, RefreshCw, Clock, CheckCircle2, XCircle, Trash2, Loader2 } from 'lucide-react';
+import { Banknote, Truck, ChevronDown, ChevronUp, RefreshCw, Clock, CheckCircle2, XCircle, Trash2, Loader2, Building2 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+// Reused verbatim from FFPaymentApprovals.tsx (the L1/Admin/CEO/Accounts
+// view) so a payment's bank details, PO breakdown, and item list look and
+// read identically no matter which stage's page the Ops Manager is on.
+import { ItemsTable, PoBreakdownTable } from '@/pages/ff-operations/FFPaymentApprovals';
 
 // ── Status config ──────────────────────────────────────────────
 // Chain (2026 refinement): Manager → L1 → Admin → CEO → Accounts → Paid.
@@ -171,17 +175,36 @@ function PaymentRow({ payment, type, onDelete, isDeleting }: { payment: any; typ
                 <span><b>Deduction:</b> ₹{Number(payment.deduction_amount || 0).toLocaleString('en-IN')}</span>
                 <span className="font-semibold text-gray-800"><b>Net:</b> ₹{Number(payment.net_amount || 0).toLocaleString('en-IN')}</span>
               </div>
-              {/* Vendor Bulk Payment — the PO-by-PO makeup of the combined
-                  total above, so the submitter can see exactly which days
-                  this payment covers (see ADD_VENDOR_BULK_PAYMENTS.sql). */}
-              {payment.is_bulk && payment.po_breakdown?.length > 0 && (
-                <div className="text-[11px] text-gray-500 space-y-0.5">
-                  <p className="font-medium text-gray-600">Covers {payment.po_breakdown.length} PO(s):</p>
-                  {payment.po_breakdown.map((p: any, i: number) => (
-                    <p key={p.po_id ?? i}>· {p.po_number} ({p.po_date}) — ₹{Number(p.subtotal || 0).toLocaleString('en-IN')}</p>
-                  ))}
+              {/* Bank details + PO breakdown + item list — same components
+                  and same data the L1/Admin/CEO/Accounts approval view
+                  renders, so the Ops Manager sees exactly what every other
+                  approver sees for a payment they raised. */}
+              {payment.vendors && (payment.vendors.account_number || payment.vendors.ifsc_code) && (
+                <div className="mt-2 p-3 rounded-lg border border-blue-100 bg-blue-50/60">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-500 mb-1.5 flex items-center gap-1">
+                    <Building2 className="w-3 h-3" /> Bank Transfer Details
+                  </p>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <p className="text-gray-400 text-[10px]">Bank</p>
+                      <p className="font-semibold text-gray-800">{payment.vendors.bank_name || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 text-[10px]">Account No.</p>
+                      <p className="font-semibold text-gray-800 font-mono">{payment.vendors.account_number || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-400 text-[10px]">IFSC</p>
+                      <p className="font-semibold text-gray-800 font-mono">{payment.vendors.ifsc_code || '—'}</p>
+                    </div>
+                  </div>
+                  {payment.vendors.phone && (
+                    <p className="text-[10px] text-gray-500 mt-1.5">📞 {payment.vendors.phone}</p>
+                  )}
                 </div>
               )}
+              {payment.is_bulk && <PoBreakdownTable poBreakdown={payment.po_breakdown || []} />}
+              <ItemsTable items={payment.items || []} />
               {payment.bill_url && (
                 <a href={payment.bill_url} target="_blank" rel="noopener noreferrer"
                   className="text-xs text-blue-600 underline">📎 View Bill</a>
@@ -261,7 +284,7 @@ export default function MySubmittedPayments() {
       if (!userId) return [];
       let q = (supabase as any)
         .from('ff_vendor_payments')
-        .select(`*, vendors(name), hubs(name)`)
+        .select(`*, vendors(name, bank_name, account_number, ifsc_code, phone), hubs(name)`)
         .eq('created_by', userId)
         .order('created_at', { ascending: false });
       if (statusFilter !== 'all') q = q.eq('payment_status', statusFilter);
