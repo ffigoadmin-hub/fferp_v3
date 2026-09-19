@@ -10,8 +10,11 @@ import {
   ChevronRight, Navigation, RefreshCw
 } from 'lucide-react';
 
+// createTrip below writes status 'scheduled' (not 'planned') — this must
+// match, or new trips render with no status color and never show a
+// "Start Trip" button.
 const STATUS_COLOR: Record<string, string> = {
-  planned: 'bg-blue-100 text-blue-700',
+  scheduled: 'bg-blue-100 text-blue-700',
   in_progress: 'bg-amber-100 text-amber-700',
   completed: 'bg-green-100 text-green-700',
   cancelled: 'bg-red-100 text-red-600',
@@ -214,7 +217,7 @@ export default function LogisticsDashboard() {
                   )}
 
                   <div className="flex gap-2">
-                    {trip.status === 'planned' && (
+                    {trip.status === 'scheduled' && (
                       <button
                         onClick={() => updateTripStatus.mutate({ id: trip.id, status: 'in_progress' })}
                         className="flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600">

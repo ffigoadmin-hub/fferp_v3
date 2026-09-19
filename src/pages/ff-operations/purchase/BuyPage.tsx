@@ -394,6 +394,22 @@ function BuyDialog({
         if (updateErr) throw new Error(`Couldn't update progress for ${c.productName}: ${updateErr.message}`);
       }
 
+      // 7. Once every item on this PO is fully bought, stamp actual_delivery_date
+      // so VendorPerformance.tsx can compute a real on-time-delivery rate — it
+      // compares this against expected_delivery_date (set at PO creation time).
+      const { data: allItems, error: allItemsErr } = await supabase
+        .from('purchase_order_items')
+        .select('status')
+        .eq('po_id', po.id);
+      if (!allItemsErr && allItems && allItems.length > 0 &&
+        allItems.every((i: any) => ['purchased', 'received'].includes(i.status))) {
+        await supabase
+          .from('purchase_orders')
+          .update({ actual_delivery_date: format(new Date(), 'yyyy-MM-dd') })
+          .eq('id', po.id)
+          .is('actual_delivery_date', null);
+      }
+
       toast.success(`✅ Purchase recorded for ${form.cart.length} item${form.cart.length > 1 ? 's' : ''} — payment sent to FF Ops for approval`);
       onSuccess();
       onClose();

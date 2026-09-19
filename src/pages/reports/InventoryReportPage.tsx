@@ -14,17 +14,21 @@ export default function InventoryReportPage() {
   const [stockFilter, setStockFilter] = useState('all'); // all | low | ok
   const [downloading, setDownloading] = useState(false);
 
+  // Reads inventory.quantity / min_threshold — the columns the EOD PO
+  // Engine, GMOperationsDashboard, and SmartInventoryPage already rely on
+  // for real restocking decisions. min_stock_level is a stale column from
+  // an earlier schema version and can drift independently of this one.
   const { data: inventory = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: ['inventory-report'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('inventory')
-        .select('current_stock, min_stock_level, product:products(name, unit), hub:hubs(name)')
-        .order('current_stock');
+        .select('quantity, min_threshold, product:products(name, unit), hub:hubs(name)')
+        .order('quantity');
       if (error) throw error;
       return (data ?? []).map((i: any) => ({
         ...i,
-        isLow: i.current_stock < (i.min_stock_level ?? 50),
+        isLow: i.quantity < (i.min_threshold ?? 50),
       }));
     },
   });
@@ -48,7 +52,7 @@ export default function InventoryReportPage() {
     total:    filtered.length,
     lowStock: filtered.filter((i: any) => i.isLow).length,
     okStock:  filtered.filter((i: any) => !i.isLow).length,
-    totalQty: filtered.reduce((s: number, i: any) => s + (Number(i.current_stock) || 0), 0),
+    totalQty: filtered.reduce((s: number, i: any) => s + (Number(i.quantity) || 0), 0),
   }), [filtered]);
 
   const downloadXLSX = async () => {
@@ -59,8 +63,8 @@ export default function InventoryReportPage() {
         'Product':       i.product?.name || '—',
         'Hub':           i.hub?.name || '—',
         'Unit':          i.product?.unit || 'kg',
-        'Current Stock': i.current_stock,
-        'Min Level':     i.min_stock_level ?? 50,
+        'Current Stock': i.quantity,
+        'Min Level':     i.min_threshold ?? 50,
         'Status':        i.isLow ? 'Low Stock' : 'OK',
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
@@ -170,8 +174,8 @@ export default function InventoryReportPage() {
                     <td className="py-3 px-4 font-semibold text-gray-900">{i.product?.name || '—'}</td>
                     <td className="py-3 px-4 text-gray-500 text-xs">{i.hub?.name || '—'}</td>
                     <td className="py-3 px-4 text-gray-500 text-xs">{i.product?.unit || 'kg'}</td>
-                    <td className="py-3 px-4 font-black text-gray-900">{i.current_stock}</td>
-                    <td className="py-3 px-4 text-gray-500">{i.min_stock_level ?? 50}</td>
+                    <td className="py-3 px-4 font-black text-gray-900">{i.quantity}</td>
+                    <td className="py-3 px-4 text-gray-500">{i.min_threshold ?? 50}</td>
                     <td className="py-3 px-4">
                       {i.isLow ? (
                         <span className="flex items-center gap-1 text-red-600 text-xs font-bold">

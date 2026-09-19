@@ -19,6 +19,10 @@ export default function InventoryDashboard() {
     }
   });
 
+  // Reads inventory.quantity / min_threshold — the columns the EOD PO
+  // Engine, GMOperationsDashboard, and SmartInventoryPage already rely on
+  // for real restocking decisions. min_stock_level is a stale column from
+  // an earlier schema version and can drift independently of this one.
   const { data: inventory = [], isLoading, refetch } = useQuery({
     queryKey: ['inventory', hubFilter],
     queryFn: async () => {
@@ -29,7 +33,7 @@ export default function InventoryDashboard() {
           product:products(name, unit, grade_a_price, min_order_kg),
           hub:hubs(id, name, display_name)
         `)
-        .order('current_stock', { ascending: true });
+        .order('quantity', { ascending: true });
 
       if (hubFilter) query = query.eq('hub_id', hubFilter);
 
@@ -44,9 +48,9 @@ export default function InventoryDashboard() {
   );
 
   const totalItems = filtered.length;
-  const lowStockCount = filtered.filter((i: any) => i.current_stock < (i.min_stock_level ?? 50)).length;
-  const outOfStock = filtered.filter((i: any) => i.current_stock === 0).length;
-  const totalValue = filtered.reduce((s: number, i: any) => s + (i.current_stock * (i.product?.grade_a_price ?? 0)), 0);
+  const lowStockCount = filtered.filter((i: any) => i.quantity < (i.min_threshold ?? 50)).length;
+  const outOfStock = filtered.filter((i: any) => i.quantity === 0).length;
+  const totalValue = filtered.reduce((s: number, i: any) => s + (i.quantity * (i.product?.grade_a_price ?? 0)), 0);
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12 pt-4">
@@ -152,10 +156,10 @@ export default function InventoryDashboard() {
                 </tr>
               ) : (
                 filtered.map((item: any, index: number) => {
-                  const isLow = item.current_stock < (item.min_stock_level ?? 50);
-                  const isOut = item.current_stock === 0;
+                  const isLow = item.quantity < (item.min_threshold ?? 50);
+                  const isOut = item.quantity === 0;
                   const maxLevel = item.max_stock_level ?? 500;
-                  const pct = Math.min(100, (item.current_stock / maxLevel) * 100);
+                  const pct = Math.min(100, (item.quantity / maxLevel) * 100);
 
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
@@ -175,13 +179,13 @@ export default function InventoryDashboard() {
                       <td className="text-right">
                         <div className="flex flex-col items-end">
                           <span className={`font-bold ${isOut ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-slate-900'}`}>
-                            {item.current_stock.toLocaleString()}
+                            {item.quantity.toLocaleString()}
                           </span>
                           <span className="text-[10px] text-slate-400 uppercase font-medium">Kilograms</span>
                         </div>
                       </td>
                       <td className="text-right text-slate-500 font-medium">
-                        {item.min_stock_level ?? 50}
+                        {item.min_threshold ?? 50}
                       </td>
                       <td className="px-4 min-w-[120px]">
                         <div className="flex flex-col gap-1">

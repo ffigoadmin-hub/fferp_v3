@@ -154,13 +154,21 @@ export default function GateEntryPage() {
 
       if (error) throw error;
 
-      // Update PO status to 'arrived'
+      // Update PO status to 'arrived', and stamp actual_delivery_date (used
+      // by VendorPerformance.tsx's on-time-delivery rate) if not already set
+      // by BuyPage.tsx's own completion check for this PO.
       if (data.po_id) {
         await supabase
           .from('purchase_orders')
           .update({ status: 'received' })
           .eq('id', data.po_id)
           .eq('status', 'ordered'); // only if still 'ordered'
+
+        await supabase
+          .from('purchase_orders')
+          .update({ actual_delivery_date: new Date().toISOString().split('T')[0] })
+          .eq('id', data.po_id)
+          .is('actual_delivery_date', null);
       }
 
       return record;
