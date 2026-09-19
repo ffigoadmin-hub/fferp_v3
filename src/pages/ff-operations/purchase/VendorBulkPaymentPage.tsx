@@ -44,21 +44,6 @@ interface VendorGroup {
   alsoKnownAs: string[];
 }
 
-// A normalized bank-account identity for a vendor, or null if it has no
-// real bank details on file (or the value looks like placeholder junk,
-// e.g. "0"/"NA" — guarded by requiring at least 6 digits). Two vendor DB
-// rows for the same real vendor (created from name spelling/OCR variance
-// across different POs) commonly share the same real bank account even
-// though `findVendor()`'s fuzzy name match never links them — grouping on
-// this instead of the name is what actually reflects "one payment, one
-// destination account".
-function bankKey(vendor: any): string | null {
-  const acct = (vendor?.bank_account || '').replace(/\s+/g, '').toUpperCase();
-  const ifsc = (vendor?.bank_ifsc || '').replace(/\s+/g, '').toUpperCase();
-  if (acct.replace(/\D/g, '').length < 6) return null;
-  return `${acct}::${ifsc}`;
-}
-
 // Sorted earliest→latest span the group's POs cover (never trust
 // insertion order) — a single date when every PO happens to share one day.
 function computeDateRange(pos: StoredPO[]): string {
@@ -161,9 +146,16 @@ export default function VendorBulkPaymentPage() {
     const map = new Map<string, VendorGroup>();
     for (const po of eligiblePOs) {
       const vendor = findVendor(po.vendorName);
-      const bkey = bankKey(vendor);
+      // Bank-account-based grouping was reverted (see git history) — a
+      // production check found dozens of unrelated vendors sharing the
+      // exact same bank_account/bank_ifsc value (almost certainly a
+      // placeholder/default entered during import, not a real shared
+      // account), which was silently merging unrelated vendors' payments
+      // into one bulk group. Grouping by name only until that's diagnosed
+      // and a real vendor-identity signal (not just "same digits on file")
+      // can be trusted.
       const hubKey = po.hub_id || 'nohub';
-      const key = `${bkey ? `bank::${bkey}` : `name::${normName(po.vendorName) || po.vendorName}`}::${hubKey}`;
+      const key = `name::${normName(po.vendorName) || po.vendorName}::${hubKey}`;
       if (!map.has(key)) {
         map.set(key, {
           key,
