@@ -78,6 +78,7 @@ const ProductFormPage = lazy(() => import('./pages/catalog/ProductForm'));
 // Reports Module
 const ReportsDashboard = lazy(() => import('./pages/reports/ReportsDashboard'));
 const PLReport = lazy(() => import('./pages/reports/PLReport'));
+const BalanceSheetReport = lazy(() => import('./pages/reports/BalanceSheetReport'));
 const CustomReportBuilder = lazy(() => import('./pages/reports/CustomReportBuilder'));
 const PurchaseReportPage      = lazy(() => import('./pages/reports/PurchaseReportPage'));
 const DailySalesReportPage    = lazy(() => import('./pages/reports/DailySalesReportPage'));
@@ -865,6 +866,7 @@ const AppRoutes = () => {
       {/* Reports Module */}
       <Route path="/reports" element={<ProtectedRoute allowedRoles={OPS_ROLES}><ReportsDashboard /></ProtectedRoute>} />
       <Route path="/reports/pl" element={<ProtectedRoute allowedRoles={OPS_ROLES}><PLReport /></ProtectedRoute>} />
+      <Route path="/reports/balance-sheet" element={<ProtectedRoute allowedRoles={OPS_ROLES}><BalanceSheetReport /></ProtectedRoute>} />
       <Route path="/reports/custom" element={<ProtectedRoute allowedRoles={OPS_ROLES}><CustomReportBuilder /></ProtectedRoute>} />
       <Route path="/reports/purchase"    element={<ProtectedRoute allowedRoles={OPS_ROLES}><PurchaseReportPage /></ProtectedRoute>} />
       <Route path="/reports/sales"       element={<ProtectedRoute allowedRoles={OPS_ROLES}><DailySalesReportPage /></ProtectedRoute>} />
