@@ -58,12 +58,48 @@ function bankKey(vendor: any): string | null {
 // to a small number of distinct vendor rows. Confirmed live via
 // CHECK_VENDOR_BANK_ACCOUNT_DUPES.sql: genuine same-vendor spelling/typo
 // clusters (Kabur Fruits / Kabur Furits / Kabur Salman Fruits; Vijayakanth
-// Traders; Sekar / Shekar; Baskar / Bhaskar; KRP Traders duplicate; K.V.
-// Palani / KVP) all top out at 2-4 rows. Two accounts used as a shared
-// "local cash market" placeholder for vendors with no real bank transfer
-// jumped to 18 and 52 completely unrelated names on the exact same
-// account+IFSC — those must never auto-merge.
+// Traders; Sekar / Shekar; Baskar / Bhaskar; KRP Traders duplicate) all top
+// out at 2-4 rows. Two accounts used as a shared "local cash market"
+// placeholder for vendors with no real bank transfer jumped to 18 and 52
+// completely unrelated names on the exact same account+IFSC.
+//
+// The count alone isn't sufficient though — confirmed live: "MS. D45" and
+// "MS. C64" share one account with only 2 rows (well under this cap) but
+// are two unrelated market-stall codes, not the same vendor. Every
+// confirmed-real cluster above also shares a long recognizable chunk of
+// text (kabur, vijayakat, (s)hekar, b(h)askar) — D45/C64 share nothing.
+// bankKeyNameSimilarityOk() below is the second, independent gate.
 const MAX_TRUSTED_BANK_KEY_VENDORS = 4;
+const MIN_NAME_SIMILARITY_LEN = 4;
+
+// Longest common (contiguous) substring length between two strings —
+// simple O(n*m) DP, fine for short vendor names.
+function longestCommonSubstringLen(a: string, b: string): number {
+  if (!a || !b) return 0;
+  let best = 0;
+  const dp = new Array(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i++) {
+    let prevDiag = 0;
+    for (let j = 1; j <= b.length; j++) {
+      const temp = dp[j];
+      dp[j] = a[i - 1] === b[j - 1] ? prevDiag + 1 : 0;
+      if (dp[j] > best) best = dp[j];
+      prevDiag = temp;
+    }
+  }
+  return best;
+}
+
+// Every vendor name sharing a bank key must share a reasonably long chunk
+// of text with the group's first (alphabetically, per fetchStoredVendors'
+// own ordering) name — otherwise the shared account is treated the same as
+// the confirmed placeholder accounts: not a reliable "same vendor" signal.
+function bankKeyNameSimilarityOk(names: string[]): boolean {
+  if (names.length <= 1) return true;
+  const normed = names.map(n => normName(n));
+  const reference = normed[0];
+  return normed.every(n => longestCommonSubstringLen(reference, n) >= MIN_NAME_SIMILARITY_LEN);
+}
 
 // Sorted earliest→latest span the group's POs cover (never trust
 // insertion order) — a single date when every PO happens to share one day.
@@ -150,13 +186,25 @@ export default function VendorBulkPaymentPage() {
   // whole vendor list (not just matched ones) — this must be known before
   // grouping POs, so a shared-placeholder account can be rejected outright
   // rather than merging the first few POs before the count grows too large.
-  const bankKeyVendorCounts = useMemo(() => {
-    const counts = new Map<string, number>();
+  // A bank key is trusted only when it's shared by a small number of
+  // vendor rows AND every one of those rows' names actually looks like the
+  // same vendor (see bankKeyNameSimilarityOk above) — count alone let
+  // unrelated "MS. D45"/"MS. C64" through.
+  const trustedBankKeys = useMemo(() => {
+    const namesByKey = new Map<string, string[]>();
     for (const v of vendorList as any[]) {
       const k = bankKey(v);
-      if (k) counts.set(k, (counts.get(k) || 0) + 1);
+      if (!k) continue;
+      if (!namesByKey.has(k)) namesByKey.set(k, []);
+      namesByKey.get(k)!.push(vendorDisplayName(v));
     }
-    return counts;
+    const trusted = new Set<string>();
+    for (const [k, names] of namesByKey) {
+      if (names.length <= MAX_TRUSTED_BANK_KEY_VENDORS && bankKeyNameSimilarityOk(names)) {
+        trusted.add(k);
+      }
+    }
+    return trusted;
   }, [vendorList]);
 
   const eligiblePOs = useMemo(() => {
@@ -182,7 +230,7 @@ export default function VendorBulkPaymentPage() {
     for (const po of eligiblePOs) {
       const vendor = findVendor(po.vendorName);
       const bkey = bankKey(vendor);
-      const trustedBankKey = bkey && (bankKeyVendorCounts.get(bkey) ?? 0) <= MAX_TRUSTED_BANK_KEY_VENDORS;
+      const trustedBankKey = bkey && trustedBankKeys.has(bkey);
       const hubKey = po.hub_id || 'nohub';
       const key = `${trustedBankKey ? `bank::${bkey}` : `name::${normName(po.vendorName) || po.vendorName}`}::${hubKey}`;
       if (!map.has(key)) {
@@ -210,7 +258,7 @@ export default function VendorBulkPaymentPage() {
     // groups are still shown (nothing hidden) but sort last since that
     // case is already served by Purchase Report's per-PO Raise & Approve.
     return Array.from(map.values()).sort((a, b) => b.pos.length - a.pos.length || b.total - a.total);
-  }, [eligiblePOs, findVendor, bankKeyVendorCounts]);
+  }, [eligiblePOs, findVendor, trustedBankKeys]);
 
   const raiseBulk = async (group: VendorGroup) => {
     if (!group.vendor?.id) {
