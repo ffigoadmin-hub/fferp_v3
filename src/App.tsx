@@ -876,7 +876,7 @@ const AppRoutes = () => {
       {/* Hub Management */}
       <Route path="/admin/hubs" element={<ProtectedRoute allowedRoles={['admin', 'ceo', 'ff_operations_manager']}><HubManagementPage /></ProtectedRoute>} />
       <Route path="/admin/hubs/:hubId" element={<ProtectedRoute allowedRoles={['admin', 'ceo', 'ff_operations_manager']}><HubManagementPage /></ProtectedRoute>} />
-      <Route path="/admin/qc-overview" element={<ProtectedRoute allowedRoles={['admin']}><AdminQCOverviewPage /></ProtectedRoute>} />
+      <Route path="/admin/qc-overview" element={<ProtectedRoute allowedRoles={['admin', 'ceo']}><AdminQCOverviewPage /></ProtectedRoute>} />
 
       {/* FF Operations Home */}
       <Route path="/ff-operations" element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><FFOperationsHomePage /></ProtectedRoute>} />
@@ -920,7 +920,7 @@ const AppRoutes = () => {
       <Route path="/accounts/ff-payments"           element={<ProtectedRoute allowedRoles={['accounts','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
       <Route path="/accounts/ff-transport-payments" element={<ProtectedRoute allowedRoles={['accounts','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
       <Route path="/accounts/execution-desk"        element={<ProtectedRoute allowedRoles={['accounts','admin']}><ExecutionDeskPage /></ProtectedRoute>} />
-      <Route path="/accounts/batch-history"         element={<ProtectedRoute allowedRoles={['accounts','admin']}><BatchHistoryPage /></ProtectedRoute>} />
+      <Route path="/accounts/batch-history"         element={<ProtectedRoute allowedRoles={['accounts','admin','ceo']}><BatchHistoryPage /></ProtectedRoute>} />
       {/* My Submitted Payments — raisers only (hub_manager, shift_employee, purchase_manager/head) */}
       <Route path="/my-submitted-payments" element={<ProtectedRoute allowedRoles={['hub_manager','shift_employee','purchase_manager','purchase_head','admin']}><MySubmittedPayments /></ProtectedRoute>} />
 
