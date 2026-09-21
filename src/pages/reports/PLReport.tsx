@@ -10,15 +10,50 @@ import {
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 
-type Dimension = 'product' | 'hub' | 'channel';
+type Dimension = 'overall' | 'product' | 'hub' | 'channel';
 
 export default function PLReport() {
-  const [dimension, setDimension] = useState<Dimension>('product');
+  const [dimension, setDimension] = useState<Dimension>('overall');
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
 
   const monthDate = new Date(selectedMonth + '-01');
   const monthStart = format(startOfMonth(monthDate), 'yyyy-MM-dd');
   const monthEnd = format(endOfMonth(monthDate), 'yyyy-MM-dd');
+
+  // Whole-business total — a direct query, not derived from summing one of
+  // the per-dimension breakdowns below, so it's unaffected by any one
+  // dimension's data limitations (see the channel dimension's honest
+  // "cost not available" note further down).
+  const { data: overallPL = [] } = useQuery({
+    queryKey: ['pl-overall', monthStart],
+    queryFn: async () => {
+      const { data: orders, error: ordersErr } = await supabase
+        .from('sales_orders')
+        .select('net_amount, status')
+        .gte('order_date', monthStart)
+        .lte('order_date', monthEnd)
+        .neq('status', 'cancelled');
+      if (ordersErr) throw ordersErr;
+
+      const { data: pos, error: posErr } = await supabase
+        .from('purchase_orders')
+        .select('total_amount, status')
+        .gte('order_date', monthStart)
+        .lte('order_date', monthEnd)
+        .neq('status', 'cancelled');
+      if (posErr) throw posErr;
+
+      const revenue = (orders ?? []).reduce((s, o: any) => s + (Number(o.net_amount) || 0), 0);
+      const cost = (pos ?? []).reduce((s, p: any) => s + (Number(p.total_amount) || 0), 0);
+      return [{
+        name: 'Farmers Factory — Overall',
+        revenue, cost,
+        profit: revenue - cost,
+        margin: revenue > 0 ? ((revenue - cost) / revenue) * 100 : 0,
+      }];
+    },
+    enabled: dimension === 'overall',
+  });
 
   const { data: productPL = [] } = useQuery({
     queryKey: ['pl-product', monthStart],
@@ -101,40 +136,57 @@ export default function PLReport() {
     enabled: dimension === 'hub',
   });
 
+  // Cost isn't trackable per sales channel anywhere in this schema —
+  // purchase orders aren't linked to which channel eventually sells the
+  // stock. Previously this hardcoded cost=0 / profit=revenue*0.15 for every
+  // row, which is exactly why the summary cards showed a flat, fake 100%
+  // margin. Now: real revenue (grouped by sales_orders.source — the actual
+  // live channel column; payment_mode was the wrong field, that's how the
+  // customer paid, not which channel the order came through), cost/profit/
+  // margin rendered as "Not Available" instead of a fabricated number.
   const { data: channelPL = [] } = useQuery({
     queryKey: ['pl-channel', monthStart],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('sales_orders')
-        .select('payment_mode, net_amount')
+        .select('source, net_amount')
         .gte('order_date', monthStart)
+        .lte('order_date', monthEnd)
         .neq('status', 'cancelled');
+      if (error) throw error;
 
       const map: Record<string, number> = {};
-      (data ?? []).forEach(o => {
-        const mode = o.payment_mode ?? 'unknown';
-        map[mode] = (map[mode] ?? 0) + (Number(o.net_amount) || 0);
+      (data ?? []).forEach((o: any) => {
+        const src = o.source ?? 'manual';
+        map[src] = (map[src] ?? 0) + (Number(o.net_amount) || 0);
       });
 
       return Object.entries(map).map(([channel, revenue]) => ({
-        name: channel.toUpperCase(),
+        name: channel.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
         revenue,
-        cost: 0,
-        profit: revenue * 0.15,
-        margin: 15,
+        cost: null,
+        profit: null,
+        margin: null,
+        costAvailable: false,
       }));
     },
     enabled: dimension === 'channel',
   });
 
-  const activeData = dimension === 'product' ? productPL
+  const activeData = dimension === 'overall' ? overallPL
+    : dimension === 'product' ? productPL
     : dimension === 'hub' ? hubPL
     : channelPL;
 
+  // Channel rows have cost=null (no per-channel cost data exists) — treat
+  // that as "the whole dimension has no cost data" rather than silently
+  // summing null as 0, which is exactly what produced the fake 100% margin
+  // before (revenue - 0 = revenue, however many rows contributed).
+  const costAvailable = (activeData as any[]).every(d => d.cost !== null && d.cost !== undefined);
   const totalRevenue = (activeData as any[]).reduce((s, d) => s + (d.revenue || 0), 0);
-  const totalCost = (activeData as any[]).reduce((s, d) => s + (d.cost || 0), 0);
-  const totalProfit = totalRevenue - totalCost;
-  const totalMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : '0';
+  const totalCost = costAvailable ? (activeData as any[]).reduce((s, d) => s + (d.cost || 0), 0) : null;
+  const totalProfit = costAvailable ? totalRevenue - (totalCost as number) : null;
+  const totalMargin = costAvailable && totalRevenue > 0 ? ((totalProfit as number / totalRevenue) * 100).toFixed(1) : null;
 
   const exportExcel = () => {
     const rows = (activeData as any[]).map(d => ({
@@ -158,7 +210,7 @@ export default function PLReport() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">P&L Report</h1>
-          <p className="text-sm text-gray-500">Profit & Loss by {dimension}</p>
+          <p className="text-sm text-gray-500">{dimension === 'overall' ? 'Overall Profit & Loss' : `Profit & Loss by ${dimension}`}</p>
         </div>
         <div className="flex items-center gap-2">
           <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
@@ -171,13 +223,13 @@ export default function PLReport() {
       </div>
 
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-        {(['product', 'hub', 'channel'] as const).map(d => (
+        {(['overall', 'product', 'hub', 'channel'] as const).map(d => (
           <button key={d}
             onClick={() => setDimension(d)}
             className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all capitalize ${
               dimension === d ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800'
             }`}>
-            By {d}
+            {d === 'overall' ? 'Overall' : `By ${d}`}
           </button>
         ))}
       </div>
@@ -189,21 +241,34 @@ export default function PLReport() {
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4 text-center">
           <p className="text-xs text-gray-500 mb-1">Gross Profit</p>
-          <p className={`text-xl font-bold ${totalProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-            {totalProfit >= 0 ? '+' : ''}₹{(Math.abs(totalProfit) / 100000).toFixed(2)}L
-          </p>
+          {costAvailable ? (
+            <p className={`text-xl font-bold ${(totalProfit as number) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+              {(totalProfit as number) >= 0 ? '+' : ''}₹{(Math.abs(totalProfit as number) / 100000).toFixed(2)}L
+            </p>
+          ) : (
+            <p className="text-xl font-bold text-gray-300">—</p>
+          )}
         </div>
-        <div className={`rounded-xl border p-4 text-center ${parseFloat(totalMargin) >= 15 ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+        <div className={`rounded-xl border p-4 text-center ${!costAvailable ? 'bg-gray-50 border-gray-200' : parseFloat(totalMargin as string) >= 15 ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
           <p className="text-xs text-gray-500 mb-1">Margin</p>
-          <p className={`text-xl font-bold ${parseFloat(totalMargin) >= 15 ? 'text-green-700' : 'text-amber-700'}`}>
-            {totalMargin}%
-          </p>
+          {costAvailable ? (
+            <p className={`text-xl font-bold ${parseFloat(totalMargin as string) >= 15 ? 'text-green-700' : 'text-amber-700'}`}>
+              {totalMargin}%
+            </p>
+          ) : (
+            <p className="text-xl font-bold text-gray-300">—</p>
+          )}
         </div>
       </div>
+      {!costAvailable && (
+        <p className="text-xs text-gray-400 -mt-2">
+          No per-channel cost data exists in this schema (purchases aren't tracked by sales channel) — showing revenue only.
+        </p>
+      )}
 
       {(activeData as any[]).length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="font-semibold text-gray-800 mb-4">Revenue vs Cost by {dimension}</h2>
+          <h2 className="font-semibold text-gray-800 mb-4">{dimension === 'overall' ? 'Revenue vs Cost' : `Revenue vs Cost by ${dimension}`}</h2>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={activeData} layout={dimension === 'product' ? 'vertical' : 'horizontal'}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
@@ -225,8 +290,8 @@ export default function PLReport() {
                 contentStyle={{ borderRadius: '10px', border: '1px solid #e5e7eb', fontSize: 12 }} />
               <Legend />
               <Bar dataKey="revenue" name="Revenue" fill={COLORS.revenue} radius={4} />
-              <Bar dataKey="cost" name="Cost" fill={COLORS.cost} radius={4} />
-              <Bar dataKey="profit" name="Profit" fill={COLORS.profit} radius={4} />
+              {costAvailable && <Bar dataKey="cost" name="Cost" fill={COLORS.cost} radius={4} />}
+              {costAvailable && <Bar dataKey="profit" name="Profit" fill={COLORS.profit} radius={4} />}
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -234,7 +299,7 @@ export default function PLReport() {
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="grid grid-cols-5 gap-3 px-5 py-3 text-xs font-semibold text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
-          <div className="col-span-2 capitalize">{dimension}</div>
+          <div className="col-span-2 capitalize">{dimension === 'overall' ? 'Business' : dimension}</div>
           <div className="text-right">Revenue</div>
           <div className="text-right">Profit</div>
           <div className="text-right">Margin</div>
@@ -249,18 +314,27 @@ export default function PLReport() {
               <div className="text-right text-sm text-gray-700">
                 ₹{Number(row.revenue).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
               </div>
-              <div className={`text-right text-sm font-semibold ${row.profit >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                {row.profit >= 0 ? '+' : ''}₹{Number(row.profit).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-              </div>
-              <div className="text-right">
-                <span className={`text-xs font-semibold rounded px-1.5 py-0.5 ${
-                  row.margin >= 20 ? 'bg-green-100 text-green-700' :
-                  row.margin >= 10 ? 'bg-yellow-100 text-yellow-700' :
-                  'bg-red-100 text-red-600'
-                }`}>
-                  {Number(row.margin).toFixed(1)}%
-                </span>
-              </div>
+              {row.cost === null || row.cost === undefined ? (
+                <>
+                  <div className="text-right text-sm text-gray-300">—</div>
+                  <div className="text-right"><span className="text-xs text-gray-300">—</span></div>
+                </>
+              ) : (
+                <>
+                  <div className={`text-right text-sm font-semibold ${row.profit >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                    {row.profit >= 0 ? '+' : ''}₹{Number(row.profit).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                  </div>
+                  <div className="text-right">
+                    <span className={`text-xs font-semibold rounded px-1.5 py-0.5 ${
+                      row.margin >= 20 ? 'bg-green-100 text-green-700' :
+                      row.margin >= 10 ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-red-100 text-red-600'
+                    }`}>
+                      {Number(row.margin).toFixed(1)}%
+                    </span>
+                  </div>
+                </>
+              )}
             </div>
           ))}
         </div>
