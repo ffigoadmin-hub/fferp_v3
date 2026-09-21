@@ -53,7 +53,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 /* ─── Expanded Order Detail Row ──────────────────────────────────────────── */
-function ExpandedOrderDetail({ orderId, onRepeat }: { orderId: string; onRepeat: (id: string) => void }) {
+function ExpandedOrderDetail({ orderId, onRepeat, hideActions }: { orderId: string; onRepeat: (id: string) => void; hideActions?: boolean }) {
   const { data, isLoading } = useQuery({
     queryKey: ['order-expand', orderId],
     queryFn: async () => {
@@ -180,10 +180,12 @@ function ExpandedOrderDetail({ orderId, onRepeat }: { orderId: string; onRepeat:
                 className="flex items-center justify-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700">
                 <Package className="h-3.5 w-3.5" /> View Full Order
               </Link>
-              <button onClick={() => onRepeat(orderId)}
-                className="flex items-center justify-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-gray-50">
-                <Repeat className="h-3.5 w-3.5" /> Repeat This Order
-              </button>
+              {!hideActions && (
+                <button onClick={() => onRepeat(orderId)}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-gray-50">
+                  <Repeat className="h-3.5 w-3.5" /> Repeat This Order
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -197,6 +199,9 @@ export default function OrderListPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isManagement = ['ceo', 'gm', 'admin', 'director', 'nsm'].includes((user as any)?.role ?? '');
+  // Admin's sidebar link to this page is meant as read-only visibility —
+  // hide every affordance that leads toward creating/repeating an order.
+  const hideCreateActions = (user as any)?.role === 'admin';
 
   // Filters
   const [search, setSearch]           = useState('');
@@ -412,33 +417,35 @@ export default function OrderListPage() {
           <div className="h-4 w-px bg-slate-200 flex-shrink-0" />
 
           {/* Submit for PO — shows confirmed orders ready for procurement */}
-          <button
-            onClick={() => setStatusFilter('submit_po')}
-            className={cn(
-              'flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider pb-2 border-b-2 transition-all flex-shrink-0',
-              statusFilter === 'submit_po'
-                ? 'border-amber-500 text-amber-600'
-                : 'border-transparent text-amber-500 hover:text-amber-700'
-            )}
-          >
-            <ShoppingCart className="h-3 w-3" />
-            Submit for PO
-            {(statusCounts['confirmed'] ?? 0) > 0 && (
-              <span className={cn(
-                'px-1.5 py-0.5 rounded-full text-[9px] font-black',
+          {!hideCreateActions && (
+            <button
+              onClick={() => setStatusFilter('submit_po')}
+              className={cn(
+                'flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider pb-2 border-b-2 transition-all flex-shrink-0',
                 statusFilter === 'submit_po'
-                  ? 'bg-amber-500 text-white'
-                  : 'bg-amber-100 text-amber-700'
-              )}>
-                {statusCounts['confirmed'] ?? 0}
-              </span>
-            )}
-          </button>
+                  ? 'border-amber-500 text-amber-600'
+                  : 'border-transparent text-amber-500 hover:text-amber-700'
+              )}
+            >
+              <ShoppingCart className="h-3 w-3" />
+              Submit for PO
+              {(statusCounts['confirmed'] ?? 0) > 0 && (
+                <span className={cn(
+                  'px-1.5 py-0.5 rounded-full text-[9px] font-black',
+                  statusFilter === 'submit_po'
+                    ? 'bg-amber-500 text-white'
+                    : 'bg-amber-100 text-amber-700'
+                )}>
+                  {statusCounts['confirmed'] ?? 0}
+                </span>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
       {/* Submit for PO Banner */}
-      {statusFilter === 'submit_po' && (
+      {!hideCreateActions && statusFilter === 'submit_po' && (
         <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
           <ShoppingCart className="h-5 w-5 text-amber-500 flex-shrink-0" />
           <div className="flex-1">
@@ -556,7 +563,7 @@ export default function OrderListPage() {
                       </td>
 
                       <td onClick={e => e.stopPropagation()}>
-                        {statusFilter === 'submit_po' ? (
+                        {!hideCreateActions && statusFilter === 'submit_po' ? (
                           <button
                             onClick={() => navigate('/purchase/auto-po')}
                             className="flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold text-white bg-amber-500 hover:bg-amber-600 rounded-lg whitespace-nowrap transition-colors"
@@ -575,6 +582,7 @@ export default function OrderListPage() {
                         key={`expand-${order.id}`}
                         orderId={order.id}
                         onRepeat={handleRepeat}
+                        hideActions={hideCreateActions}
                       />
                     )}
                   </>

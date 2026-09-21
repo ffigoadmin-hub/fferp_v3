@@ -415,263 +415,32 @@ export const navigationConfig: NavGroup[] = [
     ],
   },
 
-  // ── ADMIN — Zoho Books Organized Sections ───────────────────────────────────
+  // ── ADMIN — trimmed to exactly what an FF-operations overseer needs.
+  // Every other role's own sections below are untouched; the ~14 groups
+  // this replaced (Intelligence Hub, full FF Operations tree, HR & Payroll,
+  // Reports, Executive Controls, etc.) are still reachable by other roles
+  // via their own nav config or by URL — this is a nav declutter for
+  // admin, not a route/permission change.
   {
-    title: 'Overview',
+    title: 'Admin',
     icon: LayoutDashboard,
     roles: ['admin'],
     items: [
-      { icon: LayoutDashboard, label: 'Dashboard',        path: '/admin-dashboard' },
-      { icon: ShieldCheck,     label: 'Intelligence Hub', path: '/management/intelligence' },
-      { icon: FileSearch,      label: 'Audit Logs',       path: '/audit-logs' },
-      { icon: Bot,             label: 'AI Assistant',     path: '/admin/ai-assistant' },
-      { icon: Settings,        label: 'AI Command Center',path: '/admin/ai-command-center' },
-    ],
-  },
-  {
-    title: 'Approvals',
-    icon: CheckSquare,
-    roles: ['admin'],
-    items: [
-      { icon: Banknote,      label: 'Payment Queue',       path: '/admin-queue' },
-      { icon: Calendar,      label: 'Leave Approvals',     path: '/leave-approvals' },
-      { icon: Truck,         label: 'Transport Analysis',  path: '/admin/transport-analysis' },
-    ],
-  },
-  {
-    title: 'People & HR',
-    icon: Users,
-    roles: ['admin'],
-    items: [
-      { icon: Users,         label: 'Employee Management', path: '/admin/employees' },
-      { icon: UserPlus,      label: 'User Management',     path: '/user-management' },
-      { icon: Shield,        label: 'Role Management',     path: '/role-management' },
-      { icon: User,          label: 'Employee Profiles',   path: '/admin/employee-profiles' },
-      { icon: Users,         label: 'Employee Directory',  path: '/employee-directory' },
-      { icon: Camera,        label: 'Selfie Attendance',   path: '/selfie-attendance' },
-      { icon: ClipboardList, label: 'Attendance Roster',   path: '/admin/attendance-roster' },
-      { icon: ClipboardList, label: 'LOP Register',        path: '/admin-lop' },
-      { icon: Calendar,      label: 'Week Off Mgmt',       path: '/admin/week-off-management' },
-      { icon: Lock,          label: 'Attendance Lockouts', path: '/admin/lockouts' },
-    ],
-  },
-  {
-    title: 'Hub Management',
-    icon: Warehouse,
-    roles: ['admin'],
-    items: [
-      { icon: LayoutDashboard, label: 'All Hubs Overview',   path: '/admin/hubs' },
-      { icon: MapPin,          label: 'Pallikaranai Hub',    path: '/admin/hubs/palikarani' },
-      { icon: MapPin,          label: 'Vanagaram Hub',       path: '/admin/hubs/vanagaram' },
-      { icon: MapPin,          label: 'Hyderabad Hub',       path: '/admin/hubs/hyderabad' },
-    ],
-  },
-  {
-    title: 'FF Operations',
-    icon: Store,
-    roles: ['admin'],
-    items: [
-      { icon: LayoutDashboard, label: 'Home', path: '/ff-operations' },
-      { icon: BarChart3,       label: '🏭 GM Dashboard',  path: '/ff-operations/gm-dashboard' },
-      {
-        icon: Package, label: 'Items', path: '/ff-operations/items',
-        children: [
-          { label: 'Items', path: '/ff-operations/items', action: true },
-        ],
-      },
-      {
-        icon: ShoppingCart, label: 'Purchase', path: '/purchase',
-        children: [
-          { label: 'Vendors',             path: '/purchase/vendors' },
-          { label: 'Purchase Orders',      path: '/purchase/auto-po' },
-          { label: '⚡ EOD PO Engine',    path: '/ff-operations/eod-po-engine' },
-          { label: '↳ Auto Bill',         path: '/purchase/auto-bill' },
-          { label: 'New Payment',         path: '/purchase/payment-form' },
-          { label: 'Payment Approvals',   path: '/purchase/payment-approvals' },
-        ],
-      },
-      {
-        icon: Truck, label: 'Transit / Gate', path: '/transit',
-        children: [
-          { label: 'Transit Dashboard',   path: '/transit' },
-          { label: 'Gate Entry',          path: '/transit/gate-entry', action: true },
-        ],
-      },
-      {
-        icon: Warehouse, label: 'Warehouse & QC', path: '/warehouse',
-        children: [
-          { label: 'Dashboard',           path: '/warehouse' },
-          { label: 'QC Inspection',       path: '/warehouse/qc' },
-          { label: 'QC Rejections',       path: '/warehouse/qc-rejections' },
-          { label: 'Inventory',           path: '/warehouse/inventory' },
-          { label: '🏷️ Box Label Generator', path: '/ff-operations/labels', action: true },
-          { label: '📦 Smart Inventory',       path: '/ff-operations/inventory' },
-        ],
-      },
-      {
-        icon: TrendingUp, label: 'Sales', path: '/sales',
-        children: [
-          { label: 'Sales Order',         path: '/sales/customers' },
-          { label: 'Order Details',       path: '/sales/orders',                action: true },
-          { label: 'Invoices',            path: '/sales/invoices' },
-        ],
-      },
-      { icon: Truck,        label: 'Logistics',           path: '/logistics' },
-      { icon: Wallet,       label: 'Finance / Payments',  path: '/finance/process-payments' },
-      { icon: FileBarChart, label: 'Reports',             path: '/reports' },
-    ],
-  },
-  {
-    title: 'Payments',
-    icon: CreditCard,
-    roles: ['admin'],
-    items: [
-      { icon: Banknote,    label: 'Payment Audit',    path: '/admin-payments' },
-      { icon: Search,      label: 'Payment Search',   path: '/payment-search' },
-      { icon: Shield,      label: 'Payment Guardian', path: '/admin/payment-guardian' },
-      { icon: Tags,        label: 'Payment Tags',     path: '/admin/payment-tags' },
-      { icon: ShieldAlert, label: 'Auditor Audit',    path: '/admin/auditor-audit' },
-    ],
-  },
-  {
-    title: 'System',
-    icon: Settings,
-    roles: ['admin'],
-    items: [
-      { icon: Building2,      label: 'Departments',         path: '/departments' },
-      { icon: BookOpen,       label: 'SOP Management',      path: '/admin/sop-management' },
-      { icon: MessageSquarePlus, label: 'Announcements',   path: '/announcements' },
-      { icon: Clock,          label: 'Shift Users',         path: '/admin/shift-users' },
-      { icon: Camera,         label: 'Shift Attendance',    path: '/admin/shift-attendance' },
-      { icon: MapPin,         label: 'Geofencing',          path: '/admin/geofencing' },
-      { icon: Volume2,        label: 'Notification Sounds', path: '/admin/notification-sounds' },
-      { icon: Settings,       label: 'Cron Management',     path: '/admin/crons' },
-    ],
-  },
-  // ── Admin — FF Payment Full Chain ────────────────────────────────────────────
-  {
-    title: 'FF Payment Pipeline',
-    icon: Banknote,
-    roles: ['admin'],
-    items: [
-      {
-        // Chain: Manager -> L1 -> Admin -> CEO -> Accounts (GM/Auditor retired
-        // — see FFPaymentApprovals.tsx for the full rationale).
-        icon: Banknote, label: 'Vendor Payments', path: '/ff-operations/payment-approvals',
-        children: [
-          { label: 'Manager Review',     path: '/ff-operations/payment-approvals' },
-          { label: 'L1 Approval',        path: '/l1/payments' },
-          { label: 'Admin Approval',     path: '/admin/ff-payments' },
-          { label: 'CEO Final Approval', path: '/ceo/ff-payments' },
-          { label: 'Accounts Payout',    path: '/accounts/ff-payments' },
-          { label: 'Execution Desk',     path: '/accounts/execution-desk' },
-          { label: 'Batch History',      path: '/accounts/batch-history' },
-        ],
-      },
-      {
-        icon: Truck, label: 'Transport Payments', path: '/l1/transport-payments',
-        children: [
-          { label: 'L1 Approval',        path: '/l1/transport-payments' },
-          { label: 'Admin Approval',     path: '/admin/ff-transport-payments' },
-          { label: 'CEO Final Approval', path: '/ceo/ff-transport-payments' },
-          { label: 'Accounts Payout',    path: '/accounts/ff-transport-payments' },
-        ],
-      },
-      { icon: FileBarChart, label: 'FF Payments Report',    path: '/reports/ff-payments' },
-      { icon: BarChart3,    label: 'FF Overview (CEO)',     path: '/ceo/ff-overview' },
-    ],
-  },
-  // ── Admin — HR & Payroll ──────────────────────────────────────────────────────
-  {
-    title: 'HR & Payroll',
-    icon: Wallet,
-    roles: ['admin'],
-    items: [
-      { icon: Wallet,       label: 'Payroll Management',   path: '/hr/payroll' },
-      { icon: Banknote,     label: 'Salary Sheet',         path: '/hr/sheet' },
-      { icon: CheckCircle2, label: 'Salary Approval',      path: '/hr/approval' },
-      { icon: Calculator,   label: 'Salary Calculation',   path: '/hr/salary-calculation' },
-      { icon: CreditCard,   label: 'Payment Audit (HR)',   path: '/hr/payment-audit' },
-      { icon: RotateCcw,    label: 'LOP Reversals',        path: '/ceo/lop-reversals' },
-      { icon: Calendar,     label: 'Leave Approvals',      path: '/leave-approvals' },
-    ],
-  },
-  // ── Admin — Reports ───────────────────────────────────────────────────────────
-  {
-    title: 'Reports',
-    icon: FileBarChart,
-    roles: ['admin'],
-    items: [
-      { icon: FileBarChart, label: 'Reports Dashboard',   path: '/reports' },
-      { icon: Banknote,     label: 'FF Payments Report',  path: '/reports/ff-payments' },
-      { icon: BarChart3,    label: 'Daily Sales',         path: '/reports/sales' },
-      { icon: ShoppingCart, label: 'Purchase Report',     path: '/reports/purchase' },
-      { icon: Boxes,        label: 'Inventory Report',    path: '/reports/inventory' },
-      { icon: PieChart,     label: 'P&L Report',          path: '/reports/pl' },
-      { icon: Truck,        label: 'Delivery Report',     path: '/reports/delivery' },
-      { icon: BarChart3,    label: 'Custom Report',       path: '/reports/custom' },
-      { icon: CreditCard,   label: 'Cash Collection',     path: '/reports/collection' },
-    ],
-  },
-  // ── Admin — CEO-level controls ────────────────────────────────────────────────
-  {
-    title: 'Executive Controls',
-    icon: Star,
-    roles: ['admin'],
-    items: [
-      { icon: BarChart3,       label: 'CEO Dashboard',          path: '/ceo-dashboard' },
-      { icon: ShieldCheck,     label: 'Intelligence Hub',       path: '/management/intelligence' },
-      { icon: CreditCard,      label: 'CEO Payment Approvals',  path: '/ceo-approvals' },
-      { icon: CheckSquare,     label: 'CEO Salary Approval',    path: '/ceo/salary-approval' },
-      { icon: Package,         label: 'Procurement',            path: '/ceo/procurement' },
-      { icon: ClipboardList,   label: 'Work Approvals',         path: '/ceo/work-orders' },
-      { icon: BarChart3,       label: 'Weekly Perf. Hub',       path: '/performance-hub' },
-      { icon: PieChart,        label: 'Project Spending',       path: '/project-spending' },
-    ],
-  },
-  // ── Admin — Shift ─────────────────────────────────────────────────────────────
-  {
-    title: 'Shift',
-    icon: Clock,
-    roles: ['admin'],
-    items: [
-      { icon: LayoutDashboard, label: 'Shift Dashboard',  path: '/shift/dashboard' },
-      { icon: Clock,           label: 'Shift Users Mgmt', path: '/admin/shift-users' },
-      { icon: Camera,          label: 'Shift Attendance', path: '/admin/shift-attendance' },
-    ],
-  },
-  // ── Admin — Sales & CRM ───────────────────────────────────────────────────────
-  {
-    title: 'Sales & CRM',
-    icon: TrendingUp,
-    roles: ['admin'],
-    items: [
-      { icon: TrendingUp,    label: 'Sales Dashboard',    path: '/sales' },
-      { icon: Plus,          label: 'New Order',          path: '/sales/new-order' },
-      { icon: ClipboardList, label: 'All Orders',         path: '/sales/orders' },
-      { icon: Store,         label: 'App & Web Orders',   path: '/sales/app-orders' },
-      { icon: Users,         label: 'Customers',          path: '/sales/customers' },
-      { icon: Target,        label: 'Sales Targets',      path: '/sales/targets' },
-      { icon: PhoneCall,     label: 'Tele-Caller CRM',    path: '/tele-caller' },
-    ],
-  },
-  // ── Admin — Logistics ────────────────────────────────────────────────────────
-  {
-    title: 'Logistics',
-    icon: Truck,
-    roles: ['admin'],
-    items: [
-      { icon: LayoutDashboard, label: 'Logistics Dashboard', path: '/logistics' },
-      { icon: Truck,           label: 'Driver View',         path: '/driver' },
-      { icon: Truck,           label: 'Transport Analysis',  path: '/admin/transport-analysis' },
-    ],
-  },
-  {
-    title: 'Onboarding',
-    icon: UserPlus,
-    roles: ['admin'],
-    items: [
-      { icon: Shield, label: 'Admin Access', path: '/onboarding/admin-access' },
+      { icon: LayoutDashboard, label: 'Dashboard',                 path: '/admin-dashboard' },
+      { icon: BarChart3,       label: 'FF Operations Overview',    path: '/ff-operations/gm-dashboard' },
+      { icon: ClipboardList,   label: 'Sales Orders',              path: '/sales/orders' },
+      { icon: ShoppingCart,    label: 'Purchase Orders',           path: '/purchase/orders' },
+      { icon: PackageCheck,    label: 'QC Overview',               path: '/admin/qc-overview' },
+      { icon: Star,            label: 'Vendor Performance',        path: '/purchase/vendor-performance' },
+      { icon: Truck,           label: 'Delivery Overview',         path: '/reports/delivery' },
+      { icon: Banknote,        label: 'Vendor Payment Approval',   path: '/admin/ff-payments' },
+      { icon: Truck,           label: 'Transport Payment Approval',path: '/admin/ff-transport-payments' },
+      { icon: History,         label: 'Payment Batch History',    path: '/accounts/batch-history' },
+      { icon: Wallet,          label: 'Customer Collections',      path: '/sales/collections' },
+      { icon: Camera,          label: 'Shift Attendance',          path: '/admin/shift-attendance' },
+      { icon: MapPin,          label: 'Pallikaranai Hub',          path: '/admin/hubs/palikarani' },
+      { icon: MapPin,          label: 'Vanagaram Hub',             path: '/admin/hubs/vanagaram' },
+      { icon: MapPin,          label: 'Hyderabad Hub',             path: '/admin/hubs/hyderabad' },
     ],
   },
 

@@ -88,6 +88,7 @@ const CashCollectionReportPage = lazy(() => import('./pages/reports/CashCollecti
 
 // Hub Management Module
 const HubManagementPage = lazy(() => import('./pages/admin/HubManagementPage'));
+const AdminQCOverviewPage = lazy(() => import('./pages/admin/AdminQCOverviewPage'));
 
 // Finance Module (FF ERP)
 const FinanceDashboard = lazy(() => import('./pages/finance/FinanceDashboard'));
@@ -875,6 +876,7 @@ const AppRoutes = () => {
       {/* Hub Management */}
       <Route path="/admin/hubs" element={<ProtectedRoute allowedRoles={['admin', 'ceo', 'ff_operations_manager']}><HubManagementPage /></ProtectedRoute>} />
       <Route path="/admin/hubs/:hubId" element={<ProtectedRoute allowedRoles={['admin', 'ceo', 'ff_operations_manager']}><HubManagementPage /></ProtectedRoute>} />
+      <Route path="/admin/qc-overview" element={<ProtectedRoute allowedRoles={['admin']}><AdminQCOverviewPage /></ProtectedRoute>} />
 
       {/* FF Operations Home */}
       <Route path="/ff-operations" element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><FFOperationsHomePage /></ProtectedRoute>} />
