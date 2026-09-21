@@ -527,84 +527,30 @@ export const navigationConfig: NavGroup[] = [
     ],
   },
 
-  // ── CEO ─────────────────────────────────────────────────────────────────────
+  // ── CEO — trimmed to FF only, mirroring admin's revamp. The other ~27 items
+  // this replaced (Command Center, general Approvals, Projects, Administration,
+  // Rentals, Onboarding) are IGO-Chain-governance/core-admin, not FF — still
+  // reachable by URL (e.g. /ceo-dashboard), just not in CEO's nav anymore.
   {
-    title: 'Command Center',
+    title: 'CEO',
     icon: LayoutDashboard,
     roles: ['ceo'],
     items: [
-      { icon: LayoutDashboard, label: 'Dashboard',              path: '/ceo-dashboard' },
-      { icon: AlertTriangle,   label: 'Escalations',            path: '/dashboard/escalations' },
-      { icon: ShieldCheck,     label: 'Intelligence Hub',       path: '/management/intelligence' },
-      { icon: Briefcase,       label: 'Dept Analytics',         path: '/ceo-departments' },
-      { icon: BarChart3,       label: 'Weekly Performance Hub', path: '/performance-hub' },
-      { icon: Coffee,          label: 'Palm Cafe Analysis',     path: '/ceo/cafe-analysis' },
-      { icon: Database,        label: 'Vendor Master',          path: '/vendor-sourcing/dashboard' },
-    ],
-  },
-  {
-    title: 'Approvals',
-    icon: CheckSquare,
-    roles: ['ceo'],
-    items: [
-      { icon: CreditCard,    label: 'Payment Approvals', path: '/ceo-approvals' },
-      { icon: CheckSquare,   label: 'Salary Approval',   path: '/ceo/salary-approval' },
-      { icon: ClipboardList, label: 'Work Approvals',    path: '/ceo/work-orders' },
-      { icon: Package,       label: 'Procurement',       path: '/ceo/procurement' },
-      { icon: RotateCcw,     label: 'LOP Reversals',     path: '/ceo/lop-reversals' },
-      { icon: Calendar,      label: 'Leave Approvals',   path: '/leave-approvals' },
-    ],
-  },
-  {
-    title: 'Projects',
-    icon: FolderKanban,
-    roles: ['ceo'],
-    items: [
-      { icon: Truck,         label: 'Project Overview',      path: '/sourcing-dashboard' },
-      { icon: Package,       label: 'Procurement Tracking',  path: '/procurement-tracking' },
-      { icon: FolderKanban,  label: 'Projects',              path: '/projects' },
-      { icon: PieChart,      label: 'Project Spending',      path: '/project-spending' },
-      { icon: CheckSquare,   label: 'Task Assignment',       path: '/task-assignment' },
-    ],
-  },
-  {
-    title: 'Administration',
-    icon: Shield,
-    roles: ['ceo'],
-    items: [
-      { icon: Activity,         label: 'Employee Activity',   path: '/employee-activity' },
-      { icon: MessageSquarePlus,label: 'Announcements',       path: '/announcements' },
-      { icon: User,             label: 'Employee Profiles',   path: '/admin/employee-profiles' },
-      { icon: Shield,           label: 'Payment Guardian',    path: '/admin/payment-guardian' },
-    ],
-  },
-  {
-    title: 'Rentals',
-    icon: Banknote,
-    roles: ['ceo'],
-    items: [
-      { icon: CheckSquare,    label: 'Rental Approvals',  path: '/ceo/rentals/approvals' },
-      { icon: LayoutDashboard,label: 'Rental Oversight',  path: '/ceo/rentals/portfolio' },
-    ],
-  },
-  {
-    title: 'Onboarding',
-    icon: UserPlus,
-    roles: ['ceo'],
-    items: [
-      { icon: Shield, label: 'CEO Access', path: '/onboarding/ceo-access' },
-    ],
-  },
-  // ── CEO — FF Operations ───────────────────────────────────────────────────
-  {
-    title: 'FF Operations',
-    icon: Store,
-    roles: ['ceo'],
-    items: [
-      { icon: BarChart3,    label: 'FF Overview',           path: '/ceo/ff-overview' },
-      { icon: Banknote,     label: 'FF Final Payments',     path: '/ceo/ff-payments' },
-      { icon: Truck,        label: 'FF Transport Payments', path: '/ceo/ff-transport-payments' },
-      { icon: FileBarChart, label: 'FF Payments Report',    path: '/reports/ff-payments' },
+      { icon: BarChart3,       label: 'FF Overview',                     path: '/ceo/ff-overview' },
+      { icon: LayoutDashboard, label: 'FF Operations Overview',          path: '/ff-operations/gm-dashboard' },
+      { icon: ClipboardList,   label: 'Sales Orders',                    path: '/sales/orders' },
+      { icon: ShoppingCart,    label: 'Purchase Orders',                 path: '/purchase/orders' },
+      { icon: PackageCheck,    label: 'QC Overview',                     path: '/admin/qc-overview' },
+      { icon: Star,            label: 'Vendor Performance',              path: '/purchase/vendor-performance' },
+      { icon: Truck,           label: 'Delivery Overview',               path: '/reports/delivery' },
+      { icon: Banknote,        label: 'Vendor Payment Approval (Final)', path: '/ceo/ff-payments' },
+      { icon: Truck,           label: 'Transport Payment Approval (Final)', path: '/ceo/ff-transport-payments' },
+      { icon: History,         label: 'Payment Batch History',          path: '/accounts/batch-history' },
+      { icon: Wallet,          label: 'Customer Collections',            path: '/sales/collections' },
+      { icon: FileBarChart,    label: 'FF Payments Report',              path: '/reports/ff-payments' },
+      { icon: MapPin,          label: 'Pallikaranai Hub',                path: '/admin/hubs/palikarani' },
+      { icon: MapPin,          label: 'Vanagaram Hub',                   path: '/admin/hubs/vanagaram' },
+      { icon: MapPin,          label: 'Hyderabad Hub',                   path: '/admin/hubs/hyderabad' },
     ],
   },
 
@@ -979,7 +925,9 @@ export function Sidebar() {
     }
 
     if (group.title === 'Weekly Productivity') {
-      return isCoreHead || ['palm_cafe_manager', 'cafe_manager'].includes(userRole);
+      // ceo excluded even when core_heads-flagged — IGO-Chain performance
+      // tracking, out of scope for ceo's FF-only sidebar.
+      return userRole !== 'ceo' && (isCoreHead || ['palm_cafe_manager', 'cafe_manager'].includes(userRole));
     }
 
     const roleMatches = group.roles.some(r => r.toLowerCase() === userRole);

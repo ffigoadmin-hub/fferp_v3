@@ -783,12 +783,12 @@ export default function PurchaseOrdersPage() {
   // extend PO add/edit to everyone with visibility into this dashboard,
   // not just Ops Manager/Hub Manager. ff_payment_access flag holders are
   // included too, for parity with the rest of the FF payment/PO surface.
-  // 'admin' intentionally excluded — the admin sidebar's Purchase Orders
-  // link is meant as a read-only overview, not an edit surface. A named
-  // individual can still get edit access via the separate ff_payment_access
-  // profile flag below, same as any other role.
+  // 'admin' and 'ceo' intentionally excluded — their sidebar links to
+  // Purchase Orders are meant as a read-only overview, not an edit surface.
+  // A named individual can still get edit access via the separate
+  // ff_payment_access profile flag below, same as any other role.
   const PO_EDIT_ROLES = new Set([
-    'ceo', 'director', 'gm', 'gmo', 'smo', 'boi', 'nsm',
+    'director', 'gm', 'gmo', 'smo', 'boi', 'nsm',
     'hr', 'accounts', 'back_office',
     'purchase_manager', 'purchase_head', 'warehouse_manager', 'qc_manager',
     'field_executive', 'tele_caller', 'bde',

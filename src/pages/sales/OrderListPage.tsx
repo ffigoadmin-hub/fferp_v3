@@ -199,9 +199,10 @@ export default function OrderListPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isManagement = ['ceo', 'gm', 'admin', 'director', 'nsm'].includes((user as any)?.role ?? '');
-  // Admin's sidebar link to this page is meant as read-only visibility —
-  // hide every affordance that leads toward creating/repeating an order.
-  const hideCreateActions = (user as any)?.role === 'admin';
+  // Admin's and CEO's sidebar links to this page are meant as read-only
+  // visibility — hide every affordance that leads toward creating/repeating
+  // an order for those two roles specifically.
+  const hideCreateActions = ['admin', 'ceo'].includes((user as any)?.role);
 
   // Filters
   const [search, setSearch]           = useState('');

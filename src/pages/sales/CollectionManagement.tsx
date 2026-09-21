@@ -21,9 +21,10 @@ function agingBucket(orderDate: string) {
 
 export default function CollectionManagement() {
   const { user } = useAuth();
-  // Admin's sidebar link to this page is meant as read-only visibility
-  // into outstanding collections — not a place to mark things collected.
-  const readOnly = (user as any)?.role === 'admin';
+  // Admin's and CEO's sidebar links to this page are meant as read-only
+  // visibility into outstanding collections — not a place to mark things
+  // collected.
+  const readOnly = ['admin', 'ceo'].includes((user as any)?.role);
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [agingFilter, setAgingFilter] = useState('all');
