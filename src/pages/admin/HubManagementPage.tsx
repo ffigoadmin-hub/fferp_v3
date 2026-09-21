@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import {
   MapPin, Warehouse, Users, Truck, Package,
   ArrowRight, BarChart3, RefreshCw, PackageCheck, ChevronRight, Loader2,
@@ -278,8 +279,72 @@ function HubCard({ hub, onClick }: { hub: Hub; onClick: () => void }) {
 }
 
 // ── Hub Detail View ───────────────────────────────────────────────────────────
+// Real, hub-scoped operational data (purchases / inventory / deliveries) —
+// replaces the old HUB_ENRICHMENT-sourced manager/QC-team/route numbers,
+// which had no live DB source at all (see the comment on that map above).
 function HubDetail({ hubId, hubs, isLoading }: { hubId: string; hubs: Hub[]; isLoading: boolean }) {
   const navigate = useNavigate();
+  const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
+  const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
+
+  const hub = hubs.find(h => h.slug === hubId || h.id === hubId)
+    ?? hubs.find(h => hubNormMatch(normHub(h.slug), normHub(hubId)));
+
+  // Purchases — pending count + this month's spend for this hub, same shape
+  // as PurchaseReportPage.tsx / CEOFFOverview.tsx's purchase_orders queries.
+  const { data: poRows, isLoading: poLoading } = useQuery({
+    queryKey: ['admin-hub-purchases', hub?.id, monthStart],
+    enabled: !!hub?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('purchase_orders')
+        .select('id, status, total_amount, created_at')
+        .eq('hub_id', hub!.id)
+        .gte('created_at', monthStart)
+        .lte('created_at', monthEnd + 'T23:59:59');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const pendingPOCount = (poRows || []).filter((p: any) => p.status === 'pending').length;
+  const monthPOSpend = (poRows || []).reduce((s: number, p: any) => s + Number(p.total_amount || 0), 0);
+
+  // Inventory — same shape as GMOperationsDashboard.tsx's inventoryHubs
+  // query, cut down to just this one hub.
+  const { data: invRows, isLoading: invLoading } = useQuery({
+    queryKey: ['admin-hub-inventory', hub?.id],
+    enabled: !!hub?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('inventory')
+        .select('quantity, min_threshold')
+        .eq('hub_id', hub!.id);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const totalStockKg = (invRows || []).reduce((s: number, r: any) => s + Number(r.quantity || 0), 0);
+  const lowStockCount = (invRows || []).filter((r: any) => Number(r.quantity || 0) > 0 && Number(r.quantity || 0) <= Number(r.min_threshold || 0)).length;
+  const outOfStockCount = (invRows || []).filter((r: any) => Number(r.quantity || 0) === 0).length;
+
+  // Deliveries — trip_orders joined to this hub's sales_orders, same join
+  // CEOFFOverview.tsx's On-Time-Delivery KPI uses, cut down to one hub.
+  const { data: deliveryRows, isLoading: deliveryLoading } = useQuery({
+    queryKey: ['admin-hub-deliveries', hub?.id, monthStart],
+    enabled: !!hub?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('trip_orders')
+        .select('delivery_status, sales_orders!inner(hub_id, created_at)')
+        .eq('sales_orders.hub_id', hub!.id)
+        .gte('sales_orders.created_at', monthStart)
+        .lte('sales_orders.created_at', monthEnd + 'T23:59:59');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const deliveredCount = (deliveryRows || []).filter((r: any) => r.delivery_status === 'delivered').length;
+  const totalDeliveryCount = (deliveryRows || []).length;
 
   if (isLoading) {
     return (
@@ -288,9 +353,6 @@ function HubDetail({ hubId, hubs, isLoading }: { hubId: string; hubs: Hub[]; isL
       </div>
     );
   }
-
-  const hub = hubs.find(h => h.slug === hubId || h.id === hubId)
-    ?? hubs.find(h => hubNormMatch(normHub(h.slug), normHub(hubId)));
 
   if (!hub) {
     return (
@@ -303,8 +365,6 @@ function HubDetail({ hubId, hubs, isLoading }: { hubId: string; hubs: Hub[]; isL
       </div>
     );
   }
-
-  const totalRoutes = hub.routes.reduce((s, r) => s + r.count, 0);
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -353,96 +413,68 @@ function HubDetail({ hubId, hubs, isLoading }: { hubId: string; hubs: Hub[]; isL
         </div>
       </div>
 
-      {/* Quick Stats */}
+      {/* Quick Stats — real, hub-scoped */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total Routes" value={totalRoutes} icon={Truck} color={hub.color} sub="daily" />
-        <StatCard label="Sales Channels" value={hub.channels.length} icon={BarChart3} color="#0E8A6B" sub="active" />
-        <StatCard label="QC Team" value={hub.qcTeam.length} icon={PackageCheck} color="#D97706" sub="members" />
-        <StatCard label="Hub Manager" value={hub.manager} icon={Users} color="#7C3AED" />
+        <StatCard label="Pending POs" value={poLoading ? '…' : pendingPOCount} icon={Package} color="#0891B2" sub="purchase orders" />
+        <StatCard label="Purchase Spend" value={poLoading ? '…' : `₹${(monthPOSpend / 1000).toFixed(0)}k`} icon={BarChart3} color="#D97706" sub="this month" />
+        <StatCard label="Stock On Hand" value={invLoading ? '…' : `${totalStockKg.toLocaleString('en-IN')} kg`} icon={Warehouse} color={hub.color} sub={invLoading ? '' : `${lowStockCount} low · ${outOfStockCount} out`} />
+        <StatCard label="Delivered" value={deliveryLoading ? '…' : `${deliveredCount}/${totalDeliveryCount}`} icon={Truck} color="#0E8A6B" sub="this month" />
       </div>
 
-      {/* Routes & Operations */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Route breakdown */}
+      {/* Purchases · Inventory · Deliveries */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div className="rounded-2xl p-5"
           style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <h3 className="text-[13px] font-bold mb-4 flex items-center gap-2" style={{ color: '#111827' }}>
-            <Truck className="w-4 h-4" style={{ color: hub.color }} />
-            Route Breakdown
+            <Package className="w-4 h-4" style={{ color: '#0891B2' }} /> Purchases
           </h3>
-          {hub.routes.length === 0 ? (
-            <p className="text-[12px] py-4 text-center" style={{ color: '#9CA3AF' }}>No routes configured for this hub.</p>
-          ) : (
-            <div className="space-y-3">
-              {hub.routes.map((r, i) => {
-                const chColor = CHANNEL_COLORS[r.channel] || '#38BDF8';
-                return (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-xl"
-                    style={{ background: chColor + '08', border: `1px solid ${chColor}20` }}>
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center font-black text-[11px]"
-                        style={{ background: chColor + '15', color: chColor, border: `1px solid ${chColor}25` }}>
-                        {r.channel[0]}
-                      </div>
-                      <div>
-                        <p className="text-[12px] font-bold" style={{ color: chColor }}>{r.channel}</p>
-                        <p className="text-[10px]" style={{ color: '#9CA3AF' }}>
-                          {r.count} route{r.count > 1 ? 's' : ''}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[12px] font-bold" style={{ color: '#374151' }}>{r.volume}</p>
-                      <p className="text-[10px]" style={{ color: '#9CA3AF' }}>daily volume</p>
-                    </div>
-                  </div>
-                );
-              })}
+          {poLoading ? (
+            <p className="text-[12px] py-4 text-center" style={{ color: '#9CA3AF' }}>Loading…</p>
+          ) : poRows && poRows.length > 0 ? (
+            <div className="space-y-2">
+              <div className="flex justify-between text-[12px]"><span style={{ color: '#6B7280' }}>POs this month</span><span className="font-bold" style={{ color: '#111827' }}>{poRows.length}</span></div>
+              <div className="flex justify-between text-[12px]"><span style={{ color: '#6B7280' }}>Pending</span><span className="font-bold" style={{ color: '#D97706' }}>{pendingPOCount}</span></div>
+              <div className="flex justify-between text-[12px]"><span style={{ color: '#6B7280' }}>Spend (MTD)</span><span className="font-bold" style={{ color: '#111827' }}>₹{monthPOSpend.toLocaleString('en-IN')}</span></div>
             </div>
+          ) : (
+            <p className="text-[12px] py-4 text-center" style={{ color: '#9CA3AF' }}>No POs for this hub this month.</p>
           )}
         </div>
 
-        {/* Team */}
         <div className="rounded-2xl p-5"
           style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <h3 className="text-[13px] font-bold mb-4 flex items-center gap-2" style={{ color: '#111827' }}>
-            <Users className="w-4 h-4" style={{ color: hub.color }} />
-            Operations Team
+            <Warehouse className="w-4 h-4" style={{ color: hub.color }} /> Inventory
           </h3>
-          <div className="space-y-3">
-            {/* Manager */}
-            <div className="flex items-center gap-3 p-3 rounded-xl"
-              style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-[13px]"
-                style={{ background: hub.color + '20', color: hub.color, border: `1px solid ${hub.color}30` }}>
-                {hub.manager[0]}
-              </div>
-              <div className="flex-1">
-                <p className="text-[12px] font-bold" style={{ color: '#111827' }}>{hub.manager}</p>
-                <p className="text-[10px]" style={{ color: '#9CA3AF' }}>Hub Manager</p>
-              </div>
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-full"
-                style={{ background: hub.color + '15', color: hub.color }}>Manager</span>
+          {invLoading ? (
+            <p className="text-[12px] py-4 text-center" style={{ color: '#9CA3AF' }}>Loading…</p>
+          ) : invRows && invRows.length > 0 ? (
+            <div className="space-y-2">
+              <div className="flex justify-between text-[12px]"><span style={{ color: '#6B7280' }}>Products tracked</span><span className="font-bold" style={{ color: '#111827' }}>{invRows.length}</span></div>
+              <div className="flex justify-between text-[12px]"><span style={{ color: '#6B7280' }}>Total stock</span><span className="font-bold" style={{ color: '#111827' }}>{totalStockKg.toLocaleString('en-IN')} kg</span></div>
+              <div className="flex justify-between text-[12px]"><span style={{ color: '#6B7280' }}>Low / Out of stock</span><span className="font-bold" style={{ color: outOfStockCount > 0 ? '#DC2626' : '#D97706' }}>{lowStockCount} / {outOfStockCount}</span></div>
             </div>
-            {/* QC Team */}
-            {hub.qcTeam.length === 0 ? (
-              <p className="text-[11px] text-center py-2" style={{ color: '#9CA3AF' }}>No QC team assigned yet.</p>
-            ) : hub.qcTeam.map((m, i) => (
-              <div key={i} className="flex items-center gap-3 p-3 rounded-xl"
-                style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-[13px]"
-                  style={{ background: 'rgba(14,138,107,0.15)', color: '#0E8A6B', border: '1px solid rgba(14,138,107,0.2)' }}>
-                  {m[0]}
-                </div>
-                <div className="flex-1">
-                  <p className="text-[12px] font-bold" style={{ color: '#111827' }}>{m}</p>
-                  <p className="text-[10px]" style={{ color: '#9CA3AF' }}>QC & Operations</p>
-                </div>
-                <span className="text-[10px] font-black px-2 py-0.5 rounded-full"
-                  style={{ background: 'rgba(14,138,107,0.12)', color: '#0E8A6B', border: '1px solid rgba(14,138,107,0.2)' }}>QC</span>
-              </div>
-            ))}
-          </div>
+          ) : (
+            <p className="text-[12px] py-4 text-center" style={{ color: '#9CA3AF' }}>No inventory rows found for this hub.</p>
+          )}
+        </div>
+
+        <div className="rounded-2xl p-5"
+          style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <h3 className="text-[13px] font-bold mb-4 flex items-center gap-2" style={{ color: '#111827' }}>
+            <Truck className="w-4 h-4" style={{ color: '#0E8A6B' }} /> Deliveries
+          </h3>
+          {deliveryLoading ? (
+            <p className="text-[12px] py-4 text-center" style={{ color: '#9CA3AF' }}>Loading…</p>
+          ) : deliveryRows && deliveryRows.length > 0 ? (
+            <div className="space-y-2">
+              <div className="flex justify-between text-[12px]"><span style={{ color: '#6B7280' }}>Delivery stops this month</span><span className="font-bold" style={{ color: '#111827' }}>{totalDeliveryCount}</span></div>
+              <div className="flex justify-between text-[12px]"><span style={{ color: '#6B7280' }}>Delivered</span><span className="font-bold" style={{ color: '#0E8A6B' }}>{deliveredCount}</span></div>
+              <div className="flex justify-between text-[12px]"><span style={{ color: '#6B7280' }}>Completion rate</span><span className="font-bold" style={{ color: '#111827' }}>{totalDeliveryCount > 0 ? Math.round((deliveredCount / totalDeliveryCount) * 100) : 0}%</span></div>
+            </div>
+          ) : (
+            <p className="text-[12px] py-4 text-center" style={{ color: '#9CA3AF' }}>No delivery stops for this hub this month.</p>
+          )}
         </div>
       </div>
 
