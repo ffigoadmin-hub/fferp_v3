@@ -507,6 +507,7 @@ export const navigationConfig: NavGroup[] = [
           { label: 'QC Rejections',       path: '/warehouse/qc-rejections' },
           { label: 'Inventory',           path: '/warehouse/inventory' },
           { label: '📦 Smart Inventory',  path: '/ff-operations/inventory' },
+          { label: 'Daily Stock Count',   path: '/warehouse/daily-stock' },
           { label: 'Returns',             path: '/warehouse/returns' },
         ],
       },
@@ -804,6 +805,7 @@ export const navigationConfig: NavGroup[] = [
     items: [
       { icon: Package, label: 'Inventory Dashboard', path: '/warehouse/inventory' },
       { icon: Boxes,   label: 'Smart Inventory',     path: '/ff-operations/inventory' },
+      { icon: ClipboardList, label: 'Daily Stock Count', path: '/warehouse/daily-stock' },
     ],
   },
   {
