@@ -150,13 +150,18 @@ export async function fetchMaxPOSerial(): Promise<number> {
 
 // ── Sync write helpers ────────────────────────────────────────
 
-export async function savePOToStore(po: StoredPO): Promise<string | null> {
+export interface SavePOResult {
+  id: string | null;
+  error: string | null;
+}
+
+export async function savePOToStore(po: StoredPO): Promise<SavePOResult> {
   const { data, error } = await supabase
     .from('purchase_orders')
     .upsert(poToPayload(po), { onConflict: 'po_number' })
     .select('id')
     .single();
-  if (error) { console.error('[purchaseStore] savePOToStore:', error.message); return null; }
+  if (error) { console.error('[purchaseStore] savePOToStore:', error.message); return { id: null, error: error.message }; }
   const poId = data?.id ?? null;
 
   // Also insert items into purchase_order_items so BuyPage can render them
@@ -185,11 +190,11 @@ export async function savePOToStore(po: StoredPO): Promise<string | null> {
       // not purchase_order_items). Surface this as a full failure rather
       // than silently returning a "successful" id for a PO with 0 items.
       console.error('[purchaseStore] insert purchase_order_items:', itemErr.message);
-      return null;
+      return { id: null, error: itemErr.message };
     }
   }
 
-  return poId;
+  return { id: poId, error: null };
 }
 
 export async function markPOBilled(poNumber: string): Promise<void> {
@@ -250,7 +255,7 @@ export async function createPOsFromSalesOrders(
       hub_name: hubName,
     };
 
-    const dbId = await savePOToStore(po);
+    const { id: dbId } = await savePOToStore(po);
     if (dbId) po.id = dbId;
     created.push(po);
   }
@@ -281,6 +286,6 @@ export function getMaxPOSerial(): number {
   return 0;
 }
 /** @deprecated use savePOToStore() (now async) */
-export function syncPOToSupabase(po: StoredPO): Promise<string | null> {
+export function syncPOToSupabase(po: StoredPO): Promise<SavePOResult> {
   return savePOToStore(po);
 }

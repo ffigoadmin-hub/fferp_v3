@@ -519,10 +519,10 @@ export default function EODPOEngine() {
           hub_name:     hubData.hubName,
         };
 
-        const savedId = await savePOToStore(po);
+        const { id: savedId, error: saveError } = await savePOToStore(po);
         if (!savedId) {
-          console.warn('[EOD PO] Supabase save failed for', poNumber);
-          failedPOs.push(`${poNumber} (${hubData.hubName})`);
+          console.warn('[EOD PO] Supabase save failed for', poNumber, saveError);
+          failedPOs.push(`${poNumber} (${hubData.hubName})${saveError ? ` — ${saveError}` : ''}`);
         } else {
           newPOs.push({ poNumber, vendor: hubData.hubName, items: shortfallItems, total });
         }

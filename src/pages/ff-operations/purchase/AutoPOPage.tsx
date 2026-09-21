@@ -270,13 +270,14 @@ function CreatePOModal({
       })),
       subTotal, total, notes,
     };
-    savePOToStore(po).then(() => {
+    savePOToStore(po).then(({ id, error }) => {
+      if (!id) { toast.error(error ? `Failed to save PO: ${error}` : 'Failed to save PO'); return; }
       toast.success(status === 'draft'
         ? `PO ${po.poNumber} saved as draft`
         : `PO ${po.poNumber} submitted for approval ✓`);
       onSave();
       onClose();
-    }).catch(() => toast.error('Failed to save PO'));
+    }).catch((err) => toast.error(`Failed to save PO: ${err?.message ?? err}`));
   };
 
   if (!open) return null;
@@ -986,7 +987,8 @@ export default function AutoPOPage() {
 
   const handleVerify = async (po: StoredPO, shift: string, shiftDate: string, notes: string) => {
     const updated = { ...po, status: 'open' as const, notes: `Shift: ${shift} | Date: ${shiftDate}${notes ? ' | ' + notes : ''}` };
-    await savePOToStore(updated);
+    const { id, error } = await savePOToStore(updated);
+    if (!id) { toast.error(error ? `Failed to verify PO: ${error}` : 'Failed to verify PO'); return; }
     toast.success(`✓ PO ${po.poNumber} verified — assigned to ${shift} shift`);
     refresh();
   };
@@ -998,14 +1000,16 @@ export default function AutoPOPage() {
       approvedBy: 'FF Operations Manager',
       approvedAt: new Date().toISOString(),
     };
-    await savePOToStore(updated);
+    const { id, error } = await savePOToStore(updated);
+    if (!id) { toast.error(error ? `Failed to approve PO: ${error}` : 'Failed to approve PO'); return; }
     toast.success(`✅ PO ${po.poNumber} approved successfully`);
     refresh();
   };
 
   const handleReject = async (po: StoredPO, reason: string) => {
     const updated: StoredPO = { ...po, status: 'rejected', rejectionReason: reason };
-    await savePOToStore(updated);
+    const { id, error } = await savePOToStore(updated);
+    if (!id) { toast.error(error ? `Failed to reject PO: ${error}` : 'Failed to reject PO'); return; }
     toast.error(`PO ${po.poNumber} rejected`);
     refresh();
   };
