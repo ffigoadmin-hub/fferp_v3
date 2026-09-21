@@ -223,8 +223,8 @@ function PODialog({
         hub_name: hub?.name ?? '',
       };
 
-      const result = await savePOToStore(stored);
-      if (!result) { toast.error('Failed to save PO'); return; }
+      const { id: savedId, error: saveError } = await savePOToStore(stored);
+      if (!savedId) { toast.error(saveError ? `Failed to save PO: ${saveError}` : 'Failed to save PO'); return; }
       toast.success(isNew ? 'Purchase order created' : 'Purchase order updated');
       onSaved();
       onClose();
@@ -453,8 +453,8 @@ function ImportPODialog({
           vendor_id: vendorId,
         };
 
-        const result = await savePOToStore(stored);
-        if (!result) throw new Error('Save failed');
+        const { id: savedId, error: saveError } = await savePOToStore(stored);
+        if (!savedId) throw new Error(saveError || 'Save failed');
         updateRow(row.key, { status: 'done' });
         created++;
       } catch (e: any) {
