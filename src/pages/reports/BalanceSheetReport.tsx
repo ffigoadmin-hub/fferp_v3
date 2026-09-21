@@ -116,7 +116,37 @@ export default function BalanceSheetReport() {
     (s, p: any) => s + Number(p.base_amount || 0) + Number(p.toll_charges || 0) + Number(p.other_charges || 0), 0
   );
 
-  const isLoading = invLoading || recvLoading || vpLoading || tpLoading;
+  // Already paid out by Accounts — informational only, NOT part of Assets/Liabilities
+  // (a paid payment is no longer a liability, so it must stay out of the totals above).
+  const { data: vendorPaid, isLoading: vpPaidLoading } = useQuery({
+    queryKey: ['bs-vendor-paid'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ff_vendor_payments')
+        .select('net_amount')
+        .eq('payment_status', 'paid');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const vendorPaidTotal = (vendorPaid ?? []).reduce((s, p: any) => s + Number(p.net_amount || 0), 0);
+
+  const { data: transportPaid, isLoading: tpPaidLoading } = useQuery({
+    queryKey: ['bs-transport-paid'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('ff_transport_payments')
+        .select('base_amount, toll_charges, other_charges')
+        .eq('payment_status', 'paid');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const transportPaidTotal = (transportPaid ?? []).reduce(
+    (s, p: any) => s + Number(p.base_amount || 0) + Number(p.toll_charges || 0) + Number(p.other_charges || 0), 0
+  );
+
+  const isLoading = invLoading || recvLoading || vpLoading || tpLoading || vpPaidLoading || tpPaidLoading;
 
   const assets: LineItem[] = [
     { label: 'Inventory Value', value: inventoryValue, sub: 'Estimated — Grade A wholesale pricing, all hubs' },
@@ -129,6 +159,10 @@ export default function BalanceSheetReport() {
     { label: 'Accounts Payable — Transport', value: transportPayableTotal, sub: 'Transport payments not yet paid' },
     { label: 'Loans', value: null, sub: 'No loan/borrowing record exists' },
   ];
+  const paidByAccounts: LineItem[] = [
+    { label: 'Vendor Payments Paid', value: vendorPaidTotal, sub: 'Sum of ff_vendor_payments where payment_status = paid' },
+    { label: 'Transport Payments Paid', value: transportPaidTotal, sub: 'Sum of ff_transport_payments where payment_status = paid' },
+  ];
 
   const totalAssets = assets.reduce((s, a) => s + (a.value ?? 0), 0);
   const totalLiabilities = liabilities.reduce((s, l) => s + (l.value ?? 0), 0);
@@ -139,6 +173,7 @@ export default function BalanceSheetReport() {
     const rows = [
       ...assets.map(a => ({ Section: 'Assets', Line: a.label, 'Amount (₹)': a.value ?? 'Not Available' })),
       ...liabilities.map(l => ({ Section: 'Liabilities', Line: l.label, 'Amount (₹)': l.value ?? 'Not Available' })),
+      ...paidByAccounts.map(p => ({ Section: 'Paid by Accounts (All-Time)', Line: p.label, 'Amount (₹)': p.value ?? 'Not Available' })),
       { Section: '', Line: 'Total Assets', 'Amount (₹)': totalAssets.toFixed(0) },
       { Section: '', Line: 'Total Liabilities', 'Amount (₹)': totalLiabilities.toFixed(0) },
       { Section: '', Line: 'Net Position', 'Amount (₹)': netPosition.toFixed(0) },
@@ -204,6 +239,19 @@ export default function BalanceSheetReport() {
         </div>
         <div className="divide-y divide-gray-50">
           {liabilities.map(l => <LineRow key={l.label} item={l} />)}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+          <Banknote className="h-4 w-4 text-gray-500" />
+          <h2 className="text-sm font-semibold text-gray-700">Paid by Accounts — All-Time</h2>
+        </div>
+        <p className="px-5 pt-3 text-xs text-gray-400">
+          Informational only — already settled, so intentionally excluded from Liabilities above.
+        </p>
+        <div className="divide-y divide-gray-50">
+          {paidByAccounts.map(p => <LineRow key={p.label} item={p} />)}
         </div>
       </div>
     </div>
