@@ -548,6 +548,7 @@ export const navigationConfig: NavGroup[] = [
       { icon: History,         label: 'Payment Batch History',          path: '/accounts/batch-history' },
       { icon: Wallet,          label: 'Customer Collections',            path: '/sales/collections' },
       { icon: FileBarChart,    label: 'FF Payments Report',              path: '/reports/ff-payments' },
+      { icon: PieChart,        label: 'P&L Dashboard',                   path: '/reports/pl' },
       { icon: MapPin,          label: 'Pallikaranai Hub',                path: '/admin/hubs/palikarani' },
       { icon: MapPin,          label: 'Vanagaram Hub',                   path: '/admin/hubs/vanagaram' },
       { icon: MapPin,          label: 'Hyderabad Hub',                   path: '/admin/hubs/hyderabad' },
