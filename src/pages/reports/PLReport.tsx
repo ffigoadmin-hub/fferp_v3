@@ -35,11 +35,16 @@ export default function PLReport() {
         .neq('status', 'cancelled');
       if (ordersErr) throw ordersErr;
 
+      // purchase_orders has no order_date column at all — its real business
+      // date field is eod_date (confirmed against COMPLETE_SCHEMA_MIGRATION.sql
+      // and purchaseStore.ts's own rowToPO()). Querying order_date here
+      // silently errored on every call; with no error check, cost always
+      // came back 0 — hence the flat 100% margin regardless of dimension.
       const { data: pos, error: posErr } = await supabase
         .from('purchase_orders')
         .select('total_amount, status')
-        .gte('order_date', monthStart)
-        .lte('order_date', monthEnd)
+        .gte('eod_date', monthStart)
+        .lte('eod_date', monthEnd)
         .neq('status', 'cancelled');
       if (posErr) throw posErr;
 
@@ -58,17 +63,19 @@ export default function PLReport() {
   const { data: productPL = [] } = useQuery({
     queryKey: ['pl-product', monthStart],
     queryFn: async () => {
-      const { data: items } = await supabase
+      const { data: items, error: itemsErr } = await supabase
         .from('sales_order_items')
         .select(`qty_kg, unit_price, total_price, product:products(name, grade_a_price), order:sales_orders(status, order_date)`)
         .gte('created_at', `${monthStart}T00:00:00`)
         .lte('created_at', `${monthEnd}T23:59:59`);
+      if (itemsErr) throw itemsErr;
 
-      const { data: poItems } = await supabase
+      const { data: poItems, error: poItemsErr } = await supabase
         .from('purchase_order_items')
         .select('product_id, received_qty, unit_price, product:products(name)')
         .gte('created_at', `${monthStart}T00:00:00`)
         .lte('created_at', `${monthEnd}T23:59:59`);
+      if (poItemsErr) throw poItemsErr;
 
       const salesMap: Record<string, { name: string; revenue: number; qty: number }> = {};
       (items ?? []).forEach((item: any) => {
@@ -102,20 +109,25 @@ export default function PLReport() {
   const { data: hubPL = [] } = useQuery({
     queryKey: ['pl-hub', monthStart],
     queryFn: async () => {
-      const { data: hubs } = await supabase.from('hubs').select('id, name');
-      const { data: orders } = await supabase
+      const { data: hubs, error: hubsErr } = await supabase.from('hubs').select('id, name');
+      if (hubsErr) throw hubsErr;
+      const { data: orders, error: ordersErr } = await supabase
         .from('sales_orders')
         .select('hub_id, net_amount, status')
         .gte('order_date', monthStart)
         .lte('order_date', monthEnd)
         .neq('status', 'cancelled');
+      if (ordersErr) throw ordersErr;
 
-      const { data: pos } = await supabase
+      // purchase_orders' real date column is eod_date, not order_date (see
+      // the same fix/comment in the overallPL query above).
+      const { data: pos, error: posErr } = await supabase
         .from('purchase_orders')
         .select('hub_id, total_amount')
-        .gte('order_date', monthStart)
-        .lte('order_date', monthEnd)
+        .gte('eod_date', monthStart)
+        .lte('eod_date', monthEnd)
         .neq('status', 'cancelled');
+      if (posErr) throw posErr;
 
       return (hubs ?? []).map(hub => {
         const revenue = (orders ?? [])
