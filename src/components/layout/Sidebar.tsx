@@ -435,7 +435,6 @@ export const navigationConfig: NavGroup[] = [
       { icon: Truck,           label: 'Delivery Overview',         path: '/reports/delivery' },
       { icon: Banknote,        label: 'Vendor Payment Approval',   path: '/admin/ff-payments' },
       { icon: Truck,           label: 'Transport Payment Approval',path: '/admin/ff-transport-payments' },
-      { icon: Layers,          label: 'Bulk Vendor Payment',       path: '/ff-operations/vendor-bulk-payment' },
       { icon: History,         label: 'Payment Batch History',    path: '/accounts/batch-history' },
       { icon: Wallet,          label: 'Customer Collections',      path: '/sales/collections' },
       { icon: Camera,          label: 'Shift Attendance',          path: '/admin/shift-attendance' },
