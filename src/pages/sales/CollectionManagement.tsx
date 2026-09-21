@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 import { format, differenceInDays } from 'date-fns';
 import { CheckCircle2, AlertTriangle, Phone, Search, Clock, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
@@ -19,6 +20,10 @@ function agingBucket(orderDate: string) {
 }
 
 export default function CollectionManagement() {
+  const { user } = useAuth();
+  // Admin's sidebar link to this page is meant as read-only visibility
+  // into outstanding collections — not a place to mark things collected.
+  const readOnly = (user as any)?.role === 'admin';
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [agingFilter, setAgingFilter] = useState('all');
@@ -199,10 +204,12 @@ export default function CollectionManagement() {
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <p className="text-base font-bold text-gray-900">₹{amount.toLocaleString()}</p>
-                    <button onClick={() => markCollected.mutate(o)} disabled={markCollected.isPending}
-                      className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50">
-                      <CheckCircle2 className="h-3.5 w-3.5" /> Collected
-                    </button>
+                    {!readOnly && (
+                      <button onClick={() => markCollected.mutate(o)} disabled={markCollected.isPending}
+                        className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50">
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Collected
+                      </button>
+                    )}
                   </div>
                 </div>
               );
