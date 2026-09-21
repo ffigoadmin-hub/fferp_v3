@@ -189,7 +189,13 @@ function ImportSalesOrderDialog({
           .from('sales_orders')
           .insert({
             customer_id: customerId, customer_name: custName,
-            order_date: today, delivery_date: row.parsed.date || today,
+            // order_date must track the order's real business date (the date
+            // parsed from the source PDF), not the day someone happens to run
+            // the import — otherwise the Daily Sales Report (which filters by
+            // order_date) silently disagrees with the source document about
+            // which day this order belongs to. Same landmine already fixed
+            // for purchase_orders.eod_date vs created_at.
+            order_date: row.parsed.date || today, delivery_date: row.parsed.date || today,
             status: 'confirmed', payment_mode: 'cod',
             subtotal: total, total_amount: total,
             notes: `Imported from ${row.parsed.sourceRef}`,
@@ -558,7 +564,11 @@ export default function BulkOrderPage() {
         return {
           customer_id:   phoneToId[phone] ?? null,
           customer_name: String(r.customer_name ?? '').trim(),
-          order_date:    today,
+          // Same fix as the PDF import path above: order_date must come from
+          // the sheet's own delivery_date column, not import day, so the
+          // Daily Sales Report's order_date filter doesn't silently disagree
+          // with the uploaded file about which day these orders belong to.
+          order_date:    String(r.delivery_date ?? today).trim() || today,
           delivery_date: String(r.delivery_date ?? today).trim() || today,
           status:        'confirmed',
           payment_mode:  (() => { const m = String(r.payment_mode ?? 'cod').toLowerCase().trim(); const map: Record<string,string> = { 'credit':'credit','cod':'cod','cash':'cash','upi':'upi','online':'upi','card':'cod','cheque':'cash','partial':'cod' }; return map[m] ?? 'cod'; })(),

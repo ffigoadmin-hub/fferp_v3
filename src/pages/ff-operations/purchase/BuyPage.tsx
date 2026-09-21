@@ -403,11 +403,15 @@ function BuyDialog({
         .eq('po_id', po.id);
       if (!allItemsErr && allItems && allItems.length > 0 &&
         allItems.every((i: any) => ['purchased', 'received'].includes(i.status))) {
-        await supabase
+        const { error: deliveryStampErr } = await supabase
           .from('purchase_orders')
           .update({ actual_delivery_date: format(new Date(), 'yyyy-MM-dd') })
           .eq('id', po.id)
           .is('actual_delivery_date', null);
+        // Non-fatal to the purchase itself — only the on-time-delivery stat depends
+        // on this — but must not fail silently (it did, for every PO, until this
+        // column existed live).
+        if (deliveryStampErr) console.error('[BuyPage] actual_delivery_date stamp failed:', deliveryStampErr.message);
       }
 
       toast.success(`✅ Purchase recorded for ${form.cart.length} item${form.cart.length > 1 ? 's' : ''} — payment sent to FF Ops for approval`);
