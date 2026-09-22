@@ -750,12 +750,26 @@ export const navigationConfig: NavGroup[] = [
     ],
   },
   {
-    // Purchase Executives (shift_employee) raise vendor/transport payments for
+    // Purchase Executives (shift_employee) raise Transport payments manually for
     // their hub's buys — Ops Manager and Anusiya's payment-access flag are
-    // approve-only now, so raising lives here and with hub_manager instead.
+    // approve-only now. Vendor payment raising deliberately excluded here: their
+    // vendor payments come from BuyPage.tsx's automatic creation on a completed
+    // buy, not a manual form.
     title: 'Payments',
     icon: CreditCard,
-    roles: ['shift_employee', 'purchase_manager', 'purchase_head'],
+    roles: ['shift_employee'],
+    items: [
+      { icon: Truck,       label: 'New Transport Payment',    path: '/ff/transport-payment/new' },
+      { icon: History,     label: 'My Submitted Payments',    path: '/my-submitted-payments' },
+      { icon: History,     label: 'Payments Made',            path: '/purchase/payments-made' },
+    ],
+  },
+  {
+    // purchase_manager / purchase_head keep full raise access (both vendor and
+    // transport) -- only hub_manager and shift_employee had it removed.
+    title: 'Payments',
+    icon: CreditCard,
+    roles: ['purchase_manager', 'purchase_head'],
     items: [
       { icon: Plus,        label: 'New FF Vendor Payment',    path: '/ff/vendor-payment/new' },
       { icon: Truck,       label: 'New Transport Payment',    path: '/ff/transport-payment/new' },
@@ -791,11 +805,13 @@ export const navigationConfig: NavGroup[] = [
     ],
   },
   {
+    // Vendor payment raising deliberately excluded for hub_manager -- only
+    // Transport Payments may be raised manually here; vendor payments come
+    // from BuyPage.tsx's automatic creation on a completed buy.
     title: 'Payments',
     icon: Banknote,
     roles: ['hub_manager'],
     items: [
-      { icon: Plus,        label: 'New Vendor Payment',    path: '/ff/vendor-payment/new' },
       { icon: Truck,       label: 'New Transport Payment', path: '/ff/transport-payment/new' },
       { icon: History,     label: 'My Submitted Payments', path: '/my-submitted-payments' },
     ],
