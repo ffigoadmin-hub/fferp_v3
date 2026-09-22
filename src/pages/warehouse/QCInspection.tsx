@@ -654,7 +654,11 @@ export default function QCInspection() {
             ref={fileInputRef}
             type="file"
             accept="image/*"
-            multiple
+            // No `multiple` here on purpose: pairing it with `capture` makes most
+            // mobile browsers fall back to a generic upload/gallery chooser instead
+            // of launching the camera directly. handlePhotoChange already appends
+            // to the existing photos array, so "Add Photo" tapped repeatedly still
+            // builds up to 5 photos -- one camera capture at a time.
             capture="environment"
             onChange={handlePhotoChange}
             className="hidden"
