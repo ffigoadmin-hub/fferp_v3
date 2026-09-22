@@ -56,9 +56,11 @@ export default function WarehouseDashboard() {
   const { data: inventory = [] } = useQuery({
     queryKey: ['inventory-snapshot', (user as any)?.hub_id],
     queryFn: async () => {
+      // sku_code isn't a live column on products (see QCInspection.tsx) --
+      // embedding it here was making this whole query fail on every load.
       const query = supabase
         .from('inventory')
-        .select('*, product:products(name, unit, sku_code)')
+        .select('*, product:products(name, unit)')
         .order('quantity', { ascending: false })
         .limit(20);
 
@@ -66,7 +68,8 @@ export default function WarehouseDashboard() {
         query.eq('hub_id', (user as any).hub_id);
       }
 
-      const { data } = await query;
+      const { data, error } = await query;
+      if (error) throw error;
       return data ?? [];
     },
   });
@@ -229,7 +232,6 @@ export default function WarehouseDashboard() {
                     <div className="flex items-center justify-between">
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-slate-700 truncate">{item.product?.name}</p>
-                        <p className="text-[10px] font-medium text-slate-400 uppercase tracking-tighter">{item.product?.sku_code}</p>
                       </div>
                       <div className="text-right">
                         <p className={cn('text-xs font-black', isLow ? 'text-red-600' : 'text-slate-800')}>

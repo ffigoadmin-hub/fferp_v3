@@ -106,7 +106,12 @@ export default function QCInspection() {
   const { data: products = [] } = useQuery({
     queryKey: ['products'],
     queryFn: async () => {
-      const { data } = await supabase.from('products').select('id,name,sku_code').eq('is_active', true).order('name');
+      // sku_code isn't a live column on products (confirmed by every other page in
+      // this app selecting name/category/unit/grade_a_price but never sku_code) —
+      // selecting it here was throwing a PostgREST error on every load, and since
+      // the error was never checked, the dropdown just silently rendered empty.
+      const { data, error } = await supabase.from('products').select('id,name,unit').eq('is_active', true).order('name');
+      if (error) { toast.error(`Failed to load products: ${error.message}`); throw error; }
       return data ?? [];
     },
   });
@@ -114,9 +119,34 @@ export default function QCInspection() {
   const { data: vendors = [] } = useQuery({
     queryKey: ['vendors'],
     queryFn: async () => {
-      const { data } = await supabase.from('vendors').select('id,name').eq('is_active', true).order('name');
+      const { data, error } = await supabase.from('vendors').select('id,name').eq('is_active', true).order('name');
+      if (error) { toast.error(`Failed to load vendors: ${error.message}`); throw error; }
       return data ?? [];
     },
+  });
+
+  const [addingProduct, setAddingProduct] = useState(false);
+  const [newProductName, setNewProductName] = useState('');
+
+  const createProduct = useMutation({
+    mutationFn: async (name: string) => {
+      const { data, error } = await supabase
+        .from('products')
+        .insert({ name: name.trim(), unit: 'kg', is_active: true })
+        .select('id,name,unit')
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (created) => {
+      queryClient.setQueryData(['products'], (prev: any[] = []) =>
+        [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setValue('product_id', created.id);
+      setAddingProduct(false);
+      setNewProductName('');
+      toast.success(`Added "${created.name}" — selected for this inspection`);
+    },
+    onError: (e: any) => toast.error(`Failed to add product: ${e.message}`),
   });
 
   // PO Items from transit record's PO
@@ -377,13 +407,42 @@ export default function QCInspection() {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Product *</label>
               <select {...register('product_id', { required: true })}
+                onChange={e => { if (e.target.value === '__add_new__') { setAddingProduct(true); setValue('product_id', ''); } }}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
                 <option value="">Select product</option>
                 {(products as any[]).map((p: any) => (
-                  <option key={p.id} value={p.id}>{p.name} ({p.sku_code})</option>
+                  <option key={p.id} value={p.id}>{p.name}{p.unit ? ` (${p.unit})` : ''}</option>
                 ))}
+                <option value="__add_new__">+ Add new product…</option>
               </select>
               {errors.product_id && <p className="text-xs text-red-500 mt-1">Required</p>}
+              {addingProduct && (
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="text"
+                    autoFocus
+                    value={newProductName}
+                    onChange={e => setNewProductName(e.target.value)}
+                    placeholder="New product name"
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                  <button
+                    type="button"
+                    disabled={!newProductName.trim() || createProduct.isPending}
+                    onClick={() => createProduct.mutate(newProductName)}
+                    className="px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-700 disabled:opacity-40"
+                  >
+                    {createProduct.isPending ? 'Adding…' : 'Add'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAddingProduct(false); setNewProductName(''); }}
+                    className="px-2 py-1.5 rounded-lg text-gray-400 hover:text-gray-600 text-xs"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Vendor *</label>
