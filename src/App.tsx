@@ -901,7 +901,10 @@ const AppRoutes = () => {
       <Route path="/ff-operations/payment-approvals"  element={<ProtectedRoute allowedRoles={['ff_operations_manager','admin']}><FFPaymentApprovals /></ProtectedRoute>} />
       <Route path="/ff-operations/vendor-bulk-payment" element={<ProtectedRoute allowedRoles={['ff_operations_manager','admin']}><VendorBulkPaymentPage /></ProtectedRoute>} />
       {/* Phase 4: Payment submission forms */}
-      <Route path="/ff/vendor-payment/new"    element={<ProtectedRoute allowedRoles={['hub_manager','shift_employee','purchase_manager','purchase_head','ff_operations_manager','admin']}><FFVendorPaymentForm /></ProtectedRoute>} />
+      {/* hub_manager and shift_employee (purchase executive) deliberately excluded here --
+          they may only raise Transport Payments manually; their vendor payments come
+          exclusively from BuyPage.tsx's automatic creation on a completed buy, not this form. */}
+      <Route path="/ff/vendor-payment/new"    element={<ProtectedRoute allowedRoles={['purchase_manager','purchase_head','ff_operations_manager','admin']}><FFVendorPaymentForm /></ProtectedRoute>} />
       <Route path="/ff/transport-payment/new" element={<ProtectedRoute allowedRoles={['hub_manager','shift_employee','purchase_manager','purchase_head','ff_operations_manager','admin']}><FFTransportPaymentForm /></ProtectedRoute>} />
       {/* Phase 5: FF Payments Report */}
       <Route path="/reports/ff-payments" element={<ProtectedRoute allowedRoles={['admin','ceo','gm','l1_manager','auditor','ff_operations_manager','accounts']}><FFPaymentsReport /></ProtectedRoute>} />
