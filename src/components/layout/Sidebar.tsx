@@ -504,6 +504,7 @@ export const navigationConfig: NavGroup[] = [
         children: [
           { label: 'Warehouse Dashboard', path: '/warehouse' },
           { label: 'QC Inspection',       path: '/warehouse/qc' },
+          { label: 'Damage / Wastage Entry', path: '/warehouse/damage' },
           { label: 'QC Rejections',       path: '/warehouse/qc-rejections' },
           { label: 'Inventory',           path: '/warehouse/inventory' },
           { label: '📦 Smart Inventory',  path: '/ff-operations/inventory' },
@@ -784,6 +785,7 @@ export const navigationConfig: NavGroup[] = [
       { icon: ClipboardCheck,  label: 'PO Assignment',       path: '/warehouse/po-assignment' },
       { icon: History,         label: 'PO History',          path: '/warehouse/po-history' },
       { icon: PackageCheck,    label: 'QC Inspection',       path: '/warehouse/qc' },
+      { icon: AlertTriangle,   label: 'Damage / Wastage Entry', path: '/warehouse/damage' },
       { icon: FileText,        label: 'QC Rejections',       path: '/warehouse/qc-rejections' },
       { icon: RotateCcw,       label: 'Returns',             path: '/warehouse/returns' },
     ],
