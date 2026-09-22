@@ -9,6 +9,15 @@ import {
   Camera, CheckCircle2, XCircle, AlertTriangle, Scale,
   ClipboardCheck, ChevronDown, ChevronUp, RefreshCw, X, Image,
 } from 'lucide-react';
+import WebcamCaptureModal from '@/components/WebcamCaptureModal';
+
+// input[type=file][capture] only opens a real camera on mobile -- desktop
+// browsers ignore `capture` entirely and show the OS file picker. Coarse
+// pointer (touch, no hover) is the standard feature-detect for "this is a
+// touchscreen device", so mobile keeps using its native-camera file input
+// (already correct there) while desktop gets the WebcamCaptureModal instead.
+const isTouchDevice = () =>
+  typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
 
 type QCGrade = 'A' | 'B' | 'C' | 'D';
 
@@ -79,6 +88,7 @@ export default function QCInspection() {
   const [photoPreviewUrls, setPhotoPreviewUrls]  = useState<string[]>([]);
   const [uploadingPhotos, setUploadingPhotos]    = useState(false);
   const [showChecklist, setShowChecklist]        = useState(true);
+  const [showWebcam, setShowWebcam]              = useState(false);
 
   // Pre-fill from URL params (coming from transit record detail)
   const preTransitId = searchParams.get('transit_id') ?? '';
@@ -166,10 +176,19 @@ export default function QCInspection() {
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
+    addPhotos(files);
+  };
+
+  const addPhotos = (files: File[]) => {
     const newPhotos = [...photos, ...files].slice(0, 5); // max 5
     setPhotos(newPhotos);
     const urls = newPhotos.map(f => URL.createObjectURL(f));
     setPhotoPreviewUrls(urls);
+  };
+
+  const openPhotoCapture = () => {
+    if (isTouchDevice()) fileInputRef.current?.click();
+    else setShowWebcam(true);
   };
 
   const removePhoto = (idx: number) => {
@@ -643,7 +662,7 @@ export default function QCInspection() {
             {photos.length < 5 && (
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={openPhotoCapture}
                 className="flex items-center gap-1 text-xs text-blue-600 hover:underline font-medium"
               >
                 <Image className="h-3.5 w-3.5" /> Add Photo
@@ -658,15 +677,22 @@ export default function QCInspection() {
             // mobile browsers fall back to a generic upload/gallery chooser instead
             // of launching the camera directly. handlePhotoChange already appends
             // to the existing photos array, so "Add Photo" tapped repeatedly still
-            // builds up to 5 photos -- one camera capture at a time.
+            // builds up to 5 photos -- one camera capture at a time. This input is
+            // only ever triggered on touch devices (see openPhotoCapture) -- desktop
+            // uses WebcamCaptureModal instead, since capture is silently ignored there.
             capture="environment"
             onChange={handlePhotoChange}
             className="hidden"
           />
+          <WebcamCaptureModal
+            open={showWebcam}
+            onClose={() => setShowWebcam(false)}
+            onCapture={file => addPhotos([file])}
+          />
           {photoPreviewUrls.length === 0 ? (
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={openPhotoCapture}
               className="w-full border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:border-gray-300 transition-colors"
             >
               <Camera className="h-8 w-8 text-gray-300 mx-auto mb-1" />
