@@ -35,6 +35,7 @@ const WarehouseDashboard = lazy(() => import('./pages/warehouse/WarehouseDashboa
 const QCInspection = lazy(() => import('./pages/warehouse/QCInspection'));
 const InventoryDashboard = lazy(() => import('./pages/warehouse/InventoryDashboard'));
 const DailyStockPage = lazy(() => import('./pages/warehouse/DailyStockPage'));
+const DamageEntryPage = lazy(() => import('./pages/warehouse/DamageEntryPage'));
 const ReturnsDashboard = lazy(() => import('./pages/warehouse/ReturnsDashboard'));
 const QCRejections = lazy(() => import('./pages/warehouse/QCRejections'));
 const POAssignment = lazy(() => import('./pages/warehouse/POAssignment'));
@@ -822,6 +823,7 @@ const AppRoutes = () => {
       {/* Warehouse / QC Module — hub_manager + qc_manager + warehouse_manager */}
       <Route path="/warehouse" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager', 'qc_manager', 'warehouse_manager']}><WarehouseDashboard /></ProtectedRoute>} />
       <Route path="/warehouse/qc" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager', 'qc_manager', 'warehouse_manager']}><QCInspection /></ProtectedRoute>} />
+      <Route path="/warehouse/damage" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager', 'qc_manager', 'warehouse_manager']}><DamageEntryPage /></ProtectedRoute>} />
       <Route path="/warehouse/inventory" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager', 'qc_manager', 'warehouse_manager']}><InventoryDashboard /></ProtectedRoute>} />
       <Route path="/warehouse/daily-stock" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager']}><DailyStockPage /></ProtectedRoute>} />
       <Route path="/warehouse/returns" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager', 'qc_manager', 'warehouse_manager']}><ReturnsDashboard /></ProtectedRoute>} />
