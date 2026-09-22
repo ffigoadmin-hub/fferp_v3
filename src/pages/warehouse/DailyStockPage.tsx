@@ -1,12 +1,16 @@
 // @ts-nocheck   ← daily_stock_counts is missing from types.ts (see fferp-database)
-import { useState, useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import { toast } from 'sonner';
-import { Building2, Loader2, RefreshCw, Save, ClipboardList, History } from 'lucide-react';
-import { subDays } from 'date-fns';
+import { Building2, Loader2, RefreshCw, Save, ClipboardList, History, Upload } from 'lucide-react';
+import Papa from 'papaparse';
+import * as XLSX from 'xlsx';
+
+const normProductName = (s: string) => (s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const normalizeHeader = (h: string) => (h ?? '').toString().trim().toLowerCase().replace(/\s+/g, '_');
 
 interface StockRow {
   product_id: string;
@@ -28,6 +32,8 @@ export default function DailyStockPage() {
   const [view, setView] = useState<'entry' | 'history'>('entry');
   const [historyFrom, setHistoryFrom] = useState(format(subDays(new Date(), 13), 'yyyy-MM-dd'));
   const [historyTo, setHistoryTo] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
 
   const { data: hubs = [] } = useQuery({
     queryKey: ['hubs-active'],
@@ -112,6 +118,77 @@ export default function DailyStockPage() {
 
   const dirtyRows = useMemo(() => Object.values(rows).filter(r => r.dirty), [rows]);
 
+  // CSV/XLSX bulk fill — matches each row's product name against the active
+  // product list, then fills opening/closing qty into the same on-screen rows
+  // manual typing would, marking them dirty. The existing Save button and its
+  // inventory wiring handle persistence identically either way, so the hub
+  // manager reviews the filled-in numbers on screen before committing, same
+  // as manual entry — nothing writes to the database until Save is pressed.
+  const applyImportRows = (parsed: Record<string, any>[]) => {
+    const byNormName = new Map((products as any[]).map((p: any) => [normProductName(p.name), p]));
+    let matched = 0;
+    const unmatched: string[] = [];
+
+    setRows(prev => {
+      const next = { ...prev };
+      for (const r of parsed) {
+        const nameRaw = String(r.product ?? r.product_name ?? r.item ?? r.item_name ?? '').trim();
+        if (!nameRaw) continue;
+        const product = byNormName.get(normProductName(nameRaw));
+        if (!product) { unmatched.push(nameRaw); continue; }
+
+        const openingRaw = r.opening_qty ?? r.opening ?? '';
+        const closingRaw = r.closing_qty ?? r.closing ?? '';
+        const existing = next[product.id] ?? {
+          product_id: product.id, product_name: product.name, unit: product.unit || 'kg',
+          opening_qty: 0, closing_qty: null, dirty: false,
+        };
+        next[product.id] = {
+          ...existing,
+          opening_qty: openingRaw !== '' ? Number(openingRaw) : existing.opening_qty,
+          closing_qty: closingRaw !== '' ? Number(closingRaw) : existing.closing_qty,
+          dirty: true,
+        };
+        matched++;
+      }
+      return next;
+    });
+
+    if (matched) toast.success(`Filled in ${matched} product${matched > 1 ? 's' : ''} from file — review and Save`);
+    if (unmatched.length) toast.error(`${unmatched.length} product name${unmatched.length > 1 ? 's' : ''} not found: ${unmatched.slice(0, 5).join(', ')}${unmatched.length > 5 ? '…' : ''}`);
+    if (!matched && !unmatched.length) toast.error('No usable rows found — expect columns like "product" and "closing_qty"');
+  };
+
+  const handleImportFile = (file: File) => {
+    if (!hubId) { toast.error('Select a hub first'); return; }
+    setImporting(true);
+    const ext = file.name.split('.').pop()?.toLowerCase();
+
+    if (ext === 'xlsx' || ext === 'xls') {
+      file.arrayBuffer().then(buf => {
+        const wb = XLSX.read(buf, { type: 'array' });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as any[][];
+        const [headerRow, ...dataRows] = raw;
+        const headers = (headerRow ?? []).map((h: any) => normalizeHeader(String(h ?? '')));
+        const parsed = dataRows
+          .filter(r => r.some(c => String(c ?? '').trim() !== ''))
+          .map(r => Object.fromEntries(headers.map((h, i) => [h, r[i] ?? ''])));
+        applyImportRows(parsed);
+        setImporting(false);
+      }).catch(err => { toast.error(err.message || 'Failed to read file'); setImporting(false); });
+      return;
+    }
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: normalizeHeader,
+      complete: (result: any) => { applyImportRows(result.data); setImporting(false); },
+      error: (err: any) => { toast.error(err.message || 'Failed to read file'); setImporting(false); },
+    });
+  };
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!dirtyRows.length) return;
@@ -174,14 +251,32 @@ export default function DailyStockPage() {
           <p className="text-[13px] text-slate-500">Manual opening / closing stock — one entry per product per day</p>
         </div>
         {view === 'entry' && (
-          <button
-            onClick={() => saveMutation.mutate()}
-            disabled={!dirtyRows.length || saveMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save {dirtyRows.length > 0 ? `(${dirtyRows.length})` : ''}
-          </button>
+          <div className="flex items-center gap-2">
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleImportFile(f); e.target.value = ''; }}
+            />
+            <button
+              onClick={() => importInputRef.current?.click()}
+              disabled={!hubId || importing}
+              title='Columns: "product", "opening_qty" (optional), "closing_qty"'
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 text-sm font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              Import CSV/XLSX
+            </button>
+            <button
+              onClick={() => saveMutation.mutate()}
+              disabled={!dirtyRows.length || saveMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save {dirtyRows.length > 0 ? `(${dirtyRows.length})` : ''}
+            </button>
+          </div>
         )}
       </div>
 
