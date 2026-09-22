@@ -57,6 +57,17 @@ export default function DailyStockPage() {
         .eq('stock_date', date);
       if (error) throw error;
 
+      // No count saved for this date yet — prefill Opening Qty from the current
+      // live inventory level (itself last set by yesterday's closing count, or by
+      // QC receiving) instead of always starting at 0, so the hub manager isn't
+      // re-typing the same carried-forward number every morning.
+      const { data: invRows, error: invErr } = await supabase
+        .from('inventory')
+        .select('product_id, quantity')
+        .eq('hub_id', hubId);
+      if (invErr) throw invErr;
+      const inventoryByProduct = new Map((invRows ?? []).map((r: any) => [r.product_id, Number(r.quantity)]));
+
       const existing = new Map((data ?? []).map((r: any) => [r.product_id, r]));
       const merged: Record<string, StockRow> = {};
       for (const p of products) {
@@ -65,7 +76,7 @@ export default function DailyStockPage() {
           product_id: p.id,
           product_name: p.name,
           unit: p.unit || 'kg',
-          opening_qty: found ? Number(found.opening_qty) : 0,
+          opening_qty: found ? Number(found.opening_qty) : (inventoryByProduct.get(p.id) ?? 0),
           closing_qty: found?.closing_qty != null ? Number(found.closing_qty) : null,
           dirty: false,
         };
@@ -97,10 +108,31 @@ export default function DailyStockPage() {
         .from('daily_stock_counts')
         .upsert(payload, { onConflict: 'hub_id,product_id,stock_date' });
       if (error) throw error;
+
+      // A closing count is a physical stock-take -- it becomes the day's true
+      // inventory number (correcting for sales/wastage this app doesn't otherwise
+      // deduct automatically), not just a side log. Rows with no closing_qty yet
+      // (still mid-day) don't touch inventory.
+      const closedRows = dirtyRows.filter(r => r.closing_qty != null);
+      if (closedRows.length) {
+        const invPayload = closedRows.map(r => ({
+          hub_id: hubId,
+          product_id: r.product_id,
+          product_name: r.product_name,
+          unit: r.unit,
+          quantity: r.closing_qty,
+          updated_at: new Date().toISOString(),
+        }));
+        const { error: invErr } = await supabase
+          .from('inventory')
+          .upsert(invPayload, { onConflict: 'hub_id,product_id' });
+        if (invErr) throw new Error(`Stock count saved, but inventory update failed: ${invErr.message}`);
+      }
     },
     onSuccess: () => {
       toast.success(`Saved stock count for ${dirtyRows.length} product${dirtyRows.length > 1 ? 's' : ''}`);
       qc.invalidateQueries({ queryKey: ['daily-stock-counts'] });
+      qc.invalidateQueries({ queryKey: ['inventory'] });
       refetch();
     },
     onError: (e: any) => toast.error(`Failed to save: ${e.message}`),
