@@ -7,6 +7,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { AlertTriangle, Camera, Image, Loader2, X } from 'lucide-react';
+import WebcamCaptureModal from '@/components/WebcamCaptureModal';
+
+// See QCInspection.tsx for why: capture="environment" only opens a real
+// camera on touch devices; desktop needs WebcamCaptureModal instead.
+const isTouchDevice = () =>
+  typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches;
 
 const REASONS = [
   'Damaged in transit',
@@ -44,6 +50,7 @@ export default function DamageEntryPage() {
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const [addingProduct, setAddingProduct] = useState(false);
   const [newProductName, setNewProductName] = useState('');
+  const [showWebcam, setShowWebcam] = useState(false);
 
   const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<DamageFormData>();
 
@@ -83,9 +90,18 @@ export default function DamageEntryPage() {
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (!files.length) return;
+    addPhotos(files);
+  };
+
+  const addPhotos = (files: File[]) => {
     const updated = [...photos, ...files].slice(0, 2); // max 2, matches photo_1_url/photo_2_url
     setPhotos(updated);
     setPhotoPreviewUrls(updated.map(f => URL.createObjectURL(f)));
+  };
+
+  const openPhotoCapture = () => {
+    if (isTouchDevice()) fileInputRef.current?.click();
+    else setShowWebcam(true);
   };
 
   const removePhoto = (idx: number) => {
@@ -230,7 +246,7 @@ export default function DamageEntryPage() {
               <span className="text-xs text-gray-400 font-normal normal-case">({photos.length}/2)</span>
             </h3>
             {photos.length < 2 && (
-              <button type="button" onClick={() => fileInputRef.current?.click()}
+              <button type="button" onClick={openPhotoCapture}
                 className="flex items-center gap-1 text-xs text-blue-600 hover:underline font-medium">
                 <Image className="h-3.5 w-3.5" /> Add Photo
               </button>
@@ -244,8 +260,13 @@ export default function DamageEntryPage() {
             onChange={handlePhotoChange}
             className="hidden"
           />
+          <WebcamCaptureModal
+            open={showWebcam}
+            onClose={() => setShowWebcam(false)}
+            onCapture={file => addPhotos([file])}
+          />
           {photoPreviewUrls.length === 0 ? (
-            <button type="button" onClick={() => fileInputRef.current?.click()}
+            <button type="button" onClick={openPhotoCapture}
               className="w-full border-2 border-dashed border-gray-200 rounded-xl p-6 text-center hover:border-gray-300 transition-colors">
               <Camera className="h-8 w-8 text-gray-300 mx-auto mb-1" />
               <p className="text-sm text-gray-400">Tap to capture photo evidence</p>
