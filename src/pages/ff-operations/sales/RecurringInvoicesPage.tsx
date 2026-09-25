@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import { Plus, Search, RefreshCw, RepeatIcon, Calendar, DollarSign } from 'lucide-react';
+import { Plus, Search, RefreshCw, RepeatIcon, Calendar, DollarSign, PlayCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 const FREQ_LABELS: Record<string, string> = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', quarterly: 'Quarterly', yearly: 'Yearly' };
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
@@ -17,6 +17,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
 
 export default function RecurringInvoicesPage() {
   const { user } = useAuth();
+  const qc = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
@@ -30,6 +31,22 @@ export default function RecurringInvoicesPage() {
       if (error) throw error;
       return data || [];
     },
+  });
+
+  const processDue = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.rpc('acct_process_recurring_invoices');
+      if (error) throw error;
+      return data as any[];
+    },
+    onSuccess: (rows) => {
+      const total = (rows || []).reduce((s, r) => s + Number(r.total_posted || 0), 0);
+      const occ = (rows || []).reduce((s, r) => s + Number(r.occurrences_created || 0), 0);
+      if (occ > 0) toast.success(`Posted ${occ} occurrence(s), ₹${total.toLocaleString('en-IN')} total`);
+      else toast('Nothing due right now');
+      qc.invalidateQueries({ queryKey: ['recurring-invoices'] });
+    },
+    onError: (e: any) => toast.error(e.message || 'Failed to process'),
   });
 
   const filtered = recurring.filter((r: any) => {
@@ -75,6 +92,9 @@ export default function RecurringInvoicesPage() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => refetch()} className="border-zinc-700 text-zinc-300"><RefreshCw className="w-4 h-4 mr-2" />Refresh</Button>
+          <Button variant="outline" size="sm" onClick={() => processDue.mutate()} disabled={processDue.isPending} className="border-emerald-700 text-emerald-400 hover:bg-emerald-950">
+            <PlayCircle className="w-4 h-4 mr-2" />{processDue.isPending ? 'Processing…' : 'Process Due Now'}
+          </Button>
           <Button size="sm" onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-700"><Plus className="w-4 h-4 mr-2" />New Recurring</Button>
         </div>
       </div>
@@ -134,7 +154,7 @@ export default function RecurringInvoicesPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-zinc-800">
-                  {['Customer','Amount','Frequency','Start Date','Description','Status','Actions'].map(h=>(
+                  {['Customer','Amount','Frequency','Next Due','Description','Status','Actions'].map(h=>(
                     <th key={h} className="text-left text-xs text-zinc-500 font-medium px-4 py-3">{h}</th>
                   ))}
                 </tr></thead>
@@ -146,7 +166,7 @@ export default function RecurringInvoicesPage() {
                         <td className="px-4 py-3 text-white">{r.customer_name}</td>
                         <td className="px-4 py-3 text-emerald-400 font-medium">₹{Number(r.amount).toLocaleString()}</td>
                         <td className="px-4 py-3 text-zinc-300 capitalize">{FREQ_LABELS[r.frequency]||r.frequency}</td>
-                        <td className="px-4 py-3 text-zinc-400">{r.start_date}</td>
+                        <td className="px-4 py-3 text-zinc-400">{r.next_due || r.start_date}</td>
                         <td className="px-4 py-3 text-zinc-400 max-w-[180px] truncate">{r.description||'—'}</td>
                         <td className="px-4 py-3"><span className={`text-xs px-2 py-1 rounded-full border ${s.color}`}>{s.label}</span></td>
                         <td className="px-4 py-3">
