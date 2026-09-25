@@ -523,6 +523,7 @@ export const navigationConfig: NavGroup[] = [
           { label: 'Inventory',           path: '/warehouse/inventory' },
           { label: '📦 Smart Inventory',  path: '/ff-operations/inventory' },
           { label: 'Daily Stock Count',   path: '/warehouse/daily-stock' },
+          { label: 'Daily Cash Closing',  path: '/accounts/daily-cash-closing' },
           { label: 'Returns',             path: '/warehouse/returns' },
         ],
       },
@@ -859,6 +860,14 @@ export const navigationConfig: NavGroup[] = [
       { icon: Package, label: 'Inventory Dashboard', path: '/warehouse/inventory' },
       { icon: Boxes,   label: 'Smart Inventory',     path: '/ff-operations/inventory' },
       { icon: ClipboardList, label: 'Daily Stock Count', path: '/warehouse/daily-stock' },
+    ],
+  },
+  {
+    title: 'Cash Management',
+    icon: Wallet,
+    roles: ['hub_manager'],
+    items: [
+      { icon: Wallet, label: 'Daily Cash Closing', path: '/accounts/daily-cash-closing' },
     ],
   },
   {

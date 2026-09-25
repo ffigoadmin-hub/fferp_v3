@@ -288,6 +288,7 @@ const AuditorDashboardPage = lazy(() => import('@/pages/auditor/AuditorDashboard
 const AuditorPaymentAuditPage = lazy(() => import('@/pages/auditor/AuditorPaymentAuditPage'));
 const ChatPage = lazy(() => import('./pages/chat/ChatPage'));
 const PettyCashAuditPage = lazy(() => import('@/pages/accounts/PettyCashAuditPage'));
+const DailyCashClosingPage = lazy(() => import('@/pages/accounts/DailyCashClosingPage'));
 const PettyCashRefillPage = lazy(() => import('@/pages/accounts/PettyCashRefillPage'));
 // Books of Accounts (double-entry ledger — ADD_ACCOUNTS_LEDGER_CORE.sql)
 const ChartOfAccountsPage = lazy(() => import('@/pages/accounts/books/ChartOfAccountsPage'));
@@ -849,6 +850,7 @@ const AppRoutes = () => {
       <Route path="/warehouse/damage" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager', 'qc_manager', 'warehouse_manager']}><DamageEntryPage /></ProtectedRoute>} />
       <Route path="/warehouse/inventory" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager', 'qc_manager', 'warehouse_manager']}><InventoryDashboard /></ProtectedRoute>} />
       <Route path="/warehouse/daily-stock" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager']}><DailyStockPage /></ProtectedRoute>} />
+      <Route path="/accounts/daily-cash-closing" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager']}><DailyCashClosingPage /></ProtectedRoute>} />
       <Route path="/warehouse/returns" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager', 'qc_manager', 'warehouse_manager']}><ReturnsDashboard /></ProtectedRoute>} />
       <Route path="/warehouse/qc-rejections" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager', 'qc_manager', 'warehouse_manager']}><QCRejections /></ProtectedRoute>} />
       <Route path="/warehouse/po-assignment" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager']}><POAssignment /></ProtectedRoute>} />
