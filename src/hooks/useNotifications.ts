@@ -179,6 +179,10 @@ export function useNotifications() {
     else if (notification.type === 'announcement') {
       path = '/announcements';
     }
+    // Asset compliance
+    else if (notification.type === 'asset_expiry') {
+      path = '/admin/vehicles';
+    }
 
     // 2. Mark as read
     markAsRead(notification.id);

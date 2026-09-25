@@ -292,6 +292,9 @@ const DailyCashClosingPage = lazy(() => import('@/pages/accounts/DailyCashClosin
 const FixedAssetRegisterPage = lazy(() => import('@/pages/accounts/FixedAssetRegisterPage'));
 const VehicleManagementPage = lazy(() => import('@/pages/admin/VehicleManagementPage'));
 const CrateTrackingPage = lazy(() => import('@/pages/admin/CrateTrackingPage'));
+const AssetTransfersPage = lazy(() => import('@/pages/admin/AssetTransfersPage'));
+const AssetVerificationPage = lazy(() => import('@/pages/admin/AssetVerificationPage'));
+const AssetLookupPage = lazy(() => import('@/pages/admin/AssetLookupPage'));
 const PettyCashRefillPage = lazy(() => import('@/pages/accounts/PettyCashRefillPage'));
 // Books of Accounts (double-entry ledger — ADD_ACCOUNTS_LEDGER_CORE.sql)
 const ChartOfAccountsPage = lazy(() => import('@/pages/accounts/books/ChartOfAccountsPage'));
@@ -728,6 +731,9 @@ const AppRoutes = () => {
       <Route path="/accounts/fixed-assets" element={<ProtectedRoute allowedRoles={[...BOOKS_READ_ROLES, 'ff_operations_manager', 'gm']}><FixedAssetRegisterPage /></ProtectedRoute>} />
       <Route path="/admin/vehicles" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'logistics']}><VehicleManagementPage /></ProtectedRoute>} />
       <Route path="/admin/crates" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'logistics']}><CrateTrackingPage /></ProtectedRoute>} />
+      <Route path="/admin/asset-transfers" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'logistics']}><AssetTransfersPage /></ProtectedRoute>} />
+      <Route path="/admin/asset-verification" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'logistics']}><AssetVerificationPage /></ProtectedRoute>} />
+      <Route path="/assets/lookup/:id" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'logistics']}><AssetLookupPage /></ProtectedRoute>} />
 
       <Route path="/accounts/rentals/payments" element={<ProtectedRoute allowedRoles={['accounts', 'admin']}><AccountsRentalPaymentPage /></ProtectedRoute>} />
 

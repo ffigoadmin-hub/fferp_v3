@@ -83,6 +83,7 @@ import {
   Hourglass,
   DollarSign,
   RefreshCw,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 export interface NavChild {
@@ -614,6 +615,8 @@ export const navigationConfig: NavGroup[] = [
       { icon: Building2, label: 'Fixed Asset Register', path: '/accounts/fixed-assets' },
       { icon: Truck,     label: 'Vehicle Management',   path: '/admin/vehicles' },
       { icon: Package,   label: 'Crate Tracking',        path: '/admin/crates' },
+      { icon: ArrowRightLeft, label: 'Asset Transfers',  path: '/admin/asset-transfers' },
+      { icon: ClipboardCheck, label: 'Physical Verification', path: '/admin/asset-verification' },
     ],
   },
 
