@@ -605,6 +605,17 @@ export const navigationConfig: NavGroup[] = [
     ],
   },
 
+  // ── Asset Management — financial register + operational fleet compliance ──────
+  {
+    title: 'Asset Management',
+    icon: Building2,
+    roles: ['admin', 'ceo', 'gm', 'ff_operations_manager'],
+    items: [
+      { icon: Building2, label: 'Fixed Asset Register', path: '/accounts/fixed-assets' },
+      { icon: Truck,     label: 'Vehicle Management',   path: '/admin/vehicles' },
+    ],
+  },
+
   // ── Purchase Head ────────────────────────────────────────────────────────────
   {
     title: 'Command Center',

@@ -14,8 +14,9 @@ interface Asset {
   id: string; asset_name: string; asset_code: string | null; account_id: string;
   purchase_date: string; purchase_cost: number; salvage_value: number; useful_life_years: number;
   accumulated_depreciation: number; status: 'active' | 'disposed'; hub_id: string | null;
-  disposal_date: string | null; disposal_value: number | null;
+  assigned_to: string | null; disposal_date: string | null; disposal_value: number | null;
 }
+interface Staff { id: string; name: string }
 
 const inr = (n: number) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 const emptyForm = { asset_name: '', asset_code: '', account_id: '', hub_id: '', purchase_date: format(new Date(), 'yyyy-MM-dd'), purchase_cost: '', salvage_value: '0', useful_life_years: '5', notes: '' };
@@ -45,6 +46,37 @@ export default function FixedAssetRegisterPage() {
     },
   });
 
+  const { data: staff = [] } = useQuery({
+    queryKey: ['staff-for-asset-assignment'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('profiles').select('id, name').not('name', 'is', null).order('name');
+      if (error) throw error;
+      return (data || []) as Staff[];
+    },
+  });
+
+  const [reassignTarget, setReassignTarget] = useState<Asset | null>(null);
+  const [reassignHub, setReassignHub] = useState('');
+  const [reassignStaff, setReassignStaff] = useState('');
+
+  const openReassign = (a: Asset) => {
+    setReassignTarget(a);
+    setReassignHub(a.hub_id || '');
+    setReassignStaff(a.assigned_to || '');
+  };
+
+  const reassignMutation = useMutation({
+    mutationFn: async () => {
+      if (!reassignTarget) return;
+      const { error } = await supabase.from('fixed_assets')
+        .update({ hub_id: reassignHub || null, assigned_to: reassignStaff || null } as any)
+        .eq('id', reassignTarget.id);
+      if (error) throw error;
+    },
+    onSuccess: () => { toast.success('Custody updated'); setReassignTarget(null); refetch(); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
   const { data: assets = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: ['fixed-assets'],
     queryFn: async () => {
@@ -64,6 +96,8 @@ export default function FixedAssetRegisterPage() {
   });
 
   const accountName = (id: string) => accounts.find(a => a.id === id)?.name ?? '—';
+  const staffName = (id: string | null) => (id ? staff.find(s => s.id === id)?.name ?? '—' : '—');
+  const hubName = (id: string | null) => (id ? (hubs as any[]).find(h => h.id === id)?.name ?? '—' : '—');
 
   const totals = useMemo(() => {
     const activeAssets = assets.filter(a => a.status === 'active');
@@ -218,7 +252,7 @@ export default function FixedAssetRegisterPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-slate-100 bg-slate-50">
-                  {['Asset', 'Category', 'Purchase Date', 'Cost', 'Accum. Depreciation', 'Net Book Value', 'Status', ''].map(h => (
+                  {['Asset', 'Category', 'Custody', 'Purchase Date', 'Cost', 'Accum. Depreciation', 'Net Book Value', 'Status', ''].map(h => (
                     <th key={h} className="text-left text-xs text-slate-500 font-medium px-4 py-3">{h}</th>
                   ))}
                 </tr></thead>
@@ -229,6 +263,10 @@ export default function FixedAssetRegisterPage() {
                       <tr key={a.id} className="border-b border-slate-50 hover:bg-slate-50">
                         <td className="px-4 py-3 font-medium text-slate-800">{a.asset_name}{a.asset_code ? <span className="text-slate-400 font-normal"> · {a.asset_code}</span> : null}</td>
                         <td className="px-4 py-3 text-slate-500">{accountName(a.account_id)}</td>
+                        <td className="px-4 py-3 text-slate-500">
+                          <p className="text-xs">{hubName(a.hub_id)}</p>
+                          <p className="text-xs text-slate-400">{staffName(a.assigned_to)}</p>
+                        </td>
                         <td className="px-4 py-3 text-slate-500">{format(new Date(a.purchase_date), 'd MMM yyyy')}</td>
                         <td className="px-4 py-3 text-slate-700">{inr(a.purchase_cost)}</td>
                         <td className="px-4 py-3 text-red-600">{inr(a.accumulated_depreciation)}</td>
@@ -238,11 +276,16 @@ export default function FixedAssetRegisterPage() {
                             {a.status}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 space-x-1 whitespace-nowrap">
                           {a.status === 'active' && (
-                            <Button variant="ghost" size="sm" className="text-xs h-7 px-2 text-slate-500 hover:text-red-600" onClick={() => disposeAsset.mutate(a.id)}>
-                              <Archive className="h-3.5 w-3.5 mr-1" /> Dispose
-                            </Button>
+                            <>
+                              <Button variant="ghost" size="sm" className="text-xs h-7 px-2 text-slate-500 hover:text-blue-600" onClick={() => openReassign(a)}>
+                                Reassign
+                              </Button>
+                              <Button variant="ghost" size="sm" className="text-xs h-7 px-2 text-slate-500 hover:text-red-600" onClick={() => disposeAsset.mutate(a.id)}>
+                                <Archive className="h-3.5 w-3.5 mr-1" /> Dispose
+                              </Button>
+                            </>
                           )}
                         </td>
                       </tr>
@@ -254,6 +297,36 @@ export default function FixedAssetRegisterPage() {
           )}
         </CardContent>
       </Card>
+
+      {reassignTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setReassignTarget(null)}>
+          <Card className="w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+            <CardHeader><CardTitle className="text-base">Reassign · {reassignTarget.asset_name}</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">Hub / Location</label>
+                <select value={reassignHub} onChange={e => setReassignHub(e.target.value)} className="w-full h-9 rounded-md border border-slate-200 px-3 text-sm">
+                  <option value="">Not hub-specific</option>
+                  {(hubs as any[]).map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 mb-1 block">Assigned To (staff)</label>
+                <select value={reassignStaff} onChange={e => setReassignStaff(e.target.value)} className="w-full h-9 rounded-md border border-slate-200 px-3 text-sm">
+                  <option value="">Unassigned</option>
+                  {staff.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" size="sm" onClick={() => setReassignTarget(null)}>Cancel</Button>
+                <Button size="sm" onClick={() => reassignMutation.mutate()} disabled={reassignMutation.isPending} className="bg-blue-600 hover:bg-blue-700">
+                  {reassignMutation.isPending ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
