@@ -132,6 +132,13 @@ export default function DamageEntryPage() {
       const product = (products as any[]).find(p => p.id === form.product_id);
       const photoUrls = await uploadPhotos();
 
+      // Inventory is deducted automatically by the inv_wastage_before_trg trigger on
+      // wastage_entries (ADD_WAREHOUSE_INVENTORY_WASTAGE.sql, added 2026-09-25) whenever
+      // product_id + quantity_kg are set on the row -- it also handles edits/deletes
+      // correctly and never lets stock go negative. This used to also call
+      // decrement_inventory() directly, which double-deducted every entry once the
+      // trigger was added; removed in favour of letting the DB trigger be the single
+      // source of truth for the stock movement.
       const { error } = await supabase.from('wastage_entries').insert({
         hub_id: hubId,
         hub_name: hubName,
@@ -146,14 +153,6 @@ export default function DamageEntryPage() {
         submitted_by: user!.id,
       });
       if (error) throw error;
-
-      // Damage removes stock -- mirrors QC's increment_inventory on the way in.
-      const { error: invErr } = await supabase.rpc('decrement_inventory', {
-        p_hub_id: hubId,
-        p_product_id: form.product_id,
-        p_qty: form.quantity_kg,
-      });
-      if (invErr) throw new Error(`Entry saved, but inventory update failed: ${invErr.message}`);
     },
     onSuccess: () => {
       toast.success('Damage entry recorded — inventory updated');
