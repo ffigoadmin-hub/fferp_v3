@@ -1,6 +1,7 @@
 // @ts-nocheck   ← wastage_entries is missing from types.ts (see fferp-database)
 import { useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,7 +32,10 @@ interface DamageFormData {
 
 export default function DamageEntryPage() {
   const { user } = useAuth();
-  const hubId = (user as any)?.hub_id ?? null;
+  const [searchParams] = useSearchParams();
+  // Ops/admin roles have no personal hub_id — HubManagementPage's per-hub "Wastage" quick
+  // action passes ?hub=<id> so they can log a damage entry for a specific hub they're viewing.
+  const hubId = searchParams.get('hub') || (user as any)?.hub_id || null;
   const queryClient = useQueryClient();
 
   const { data: hub } = useQuery({

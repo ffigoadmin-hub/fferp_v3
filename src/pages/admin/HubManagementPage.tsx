@@ -537,7 +537,7 @@ function HubDetail({ hubId, hubs, isLoading }: { hubId: string; hubs: Hub[]; isL
           {[
             { label: 'QC Inspection', icon: PackageCheck, path: '/warehouse/qc', color: '#0E8A6B' },
             { label: 'Inventory', icon: Package, path: `/warehouse/inventory?hub=${hub.id}`, color: '#38BDF8' },
-            { label: 'Wastage', icon: PackageCheck, path: `/warehouse/wastage?hub=${hub.id}`, color: '#DC2626' },
+            { label: 'Wastage', icon: PackageCheck, path: `/warehouse/damage?hub=${hub.id}`, color: '#DC2626' },
             { label: 'Dispatch', icon: Truck, path: '/logistics', color: '#D97706' },
             { label: 'Reports', icon: BarChart3, path: '/reports', color: '#A78BFA' },
           ].map((a, i) => (
