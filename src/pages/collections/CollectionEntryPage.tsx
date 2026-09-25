@@ -25,10 +25,43 @@ const EMPTY_MANUAL = {
   paymentMode: 'cash', upiRef: '', chequeNo: '', notes: '',
 };
 
+const APPROVER_ROLES = ['admin', 'ceo', 'gm', 'accounts'];
+
 export default function CollectionEntryPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const today = format(new Date(), 'yyyy-MM-dd');
+  const isApprover = APPROVER_ROLES.includes((user as any)?.role);
+
+  // Pending verification (approvers only)
+  const { data: pendingVerification = [] } = useQuery({
+    queryKey: ['collections-pending-verification'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cash_collections')
+        .select('*')
+        .is('verified_at', null)
+        .order('created_at', { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: isApprover,
+  });
+
+  const verifyCollection = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('cash_collections')
+        .update({ verified_by: user?.id, verified_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Collection verified — posted to the books');
+      qc.invalidateQueries({ queryKey: ['collections-pending-verification'] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
 
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -73,7 +106,7 @@ export default function CollectionEntryPage() {
       const { data } = await supabase
         .from('cash_collections')
         .select('*')
-        .eq('collected_by', user?.id)
+        .eq('collector_id', user?.id)
         .eq('collection_date', today)
         .order('created_at', { ascending: false });
       return data ?? [];
@@ -115,7 +148,6 @@ export default function CollectionEntryPage() {
         cheque_number:    paymentMode === 'cheque' ? chequeNo : null,
         collection_date:  today,
         hub_id:           selectedOrder.hub_id || null,
-        collected_by:     user?.id,
         notes:            notes || null,
         status:           amt >= selectedOrder.netAmount ? 'collected' : 'shortfall',
       });
@@ -149,7 +181,6 @@ export default function CollectionEntryPage() {
         upi_reference:    manual.paymentMode === 'upi' ? manual.upiRef : null,
         cheque_number:    manual.paymentMode === 'cheque' ? manual.chequeNo : null,
         collection_date:  today,
-        collected_by:     user?.id,
         notes:            manual.notes || null,
         status:           collected >= orderAmt ? 'collected' : 'shortfall',
       });
@@ -191,6 +222,39 @@ export default function CollectionEntryPage() {
           </button>
         </div>
       </div>
+
+      {/* Pending Verification (approvers only) */}
+      {isApprover && (
+        <div className="bg-white rounded-2xl border border-amber-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-amber-100 bg-amber-50 flex items-center justify-between">
+            <p className="text-sm font-black text-amber-900 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-amber-600" /> Pending Verification
+            </p>
+            <span className="text-xs text-amber-600 font-bold">{pendingVerification.length}</span>
+          </div>
+          {pendingVerification.length === 0 ? (
+            <p className="text-center text-sm text-gray-400 py-6">Nothing waiting on verification</p>
+          ) : (
+            <div className="divide-y divide-gray-50 max-h-64 overflow-y-auto">
+              {(pendingVerification as any[]).map((c: any) => (
+                <div key={c.id} className="px-5 py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-800 truncate">{c.shop_name || c.customer_name}</p>
+                    <p className="text-[11px] text-gray-400">{c.collection_date} · {c.payment_mode?.toUpperCase()} · {c.status}</p>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <p className="font-black text-gray-900 text-sm">₹{Number(c.collected_amount).toLocaleString('en-IN')}</p>
+                    <button onClick={() => verifyCollection.mutate(c.id)} disabled={verifyCollection.isPending}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold disabled:opacity-50">
+                      Verify
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Main: Search from orders */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

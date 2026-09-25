@@ -33,7 +33,7 @@ export default function CollectionDashboardPage() {
         .from('cash_collections')
         .select(`
           *,
-          collector:profiles!cash_collections_collected_by_fkey(name, role),
+          collector:profiles!cash_collections_collector_id_fkey(name, role),
           hub:hubs(name)
         `)
         .eq('collection_date', date)
