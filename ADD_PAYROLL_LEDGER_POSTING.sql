@@ -24,10 +24,8 @@
 --     Dr Salaries Payable     sum(final_salary)
 --     Cr Bank
 --
--- NOTE on other_deduction: salary_batch_employees.other_deduction is deliberately NOT modelled
--- here — it's ambiguous (could be an advance recovery, a fixed charge, etc.) and no employee-
--- advances ledger account exists yet. final_salary is assumed to already net it out correctly;
--- if that's wrong once real payroll runs happen, this needs a follow-up, not a guess now.
+-- other_deduction is credited to Other Income (treated as a recovery from the employee — advance/
+-- loan/canteen etc.) so gross expense always ties to net_pay + every deduction actually taken.
 --
 -- New accounts: 2170 PF Payable, 2180 ESI Payable.
 --
@@ -48,7 +46,7 @@ CREATE OR REPLACE FUNCTION public.acct_sync_salary_batch(p_id uuid) RETURNS text
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   b public.salary_batches; v_start date;
-  v_gross numeric; v_pf numeric; v_esi numeric; v_tds numeric; v_net numeric;
+  v_gross numeric; v_pf numeric; v_esi numeric; v_tds numeric; v_other numeric; v_net numeric;
   v_expense jsonb; v_payment jsonb; a text; c text;
 BEGIN
   SELECT * INTO b FROM public.salary_batches WHERE id = p_id;
@@ -56,11 +54,14 @@ BEGIN
 
   -- final_salary is nullable (only locked in at a later stage); net_pay is always populated
   -- from creation, so it's the reliable figure whenever final_salary hasn't been set yet.
+  -- other_deduction is credited to Other Income (a recovery from the employee — advance/loan/
+  -- canteen etc.) so gross expense always ties out to net_pay + every deduction taken; leaving
+  -- it out would silently understate the expense whenever it's non-zero.
   SELECT coalesce(sum(pf_amount), 0), coalesce(sum(esi_amount), 0), coalesce(sum(tds_amount), 0),
-         coalesce(sum(coalesce(final_salary, net_pay)), 0)
-  INTO v_pf, v_esi, v_tds, v_net
+         coalesce(sum(other_deduction), 0), coalesce(sum(coalesce(final_salary, net_pay)), 0)
+  INTO v_pf, v_esi, v_tds, v_other, v_net
   FROM public.salary_batch_employees WHERE batch_id = p_id;
-  v_gross := round(v_net + v_pf + v_esi + v_tds, 2);
+  v_gross := round(v_net + v_pf + v_esi + v_tds + v_other, 2);
 
   IF b.id IS NOT NULL AND b.status NOT IN ('Draft', 'Auditor Rejected', 'CEO Rejected') AND v_gross > 0
      AND coalesce(b.created_at::date, current_date) >= v_start THEN
@@ -73,6 +74,7 @@ BEGIN
         jsonb_build_object('system_key','pf_payable', 'credit', round(v_pf,2)),
         jsonb_build_object('system_key','esi_payable', 'credit', round(v_esi,2)),
         jsonb_build_object('system_key','tds_payable', 'credit', round(v_tds,2)),
+        jsonb_build_object('system_key','other_income', 'credit', round(v_other,2)),
         jsonb_build_object('system_key','salaries_payable', 'credit', round(v_net,2))));
   END IF;
 
