@@ -873,6 +873,8 @@ const AppRoutes = () => {
       <Route path="/sales/customers" element={<ProtectedRoute allowedRoles={OPS_ROLES}><CustomerManagement /></ProtectedRoute>} />
       <Route path="/sales/collections" element={<ProtectedRoute allowedRoles={OPS_ROLES}><CollectionManagement /></ProtectedRoute>} />
       <Route path="/sales/targets" element={<ProtectedRoute allowedRoles={OPS_ROLES}><SalesTargets /></ProtectedRoute>} />
+      <Route path="/collections/entry"     element={<ProtectedRoute allowedRoles={['field_executive', 'bde', 'tele_caller', ...OPS_ROLES]}><CollectionEntryPage /></ProtectedRoute>} />
+      <Route path="/collections/dashboard" element={<ProtectedRoute allowedRoles={['field_executive', 'bde', 'tele_caller', ...OPS_ROLES]}><CollectionDashboardPage /></ProtectedRoute>} />
 
       {/* Tele-Caller Module */}
       <Route path="/tele-caller" element={<ProtectedRoute allowedRoles={['tele_caller', 'admin', 'back_office', ...OPS_ROLES]}><TeleCallerDashboard /></ProtectedRoute>} />

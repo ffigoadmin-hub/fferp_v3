@@ -479,6 +479,8 @@ export const navigationConfig: NavGroup[] = [
           { label: 'Payments Received', path: '/sales/payments-received' },
           { label: 'Credit Notes',      path: '/sales/credit-notes' },
           { label: 'Recurring Invoices', path: '/sales/recurring-invoices' },
+          { label: 'Collection Entry',      path: '/collections/entry' },
+          { label: 'Collection Dashboard',  path: '/collections/dashboard' },
         ],
       },
     ],
@@ -711,6 +713,8 @@ export const navigationConfig: NavGroup[] = [
       { icon: DollarSign,      label: 'Payments Received', path: '/sales/payments-received' },
       { icon: FileText,        label: 'Credit Notes',      path: '/sales/credit-notes' },
       { icon: RefreshCw,       label: 'Recurring Invoices', path: '/sales/recurring-invoices' },
+      { icon: Wallet,          label: 'Collection Entry',     path: '/collections/entry' },
+      { icon: BarChart3,       label: 'Collection Dashboard', path: '/collections/dashboard' },
     ],
   },
   {
