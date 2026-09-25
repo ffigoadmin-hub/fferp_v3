@@ -599,6 +599,8 @@ export const navigationConfig: NavGroup[] = [
       { icon: PieChart,     label: 'P&L / Balance Sheet',   path: '/accounts/books/statements' },
       { icon: Hourglass,    label: 'Receivables & Payables', path: '/accounts/books/ageing' },
       { icon: ListTree,     label: 'Chart of Accounts',     path: '/accounts/books/chart' },
+      { icon: Building2,    label: 'Fixed Asset Register',  path: '/accounts/fixed-assets' },
+      { icon: Wallet,       label: 'Daily Cash Closing',    path: '/accounts/daily-cash-closing' },
       { icon: Settings,     label: 'Books Settings',        path: '/accounts/books/settings' },
     ],
   },
