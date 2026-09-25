@@ -4,14 +4,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { Plus, RefreshCw, Loader2, Building2, PlayCircle, Archive } from 'lucide-react';
+import QRCode from 'qrcode';
+import { Plus, RefreshCw, Loader2, Building2, PlayCircle, Archive, Tag, Printer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface AssetAccount { id: string; code: string; name: string }
 interface Asset {
-  id: string; asset_name: string; asset_code: string | null; account_id: string;
+  id: string; asset_name: string; asset_code: string | null; asset_tag_code: string | null; account_id: string;
   purchase_date: string; purchase_cost: number; salvage_value: number; useful_life_years: number;
   accumulated_depreciation: number; status: 'active' | 'disposed'; hub_id: string | null;
   assigned_to: string | null; disposal_date: string | null; disposal_value: number | null;
@@ -58,6 +59,17 @@ export default function FixedAssetRegisterPage() {
   const [reassignTarget, setReassignTarget] = useState<Asset | null>(null);
   const [reassignHub, setReassignHub] = useState('');
   const [reassignStaff, setReassignStaff] = useState('');
+
+  const [tagTarget, setTagTarget] = useState<Asset | null>(null);
+  const [tagQR, setTagQR] = useState<string | null>(null);
+
+  const openTag = async (a: Asset) => {
+    setTagTarget(a);
+    const url = `${window.location.origin}/assets/lookup/${a.id}`;
+    const dataUrl = await QRCode.toDataURL(url, { width: 220, margin: 1, color: { dark: '#000000', light: '#FFFFFF' } });
+    setTagQR(dataUrl);
+  };
+  const closeTag = () => { setTagTarget(null); setTagQR(null); };
 
   const openReassign = (a: Asset) => {
     setReassignTarget(a);
@@ -261,7 +273,10 @@ export default function FixedAssetRegisterPage() {
                     const nbv = Number(a.purchase_cost) - Number(a.accumulated_depreciation);
                     return (
                       <tr key={a.id} className="border-b border-slate-50 hover:bg-slate-50">
-                        <td className="px-4 py-3 font-medium text-slate-800">{a.asset_name}{a.asset_code ? <span className="text-slate-400 font-normal"> · {a.asset_code}</span> : null}</td>
+                        <td className="px-4 py-3 font-medium text-slate-800">
+                          {a.asset_name}{a.asset_code ? <span className="text-slate-400 font-normal"> · {a.asset_code}</span> : null}
+                          {a.asset_tag_code && <p className="text-[11px] font-mono font-normal text-slate-400">{a.asset_tag_code}</p>}
+                        </td>
                         <td className="px-4 py-3 text-slate-500">{accountName(a.account_id)}</td>
                         <td className="px-4 py-3 text-slate-500">
                           <p className="text-xs">{hubName(a.hub_id)}</p>
@@ -277,6 +292,9 @@ export default function FixedAssetRegisterPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3 space-x-1 whitespace-nowrap">
+                          <Button variant="ghost" size="sm" className="text-xs h-7 px-2 text-slate-500 hover:text-blue-600" onClick={() => openTag(a)}>
+                            <Tag className="h-3.5 w-3.5 mr-1" /> Tag
+                          </Button>
                           {a.status === 'active' && (
                             <>
                               <Button variant="ghost" size="sm" className="text-xs h-7 px-2 text-slate-500 hover:text-blue-600" onClick={() => openReassign(a)}>
@@ -325,6 +343,35 @@ export default function FixedAssetRegisterPage() {
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {tagTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 print:bg-transparent" onClick={closeTag}>
+          <Card className="w-full max-w-xs" onClick={(e) => e.stopPropagation()}>
+            <CardContent id="asset-tag-print-area" className="p-6 flex flex-col items-center text-center gap-2">
+              {tagQR ? <img src={tagQR} alt="Asset QR tag" className="h-40 w-40" /> : <Loader2 className="h-8 w-8 animate-spin text-slate-300" />}
+              <p className="font-semibold text-slate-800 mt-1">{tagTarget.asset_name}</p>
+              {tagTarget.asset_tag_code && <p className="text-sm font-mono text-slate-500">{tagTarget.asset_tag_code}</p>}
+              <p className="text-[11px] text-slate-400">Scan to look up this asset</p>
+            </CardContent>
+            <CardContent className="pt-0 flex gap-2 justify-end print:hidden">
+              <Button variant="outline" size="sm" onClick={closeTag}>Close</Button>
+              <Button size="sm" onClick={() => window.print()} disabled={!tagQR} className="bg-blue-600 hover:bg-blue-700">
+                <Printer className="h-3.5 w-3.5 mr-1.5" /> Print
+              </Button>
+            </CardContent>
+          </Card>
+          <style>{`
+            @media print {
+              body * { visibility: hidden; }
+              #asset-tag-print-area, #asset-tag-print-area * { visibility: visible; }
+              #asset-tag-print-area {
+                position: absolute !important; left: 0 !important; top: 0 !important;
+                width: 100% !important; padding: 24px !important; margin: 0 !important;
+              }
+            }
+          `}</style>
         </div>
       )}
     </div>
