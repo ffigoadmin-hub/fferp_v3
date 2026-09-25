@@ -1,13 +1,23 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import {
   MapPin, Warehouse, Users, Truck, Package,
-  ArrowRight, BarChart3, RefreshCw, PackageCheck, ChevronRight, Loader2,
+  ArrowRight, BarChart3, RefreshCw, PackageCheck, ChevronRight, Loader2, Plus, Pencil,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { WarehouseFormDialog, nextWarehouseCode, type WarehouseRow } from '@/components/warehouse/WarehouseFormDialog';
+
+// Roles allowed to add / edit warehouses — mirrors RLS policy hubs_admin_write.
+const WAREHOUSE_ADMIN_ROLES = ['admin', 'ceo', 'ff_operations_manager'];
+function useCanManageWarehouses() {
+  const { user } = useAuth();
+  return WAREHOUSE_ADMIN_ROLES.includes((user?.role || '').toLowerCase());
+}
 
 // ── Live hub row (from public.hubs) ─────────────────────────────────────────────
 interface HubRow {
@@ -17,6 +27,12 @@ interface HubRow {
   code: string | null;
   city: string | null;
   is_active: boolean | null;
+  state?: string | null;
+  address?: string | null;
+  pincode?: string | null;
+  manager_name?: string | null;
+  channels?: string[] | null;
+  capacity_kg?: number | null;
 }
 
 interface HubRoute { channel: string; count: number; volume: string; }
@@ -33,6 +49,7 @@ interface Hub {
   routes: HubRoute[];
   channels: string[];
   status: string;
+  raw: HubRow;
 }
 
 // ── Cosmetic enrichment (no DB column exists for these yet) ─────────────────────
@@ -104,6 +121,10 @@ function toHub(row: HubRow): Hub {
     code: row.code || '—',
     status: row.is_active === false ? 'inactive' : 'active',
     ...enrichment,
+    // live columns win over the cosmetic defaults, so edits made in the app show up
+    manager: row.manager_name || enrichment.manager,
+    channels: row.channels?.length ? row.channels : enrichment.channels,
+    raw: row,
   };
 }
 
@@ -113,7 +134,7 @@ function useHubs() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('hubs')
-        .select('id, name, display_name, code, city, is_active')
+        .select('id, name, display_name, code, city, is_active, state, address, pincode, manager_name, channels, capacity_kg')
         .order('name');
       if (error) throw error;
       return ((data ?? []) as HubRow[]).map(toHub);
@@ -284,6 +305,8 @@ function HubCard({ hub, onClick }: { hub: Hub; onClick: () => void }) {
 // which had no live DB source at all (see the comment on that map above).
 function HubDetail({ hubId, hubs, isLoading }: { hubId: string; hubs: Hub[]; isLoading: boolean }) {
   const navigate = useNavigate();
+  const canManage = useCanManageWarehouses();
+  const [editing, setEditing] = useState(false);
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
   const monthEnd = format(endOfMonth(new Date()), 'yyyy-MM-dd');
 
@@ -360,7 +383,7 @@ function HubDetail({ hubId, hubs, isLoading }: { hubId: string; hubs: Hub[]; isL
         <Warehouse className="w-12 h-12 mx-auto mb-3 opacity-30" />
         <p className="font-medium">Hub not found</p>
         <Button variant="outline" size="sm" className="mt-4" onClick={() => navigate('/admin/hubs')}>
-          Back to All Hubs
+          Back to All Warehouses
         </Button>
       </div>
     );
@@ -368,15 +391,33 @@ function HubDetail({ hubId, hubs, isLoading }: { hubId: string; hubs: Hub[]; isL
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-[12px]" style={{ color: '#9CA3AF' }}>
-        <button onClick={() => navigate('/admin/hubs')}
-          className="hover:underline font-bold" style={{ color: hub.color }}>
-          All Hubs
-        </button>
-        <ChevronRight className="w-3 h-3" />
-        <span style={{ color: '#374151' }}>{hub.name}</span>
+      {/* Breadcrumb + warehouse switcher (one entry point instead of one sidebar link per hub) */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-[12px]" style={{ color: '#9CA3AF' }}>
+          <button onClick={() => navigate('/admin/hubs')}
+            className="hover:underline font-bold" style={{ color: hub.color }}>
+            All Warehouses
+          </button>
+          <ChevronRight className="w-3 h-3" />
+          <span style={{ color: '#374151' }}>{hub.name}</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5 rounded-xl bg-white p-1" style={{ border: '1px solid #E5E7EB' }} role="tablist" aria-label="Switch warehouse">
+          {hubs.map((h) => (
+            <button key={h.id} role="tab" aria-selected={h.id === hub.id} onClick={() => navigate(`/admin/hubs/${h.slug}`)}
+              className="px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-colors"
+              style={h.id === hub.id ? { background: h.color, color: '#fff' } : { color: '#4B5563', opacity: h.status === 'active' ? 1 : 0.55 }}>
+              {h.name.replace(/\s*hub\s*$/i, '')}
+            </button>
+          ))}
+        </div>
       </div>
+      {editing && (
+        <WarehouseFormDialog
+          initial={{ ...hub.raw, code: hub.code, name: hub.raw.name } as WarehouseRow}
+          existingCodes={hubs.map((h) => h.code)}
+          onClose={() => setEditing(false)}
+        />
+      )}
 
       {/* Hub Header */}
       <div className="rounded-2xl overflow-hidden relative"
@@ -394,9 +435,9 @@ function HubDetail({ hubId, hubs, isLoading }: { hubId: string; hubs: Hub[]; isL
                 <span className="text-[11px] font-black px-2 py-0.5 rounded-full"
                   style={{ background: hub.color + '15', color: hub.color }}>{hub.code}</span>
                 <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full"
-                  style={{ background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.25)' }}>
-                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#4ADE80' }} />
-                  <span className="text-[10px] font-semibold" style={{ color: '#4ADE80' }}>
+                  style={hub.status === 'active' ? { background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.25)' } : { background: '#F3F4F6', border: '1px solid #E5E7EB' }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ background: hub.status === 'active' ? '#4ADE80' : '#9CA3AF' }} />
+                  <span className="text-[10px] font-semibold" style={{ color: hub.status === 'active' ? '#16A34A' : '#6B7280' }}>
                     {hub.status === 'active' ? 'Active' : 'Inactive'}
                   </span>
                 </div>
@@ -407,9 +448,16 @@ function HubDetail({ hubId, hubs, isLoading }: { hubId: string; hubs: Hub[]; isL
               </div>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => navigate('/admin/hubs')} className="gap-1.5">
-            ← All Hubs
-          </Button>
+          <div className="flex items-center gap-2">
+            {canManage && (
+              <Button variant="outline" size="sm" onClick={() => setEditing(true)} className="gap-1.5">
+                <Pencil className="w-3.5 h-3.5" /> Edit
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => navigate('/admin/hubs')} className="gap-1.5">
+              ← All Warehouses
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -455,7 +503,10 @@ function HubDetail({ hubId, hubs, isLoading }: { hubId: string; hubs: Hub[]; isL
               <div className="flex justify-between text-[12px]"><span style={{ color: '#6B7280' }}>Low / Out of stock</span><span className="font-bold" style={{ color: outOfStockCount > 0 ? '#DC2626' : '#D97706' }}>{lowStockCount} / {outOfStockCount}</span></div>
             </div>
           ) : (
-            <p className="text-[12px] py-4 text-center" style={{ color: '#9CA3AF' }}>No inventory rows found for this hub.</p>
+            <p className="text-[12px] py-4 text-center" style={{ color: '#9CA3AF' }}>
+              No stock recorded yet.{' '}
+              <button className="font-semibold underline" style={{ color: hub.color }} onClick={() => navigate(`/warehouse/inventory?hub=${hub.id}`)}>Record a stock count</button>
+            </p>
           )}
         </div>
 
@@ -482,10 +533,11 @@ function HubDetail({ hubId, hubs, isLoading }: { hubId: string; hubs: Hub[]; isL
       <div className="rounded-2xl p-5"
         style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <h3 className="text-[13px] font-bold mb-4" style={{ color: '#111827' }}>Quick Actions</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {[
             { label: 'QC Inspection', icon: PackageCheck, path: '/warehouse/qc', color: '#0E8A6B' },
-            { label: 'Inventory', icon: Package, path: '/warehouse/inventory', color: '#38BDF8' },
+            { label: 'Inventory', icon: Package, path: `/warehouse/inventory?hub=${hub.id}`, color: '#38BDF8' },
+            { label: 'Wastage', icon: PackageCheck, path: `/warehouse/wastage?hub=${hub.id}`, color: '#DC2626' },
             { label: 'Dispatch', icon: Truck, path: '/logistics', color: '#D97706' },
             { label: 'Reports', icon: BarChart3, path: '/reports', color: '#A78BFA' },
           ].map((a, i) => (
@@ -510,6 +562,8 @@ function HubDetail({ hubId, hubs, isLoading }: { hubId: string; hubs: Hub[]; isL
 // ── All Hubs Overview ─────────────────────────────────────────────────────────
 function AllHubsOverview({ hubs, isLoading, refetch }: { hubs: Hub[]; isLoading: boolean; refetch: () => void }) {
   const navigate = useNavigate();
+  const canManage = useCanManageWarehouses();
+  const [adding, setAdding] = useState(false);
 
   const totalRoutes = hubs.reduce((s, h) => s + h.routes.reduce((rs, r) => rs + r.count, 0), 0);
   const totalChannels = new Set(hubs.flatMap(h => h.channels)).size;
@@ -529,30 +583,45 @@ function AllHubsOverview({ hubs, isLoading, refetch }: { hubs: Hub[]; isLoading:
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-[22px] font-black tracking-tight" style={{ color: '#111827' }}>
-            Hub Management
+            Warehouses
           </h1>
           <p className="text-[12px] mt-0.5 font-medium" style={{ color: '#6B7280' }}>
-            Manage all {hubs.length} warehouse hub{hubs.length === 1 ? '' : 's'} — operations, teams, routes, and performance
+            All {hubs.length} warehouse{hubs.length === 1 ? '' : 's'} in one place — open one for its purchases, stock and deliveries
           </p>
         </div>
-        <Button variant="outline" size="sm" className="gap-2" onClick={() => refetch()}>
-          <RefreshCw className="w-3.5 h-3.5" /> Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => refetch()}>
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </Button>
+          {canManage && (
+            <Button size="sm" className="gap-2 bg-sky-600 hover:bg-sky-700 text-white" onClick={() => setAdding(true)}>
+              <Plus className="w-3.5 h-3.5" /> Add warehouse
+            </Button>
+          )}
+        </div>
       </div>
+      {adding && (
+        <WarehouseFormDialog
+          initial={{ code: nextWarehouseCode(hubs.map((h) => h.code)), name: '' }}
+          existingCodes={hubs.map((h) => h.code)}
+          onClose={() => setAdding(false)}
+          onSaved={() => refetch()}
+        />
+      )}
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total Hubs" value={hubs.length} icon={Warehouse} color="#38BDF8" sub="in system" />
+        <StatCard label="Total Warehouses" value={hubs.length} icon={Warehouse} color="#38BDF8" sub="in system" />
         <StatCard label="Total Routes" value={totalRoutes} icon={Truck} color="#2563EB" sub="daily" />
         <StatCard label="Sales Channels" value={totalChannels} icon={BarChart3} color="#FBBF24" sub={activeChannelList} />
-        <StatCard label="Active Hubs" value={hubs.filter(h => h.status === 'active').length} icon={Package} color="#A78BFA" sub="operational" />
+        <StatCard label="Active Warehouses" value={hubs.filter(h => h.status === 'active').length} icon={Package} color="#A78BFA" sub="operational" />
       </div>
 
       {/* Hub Cards */}
       <div>
         <h2 className="text-[13px] font-bold mb-3 flex items-center gap-2" style={{ color: '#374151' }}>
           <MapPin className="w-4 h-4" style={{ color: '#2563EB' }} />
-          All Hubs
+          All Warehouses
         </h2>
         {hubs.length === 0 ? (
           <div className="text-center py-16 rounded-2xl" style={{ border: '1px dashed #E5E7EB', color: '#9CA3AF' }}>

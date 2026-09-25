@@ -288,6 +288,15 @@ const AuditorPaymentAuditPage = lazy(() => import('@/pages/auditor/AuditorPaymen
 const ChatPage = lazy(() => import('./pages/chat/ChatPage'));
 const PettyCashAuditPage = lazy(() => import('@/pages/accounts/PettyCashAuditPage'));
 const PettyCashRefillPage = lazy(() => import('@/pages/accounts/PettyCashRefillPage'));
+// Books of Accounts (double-entry ledger — ADD_ACCOUNTS_LEDGER_CORE.sql)
+const ChartOfAccountsPage = lazy(() => import('@/pages/accounts/books/ChartOfAccountsPage'));
+const BooksDayBookPage = lazy(() => import('@/pages/accounts/books/DayBookPage'));
+const JournalEntryPage = lazy(() => import('@/pages/accounts/books/JournalEntryPage'));
+const GeneralLedgerPage = lazy(() => import('@/pages/accounts/books/GeneralLedgerPage'));
+const TrialBalancePage = lazy(() => import('@/pages/accounts/books/TrialBalancePage'));
+const FinancialStatementsPage = lazy(() => import('@/pages/accounts/books/FinancialStatementsPage'));
+const AgeingPage = lazy(() => import('@/pages/accounts/books/AgeingPage'));
+const BooksSettingsPage = lazy(() => import('@/pages/accounts/books/BooksSettingsPage'));
 const DirectorDailyWorkflow = lazy(() => import('@/pages/director/DirectorDailyWorkflow'));
 const DirectorSalaryAuditPage = lazy(() => import('@/pages/director/DirectorSalaryAuditPage'));
 const DirectorMealOrderingPage = lazy(() => import('@/pages/director/DirectorMealOrderingPage').then(m => ({ default: m.DirectorMealOrderingPage })));
@@ -399,6 +408,9 @@ const OPS_ROLES = [
   // FF New Roles
   'hub_manager', 'l1_manager', 'shift_employee',
 ];
+
+// Books of Accounts readers — must match acct_can_read() in ADD_ACCOUNTS_LEDGER_CORE.sql
+const BOOKS_READ_ROLES = ['accounts', 'admin', 'ceo', 'director', 'Director', 'auditor', 'Auditor'];
 
 // ff_ops_access: roles eligible for the "loaned" ops-manager dashboard view.
 // Mirrors RedirectPage.tsx's FF_OPS_ACCESS_ELIGIBLE_ROLES — keep both in sync.
@@ -698,6 +710,16 @@ const AppRoutes = () => {
           <PettyCashRefillPage />
         </ProtectedRoute>
       } />
+
+      {/* Books of Accounts — write: accounts/admin, read: + ceo/director/auditor (also enforced by RLS) */}
+      <Route path="/accounts/books/chart" element={<ProtectedRoute allowedRoles={BOOKS_READ_ROLES}><ChartOfAccountsPage /></ProtectedRoute>} />
+      <Route path="/accounts/books/vouchers" element={<ProtectedRoute allowedRoles={BOOKS_READ_ROLES}><BooksDayBookPage /></ProtectedRoute>} />
+      <Route path="/accounts/books/journal/new" element={<ProtectedRoute allowedRoles={['accounts', 'admin']}><JournalEntryPage /></ProtectedRoute>} />
+      <Route path="/accounts/books/ledger" element={<ProtectedRoute allowedRoles={BOOKS_READ_ROLES}><GeneralLedgerPage /></ProtectedRoute>} />
+      <Route path="/accounts/books/trial-balance" element={<ProtectedRoute allowedRoles={BOOKS_READ_ROLES}><TrialBalancePage /></ProtectedRoute>} />
+      <Route path="/accounts/books/statements" element={<ProtectedRoute allowedRoles={BOOKS_READ_ROLES}><FinancialStatementsPage /></ProtectedRoute>} />
+      <Route path="/accounts/books/ageing" element={<ProtectedRoute allowedRoles={BOOKS_READ_ROLES}><AgeingPage /></ProtectedRoute>} />
+      <Route path="/accounts/books/settings" element={<ProtectedRoute allowedRoles={BOOKS_READ_ROLES}><BooksSettingsPage /></ProtectedRoute>} />
 
       <Route path="/accounts/rentals/payments" element={<ProtectedRoute allowedRoles={['accounts', 'admin']}><AccountsRentalPaymentPage /></ProtectedRoute>} />
 

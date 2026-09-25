@@ -167,3 +167,21 @@ JSONB, `remarks`. INSERT policy must exist or logging silently disables (Feb 202
 ## Storage buckets  (Used by code)
 `payment-proofs` (slip photos, Buy receipts), `qc-photos`, `app-images`, `rental-bills`,
 `project-photos`, `voice-comments`. Bucket listing RLS: `FIX_STORAGE_BUCKET_LISTING.sql`.
+
+## Accounts-module findings  (Confirmed 2026-09-24 via Supabase MCP, read-only)
+- `sales_orders.net_amount` = `total_amount − discount` (generated). `delivery_charges` is NOT in it;
+  `total_amount = subtotal` on 742/768 rows. Status CHECK: pending/confirmed/processing/dispatched/
+  delivered/cancelled. `payment_status` CHECK: unpaid/partial/paid/refunded. `amount_paid` exists (all 0).
+- `invoices`: live has `hub_id` (always NULL), `amount` (NOT NULL), `issued_at`, `discount`, `tax`,
+  `discount_amount` (NOT NULL), `tax_amount` (NOT NULL, all 0). **2–3 invoices per order** (860 duplicate
+  rows from backfills) → never sum invoices for revenue; the ledger posts from `sales_orders`.
+- `ff_transport_payments.total_amount` **does exist** — GENERATED = base + toll + other (the older
+  note above saying "no total_amount" is wrong). Also has `is_bulk`, `purchase_order_ids`, `po_breakdown`.
+- `ff_vendor_payments` also has `purchase_entry_id`, `is_bulk`, `purchase_order_ids[]`, `po_breakdown`.
+- `cash_collections` live columns: id, amount!, collection_date!, collector_id, customer_id, status!,
+  payment_mode, receipt_number, proof_url, notes, verified_by/at, deposited_at, created/updated_at.
+  **`CollectionEntryPage.tsx` inserts columns that don't exist** (order_id, collected_amount, collected_by,
+  hub_id, shop_name…) → every insert fails; table has 0 rows.
+- Empty on 2026-09-24: payments_received, payments_made, credit_notes, vendor_credits, wastage_entries,
+  cash_collections, client_collections. A legacy table named `accounts` exists — unrelated to `acct_*`.
+- Accounts ledger objects all use the `acct_` prefix (ADD_ACCOUNTS_LEDGER_CORE.sql applied 2026-09-24).

@@ -76,6 +76,11 @@ import {
   MessageSquarePlus as Feedback,
   CheckCircle2,
   Calculator,
+  Scale,
+  Landmark,
+  ListTree,
+  NotebookPen,
+  Hourglass,
 } from 'lucide-react';
 
 export interface NavChild {
@@ -569,6 +574,22 @@ export const navigationConfig: NavGroup[] = [
       { icon: Layers,       label: 'Execution Desk',        path: '/accounts/execution-desk' },
       { icon: History,      label: 'Batch History',         path: '/accounts/batch-history' },
       { icon: FileBarChart, label: 'FF Payments Report',    path: '/reports/ff-payments' },
+    ],
+  },
+
+  // ── Books of Accounts — double-entry ledger (accounts/admin write; ceo/director/auditor read)
+  {
+    title: 'Books of Accounts',
+    icon: Landmark,
+    roles: ['accounts', 'admin', 'ceo', 'director', 'Director', 'auditor'],
+    items: [
+      { icon: NotebookPen,  label: 'Vouchers & Day Book',   path: '/accounts/books/vouchers' },
+      { icon: BookOpen,     label: 'General Ledger',        path: '/accounts/books/ledger' },
+      { icon: Scale,        label: 'Trial Balance',         path: '/accounts/books/trial-balance' },
+      { icon: PieChart,     label: 'P&L / Balance Sheet',   path: '/accounts/books/statements' },
+      { icon: Hourglass,    label: 'Receivables & Payables', path: '/accounts/books/ageing' },
+      { icon: ListTree,     label: 'Chart of Accounts',     path: '/accounts/books/chart' },
+      { icon: Settings,     label: 'Books Settings',        path: '/accounts/books/settings' },
     ],
   },
 
