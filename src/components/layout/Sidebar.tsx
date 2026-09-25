@@ -81,6 +81,8 @@ import {
   ListTree,
   NotebookPen,
   Hourglass,
+  DollarSign,
+  RefreshCw,
 } from 'lucide-react';
 
 export interface NavChild {
@@ -474,6 +476,9 @@ export const navigationConfig: NavGroup[] = [
           { label: 'Bulk Orders',     path: '/sales/bulk-order' },
           { label: 'Customers',       path: '/sales/customers' },
           { label: 'Invoices',        path: '/sales/invoices' },
+          { label: 'Payments Received', path: '/sales/payments-received' },
+          { label: 'Credit Notes',      path: '/sales/credit-notes' },
+          { label: 'Recurring Invoices', path: '/sales/recurring-invoices' },
         ],
       },
     ],
@@ -494,6 +499,8 @@ export const navigationConfig: NavGroup[] = [
           { label: 'New Transport Payment', path: '/ff/transport-payment/new' },
           { label: 'Vendor Bulk Payment',  path: '/ff-operations/vendor-bulk-payment' },
           { label: 'Payment Approvals',   path: '/ff-operations/payment-approvals', action: false },
+          { label: 'Debit Notes',         path: '/purchase/debit-notes' },
+          { label: 'Recurring Bills',     path: '/purchase/recurring-bills' },
           { label: '🏷️ Box Labels',       path: '/ff-operations/labels', action: true },
         ],
       },
@@ -701,6 +708,9 @@ export const navigationConfig: NavGroup[] = [
       { icon: Users,           label: 'Customers',        path: '/sales/customers' },
       { icon: FileText,        label: 'Invoices',         path: '/sales/invoices' },
       { icon: Target,          label: 'Sales Targets',    path: '/sales/targets' },
+      { icon: DollarSign,      label: 'Payments Received', path: '/sales/payments-received' },
+      { icon: FileText,        label: 'Credit Notes',      path: '/sales/credit-notes' },
+      { icon: RefreshCw,       label: 'Recurring Invoices', path: '/sales/recurring-invoices' },
     ],
   },
   {

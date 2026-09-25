@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Plus, Search, DollarSign, CheckCircle2, Clock, RefreshCw } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, Search, DollarSign, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,13 +13,17 @@ const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   verified:  { label: 'Verified',  color: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' },
   bounced:   { label: 'Bounced',   color: 'bg-red-500/15 text-red-400 border-red-500/30' },
 };
+interface CustomerOption { id: string; name: string; hub_id: string | null }
+
+const emptyForm = { customer_id: '', customer_name: '', hub_id: '', invoice_reference: '', amount: '', payment_mode: 'bank_transfer', utr_number: '', received_date: new Date().toISOString().split('T')[0] };
 
 export default function PaymentsReceivedPage() {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ customer_name: '', invoice_reference: '', amount: '', payment_mode: 'bank_transfer', utr_number: '', received_date: new Date().toISOString().split('T')[0] });
+  const [form, setForm] = useState(emptyForm);
+  const [customerQuery, setCustomerQuery] = useState('');
   const [saving, setSaving] = useState(false);
 
   const { data: payments = [], isLoading, refetch } = useQuery({
@@ -31,6 +35,22 @@ export default function PaymentsReceivedPage() {
     },
   });
 
+  const { data: customers = [] } = useQuery({
+    queryKey: ['customers-for-payment-received'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('customers').select('id, name, hub_id').order('name');
+      if (error) throw error;
+      return (data || []) as CustomerOption[];
+    },
+    enabled: showForm,
+  });
+
+  const customerMatches = useMemo(() => {
+    if (!customerQuery || form.customer_id) return [];
+    const q = customerQuery.toLowerCase();
+    return customers.filter(c => c.name?.toLowerCase().includes(q)).slice(0, 8);
+  }, [customers, customerQuery, form.customer_id]);
+
   const filtered = payments.filter((p: any) => {
     const matchSearch = !search || p.customer_name?.toLowerCase().includes(search.toLowerCase()) || p.utr_number?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === 'all' || p.status === statusFilter;
@@ -40,11 +60,13 @@ export default function PaymentsReceivedPage() {
   const totalAmount = filtered.reduce((sum: number, p: any) => sum + Number(p.amount || 0), 0);
 
   const handleCreate = async () => {
-    if (!form.customer_name || !form.amount) { toast.error('Customer and amount required'); return; }
+    if (!form.customer_id || !form.amount) { toast.error('Select a customer and enter an amount'); return; }
     setSaving(true);
     try {
       const { error } = await (supabase as any).from('payments_received').insert({
+        customer_id: form.customer_id,
         customer_name: form.customer_name,
+        hub_id: form.hub_id || null,
         invoice_reference: form.invoice_reference || null,
         amount: parseFloat(form.amount),
         payment_mode: form.payment_mode,
@@ -54,12 +76,19 @@ export default function PaymentsReceivedPage() {
         recorded_by: user?.id,
       });
       if (error) throw error;
-      toast.success('Payment recorded');
+      toast.success('Payment recorded — verify it once it clears the bank statement');
       setShowForm(false);
-      setForm({ customer_name: '', invoice_reference: '', amount: '', payment_mode: 'bank_transfer', utr_number: '', received_date: new Date().toISOString().split('T')[0] });
+      setForm(emptyForm);
+      setCustomerQuery('');
       refetch();
     } catch (e: any) { toast.error(e.message || 'Failed'); }
     finally { setSaving(false); }
+  };
+
+  const setStatus = async (id: string, status: 'verified' | 'bounced') => {
+    const { error } = await (supabase as any).from('payments_received').update({ status }).eq('id', id);
+    if (error) toast.error('Update failed');
+    else { toast.success(status === 'verified' ? 'Marked verified — posted to the books' : 'Marked bounced'); refetch(); }
   };
 
   return (
@@ -67,7 +96,7 @@ export default function PaymentsReceivedPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Payments Received</h1>
-          <p className="text-sm text-zinc-400 mt-1">Record and track customer payments</p>
+          <p className="text-sm text-zinc-400 mt-1">Record and verify customer payments — verified receipts post to the books automatically</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => refetch()} className="border-zinc-700 text-zinc-300"><RefreshCw className="w-4 h-4 mr-2" />Refresh</Button>
@@ -96,7 +125,26 @@ export default function PaymentsReceivedPage() {
           <CardHeader><CardTitle className="text-white text-base">Record Payment Received</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div><label className="text-xs text-zinc-400 mb-1 block">Customer Name *</label><Input value={form.customer_name} onChange={e=>setForm(f=>({...f,customer_name:e.target.value}))} placeholder="Customer name" className="bg-zinc-800 border-zinc-700 text-white"/></div>
+              <div className="relative">
+                <label className="text-xs text-zinc-400 mb-1 block">Customer *</label>
+                <Input
+                  value={form.customer_id ? form.customer_name : customerQuery}
+                  onChange={e => { setCustomerQuery(e.target.value); setForm(f => ({ ...f, customer_id: '', customer_name: '', hub_id: '' })); }}
+                  placeholder="Search customer by name..."
+                  className="bg-zinc-800 border-zinc-700 text-white"
+                />
+                {customerMatches.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full bg-zinc-800 border border-zinc-700 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                    {customerMatches.map(c => (
+                      <button key={c.id} type="button"
+                        className="w-full text-left px-3 py-2 text-sm text-white hover:bg-zinc-700"
+                        onClick={() => { setForm(f => ({ ...f, customer_id: c.id, customer_name: c.name, hub_id: c.hub_id || '' })); setCustomerQuery(''); }}>
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div><label className="text-xs text-zinc-400 mb-1 block">Invoice Reference</label><Input value={form.invoice_reference} onChange={e=>setForm(f=>({...f,invoice_reference:e.target.value}))} placeholder="INV-XXXX" className="bg-zinc-800 border-zinc-700 text-white"/></div>
               <div><label className="text-xs text-zinc-400 mb-1 block">Amount (₹) *</label><Input type="number" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} placeholder="0.00" className="bg-zinc-800 border-zinc-700 text-white"/></div>
               <div><label className="text-xs text-zinc-400 mb-1 block">Payment Mode</label>
@@ -131,7 +179,7 @@ export default function PaymentsReceivedPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b border-zinc-800">
-                  {['Customer','Invoice Ref','Amount','Mode','UTR / Ref','Status','Date'].map(h=>(
+                  {['Customer','Invoice Ref','Amount','Mode','UTR / Ref','Status','Date','Actions'].map(h=>(
                     <th key={h} className="text-left text-xs text-zinc-500 font-medium px-4 py-3">{h}</th>
                   ))}
                 </tr></thead>
@@ -147,6 +195,14 @@ export default function PaymentsReceivedPage() {
                         <td className="px-4 py-3 text-zinc-400 font-mono text-xs">{p.utr_number||'—'}</td>
                         <td className="px-4 py-3"><span className={`text-xs px-2 py-1 rounded-full border ${s.color}`}>{s.label}</span></td>
                         <td className="px-4 py-3 text-zinc-400">{p.received_date||p.created_at?.split('T')[0]}</td>
+                        <td className="px-4 py-3">
+                          {p.status === 'pending' && (
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" className="text-xs text-emerald-400 hover:text-emerald-300 h-7 px-2" onClick={()=>setStatus(p.id,'verified')}>Verify</Button>
+                              <Button variant="ghost" size="sm" className="text-xs text-red-400 hover:text-red-300 h-7 px-2" onClick={()=>setStatus(p.id,'bounced')}>Bounced</Button>
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     );
                   })}

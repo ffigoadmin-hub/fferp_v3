@@ -131,6 +131,7 @@ const AutoBillPage             = lazy(() => import('./pages/ff-operations/purcha
 const BuyPage                  = lazy(() => import('./pages/ff-operations/purchase/BuyPage'));
 const POBuysReview             = lazy(() => import('./pages/ff-operations/purchase/POBuysReview'));
 const VendorBulkPaymentPage    = lazy(() => import('./pages/ff-operations/purchase/VendorBulkPaymentPage'));
+const DebitNotesPage           = lazy(() => import('./pages/ff-operations/purchase/DebitNotesPage'));
 
 // FF Operations — Sales sub-pages
 const SalesCustomersPage       = lazy(() => import('./pages/ff-operations/sales/SalesCustomersPage'));
@@ -967,6 +968,7 @@ const AppRoutes = () => {
       <Route path="/purchase/recurring-bills"    element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><RecurringBillsPage /></ProtectedRoute>} />
       <Route path="/purchase/payments-made"      element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><PaymentsMadePage /></ProtectedRoute>} />
       <Route path="/purchase/vendor-credits"     element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><VendorCreditsPage /></ProtectedRoute>} />
+      <Route path="/purchase/debit-notes"        element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager', 'accounts']}><DebitNotesPage /></ProtectedRoute>} />
 
       {/* FF Operations — Sales sub-pages — tele_caller + hub_manager + ceo + gm added */}
       <Route path="/sales/customers"             element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'field_executive', 'bde', 'tele_caller', 'ff_operations_manager', 'gm', 'ceo', 'hub_manager']}><SalesCustomersPage /></ProtectedRoute>} />
@@ -975,7 +977,7 @@ const AppRoutes = () => {
       <Route path="/sales/recurring-invoices"    element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'field_executive', 'bde', 'tele_caller', 'ff_operations_manager', 'gm', 'ceo']}><RecurringInvoicesPage /></ProtectedRoute>} />
       <Route path="/sales/delivery-challans"     element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'field_executive', 'bde', 'tele_caller', 'ff_operations_manager', 'gm', 'ceo']}><DeliveryChallansPage /></ProtectedRoute>} />
       <Route path="/sales/payments-received"     element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'field_executive', 'bde', 'tele_caller', 'ff_operations_manager', 'gm', 'ceo', 'accounts']}><PaymentsReceivedPage /></ProtectedRoute>} />
-      <Route path="/sales/credit-notes"          element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'field_executive', 'bde', 'tele_caller', 'ff_operations_manager', 'gm', 'ceo']}><CreditNotesPage /></ProtectedRoute>} />
+      <Route path="/sales/credit-notes"          element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'field_executive', 'bde', 'tele_caller', 'ff_operations_manager', 'gm', 'ceo', 'accounts']}><CreditNotesPage /></ProtectedRoute>} />
 
       {/* Finance Module (FF ERP) */}
       <Route path="/finance" element={<ProtectedRoute allowedRoles={OPS_ROLES}><FinanceDashboard /></ProtectedRoute>} />
