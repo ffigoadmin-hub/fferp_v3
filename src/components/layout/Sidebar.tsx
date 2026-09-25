@@ -613,6 +613,7 @@ export const navigationConfig: NavGroup[] = [
     items: [
       { icon: Building2, label: 'Fixed Asset Register', path: '/accounts/fixed-assets' },
       { icon: Truck,     label: 'Vehicle Management',   path: '/admin/vehicles' },
+      { icon: Package,   label: 'Crate Tracking',        path: '/admin/crates' },
     ],
   },
 
