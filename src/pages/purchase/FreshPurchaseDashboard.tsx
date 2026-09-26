@@ -6,7 +6,7 @@ import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { Link } from 'react-router-dom';
 import {
   ShoppingCart, TrendingUp, AlertCircle, CheckCircle2, Clock,
-  Package, ChevronRight, RefreshCw, Plus, BarChart3, Printer, Tag, Banknote
+  Package, ChevronRight, RefreshCw, Plus, BarChart3, Printer, Banknote
 } from 'lucide-react';
 import { printPurchaseOrder } from '@/utils/printPurchaseOrder';
 import { toast } from 'sonner';
@@ -213,8 +213,6 @@ export default function FreshPurchaseDashboard() {
       {/* Quick links */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Box Labels',          path: '/ff-operations/labels',         icon: Tag },
-          { label: 'Gate Entry',         path: '/transit/gate-entry',           icon: Package },
           { label: 'Payment Approvals',  path: '/purchase/payment-approvals',   icon: AlertCircle },
           { label: 'Vendor Payments',    path: '/purchase/vendor-payments',     icon: Banknote },
           { label: 'Rate Comparison',    path: '/purchase/rate-comparison',     icon: BarChart3 },
