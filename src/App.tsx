@@ -41,11 +41,6 @@ const QCRejections = lazy(() => import('./pages/warehouse/QCRejections'));
 const POAssignment = lazy(() => import('./pages/warehouse/POAssignment'));
 const POAssignmentHistory = lazy(() => import('./pages/warehouse/POAssignmentHistory'));
 
-// Transit / Gate Entry Module
-const TransitDashboard = lazy(() => import('./pages/transit/TransitDashboard'));
-const GateEntryPage = lazy(() => import('./pages/transit/GateEntryPage'));
-const TransitRecordDetail = lazy(() => import('./pages/transit/TransitRecordDetail'));
-
 // Payment Approval Module
 const VendorPaymentForm = lazy(() => import('./pages/purchase/VendorPaymentForm'));
 const PaymentApprovalQueue = lazy(() => import('./pages/purchase/PaymentApprovalQueue'));
@@ -97,7 +92,6 @@ const AdminQCOverviewPage = lazy(() => import('./pages/admin/AdminQCOverviewPage
 const FinanceDashboard = lazy(() => import('./pages/finance/FinanceDashboard'));
 const FFOperationsHomePage = lazy(() => import('./pages/ff-operations/FFOperationsHomePage'));
 const ItemsPage             = lazy(() => import('./pages/ff-operations/items/ItemsPage'));
-const BoxLabelGenerator    = lazy(() => import('./pages/ff-operations/labels/BoxLabelGenerator'));
 const SmartInventoryPage   = lazy(() => import('./pages/ff-operations/inventory/SmartInventoryPage'));
 const GMOperationsDashboard = lazy(() => import('./pages/ff-operations/gm/GMOperationsDashboard'));
 const EODPOEngine           = lazy(() => import('./pages/ff-operations/po-engine/EODPOEngine'));
@@ -868,11 +862,6 @@ const AppRoutes = () => {
       <Route path="/warehouse/po-assignment" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager']}><POAssignment /></ProtectedRoute>} />
       <Route path="/warehouse/po-history" element={<ProtectedRoute allowedRoles={[...OPS_ROLES, 'hub_manager']}><POAssignmentHistory /></ProtectedRoute>} />
 
-      {/* Transit / Gate Entry Module */}
-      <Route path="/transit" element={<ProtectedRoute allowedRoles={OPS_ROLES}><TransitDashboard /></ProtectedRoute>} />
-      <Route path="/transit/gate-entry" element={<ProtectedRoute allowedRoles={OPS_ROLES}><GateEntryPage /></ProtectedRoute>} />
-      <Route path="/transit/:id" element={<ProtectedRoute allowedRoles={OPS_ROLES}><TransitRecordDetail /></ProtectedRoute>} />
-
       {/* Payment Approval Module */}
       <Route path="/purchase/payment-form" element={<ProtectedRoute allowedRoles={OPS_ROLES}><VendorPaymentForm /></ProtectedRoute>} />
       <Route path="/purchase/payment-approvals" element={<ProtectedRoute allowedRoles={OPS_ROLES}><PaymentApprovalQueue /></ProtectedRoute>} />
@@ -926,7 +915,6 @@ const AppRoutes = () => {
       {/* FF Operations Home */}
       <Route path="/ff-operations" element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><FFOperationsHomePage /></ProtectedRoute>} />
       <Route path="/ff-operations/items" element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager']}><ItemsPage /></ProtectedRoute>} />
-      <Route path="/ff-operations/labels" element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'purchase_manager', 'purchase_head', 'ff_operations_manager', 'gm', 'shift_employee']}><BoxLabelGenerator /></ProtectedRoute>} />
       <Route path="/ff-operations/inventory" element={<ProtectedRoute allowedRoles={['admin', 'back_office', 'ff_operations_manager', 'gm', 'hub_manager']}><SmartInventoryPage /></ProtectedRoute>} />
       <Route path="/ff-operations/gm-dashboard" element={<ProtectedRoute allowedRoles={['admin', 'ff_operations_manager', 'gm', 'ceo', 'l1_manager']}><GMOperationsDashboard /></ProtectedRoute>} />
       <Route path="/ff-operations/eod-po-engine" element={<ProtectedRoute allowedRoles={['admin', 'ff_operations_manager', 'gm', 'purchase_manager', 'purchase_head', 'field_executive', 'bde', 'tele_caller', 'back_office', 'hub_manager']}><EODPOEngine /></ProtectedRoute>} />

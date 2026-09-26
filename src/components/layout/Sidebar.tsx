@@ -48,7 +48,6 @@ import {
   Layers,
   Wallet,
   FileBarChart,
-  Tags,
   RotateCcw,
   Bot,
   Building2,
@@ -504,7 +503,6 @@ export const navigationConfig: NavGroup[] = [
           { label: 'Payment Approvals',   path: '/ff-operations/payment-approvals', action: false },
           { label: 'Debit Notes',         path: '/purchase/debit-notes' },
           { label: 'Recurring Bills',     path: '/purchase/recurring-bills' },
-          { label: '🏷️ Box Labels',       path: '/ff-operations/labels', action: true },
         ],
       },
     ],
@@ -782,14 +780,6 @@ export const navigationConfig: NavGroup[] = [
       { icon: LayoutDashboard, label: 'Purchase Dashboard',  path: '/purchase' },
       { icon: ClipboardList,   label: 'My Purchase Orders',  path: '/purchase/orders' },
       { icon: Package,         label: 'Buy (Go Purchase)',   path: '/purchase/buy' },
-    ],
-  },
-  {
-    title: 'Labels',
-    icon: Tags,
-    roles: ['shift_employee', 'purchase_manager', 'purchase_head'],
-    items: [
-      { icon: Package, label: 'Box Label Generator', path: '/ff-operations/labels' },
     ],
   },
   {
