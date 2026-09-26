@@ -106,19 +106,6 @@ export default function DailySalesReportPage() {
     return { label: `Pending (${(c.status || 'collected')})`, key: 'pending', amount: Number(c.collected_amount) };
   };
 
-  const collectionSummary = useMemo(() => {
-    const collectible = filtered.filter((o: any) => COLLECTIBLE_PAYMENT_MODES.includes(o.payment_mode));
-    let verifiedAmt = 0, pendingAmt = 0, notCollected = 0;
-    collectible.forEach((o: any) => {
-      const c = getCollection(o);
-      if (c.key === 'verified') verifiedAmt += c.amount || 0;
-      else if (c.key === 'pending') pendingAmt += c.amount || 0;
-      else notCollected++;
-    });
-    return { collectibleCount: collectible.length, verifiedAmt, pendingAmt, notCollected };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered, collectionByOrder]);
-
   const creditNoteSummary = useMemo(() => ({
     count: (creditNotes as any[]).length,
     total: (creditNotes as any[]).reduce((s, c) => s + Number(c.amount || 0), 0),
@@ -137,6 +124,19 @@ export default function DailySalesReportPage() {
       return matchSearch && matchStatus && matchPayment;
     });
   }, [orders, search, statusFilter, paymentFilter]);
+
+  const collectionSummary = useMemo(() => {
+    const collectible = filtered.filter((o: any) => COLLECTIBLE_PAYMENT_MODES.includes(o.payment_mode));
+    let verifiedAmt = 0, pendingAmt = 0, notCollected = 0;
+    collectible.forEach((o: any) => {
+      const c = getCollection(o);
+      if (c.key === 'verified') verifiedAmt += c.amount || 0;
+      else if (c.key === 'pending') pendingAmt += c.amount || 0;
+      else notCollected++;
+    });
+    return { collectibleCount: collectible.length, verifiedAmt, pendingAmt, notCollected };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, collectionByOrder]);
 
   const summary = useMemo(() => {
     const active = filtered.filter((o: any) => o.status !== 'cancelled');
