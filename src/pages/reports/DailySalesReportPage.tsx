@@ -23,6 +23,16 @@ const PAYMENT_COLORS: Record<string, string> = {
   cash:   'bg-green-100 text-green-700',
 };
 
+// Collection is only tracked for orders that get paid after delivery --
+// mirrors CollectionEntryPage.tsx's own `.in('payment_mode', [...])` filter.
+const COLLECTIBLE_PAYMENT_MODES = ['cod', 'credit', 'partial'];
+
+const COLLECTION_STATUS_COLORS: Record<string, string> = {
+  not_collected: 'bg-slate-100 text-slate-500',
+  pending:       'bg-amber-100 text-amber-700',
+  verified:      'bg-green-100 text-green-700',
+};
+
 export default function DailySalesReportPage() {
   const navigate = useNavigate();
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -48,6 +58,59 @@ export default function DailySalesReportPage() {
     },
   });
 
+  const orderIds = useMemo(() => orders.map((o: any) => o.id), [orders]);
+
+  // Collection status per order -- cash_collections.order_id is a real FK, so
+  // this is an exact per-row match (not the fuzzy text match credit notes need
+  // below). A collection can land days after the order itself, so this is
+  // fetched by order id, not by collection_date.
+  const { data: collections = [] } = useQuery({
+    queryKey: ['sales-report-collections', orderIds],
+    enabled: orderIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cash_collections')
+        .select('order_id, collected_amount, status, verified_at')
+        .in('order_id', orderIds);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+  const collectionByOrder = useMemo(() => {
+    const map = new Map<string, any>();
+    (collections as any[]).forEach(c => map.set(c.order_id, c));
+    return map;
+  }, [collections]);
+
+  // Credit notes have no order_id column -- only a free-text invoice_reference
+  // -- so there's no reliable per-order match. Shown as its own "issued this
+  // day" list instead of forcing a fuzzy join onto the orders table.
+  const { data: creditNotes = [] } = useQuery({
+    queryKey: ['sales-report-credit-notes', date],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('credit_notes')
+        .select('id, credit_note_number, customer_name, invoice_reference, amount, status, issued_date')
+        .eq('issued_date', date)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const getCollection = (order: any): { label: string; key: string; amount: number | null } => {
+    if (!COLLECTIBLE_PAYMENT_MODES.includes(order.payment_mode)) return { label: '—', key: 'na', amount: null };
+    const c = collectionByOrder.get(order.id);
+    if (!c) return { label: 'Not Collected', key: 'not_collected', amount: null };
+    if (c.verified_at) return { label: 'Verified', key: 'verified', amount: Number(c.collected_amount) };
+    return { label: `Pending (${(c.status || 'collected')})`, key: 'pending', amount: Number(c.collected_amount) };
+  };
+
+  const creditNoteSummary = useMemo(() => ({
+    count: (creditNotes as any[]).length,
+    total: (creditNotes as any[]).reduce((s, c) => s + Number(c.amount || 0), 0),
+  }), [creditNotes]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return orders.filter((o: any) => {
@@ -61,6 +124,19 @@ export default function DailySalesReportPage() {
       return matchSearch && matchStatus && matchPayment;
     });
   }, [orders, search, statusFilter, paymentFilter]);
+
+  const collectionSummary = useMemo(() => {
+    const collectible = filtered.filter((o: any) => COLLECTIBLE_PAYMENT_MODES.includes(o.payment_mode));
+    let verifiedAmt = 0, pendingAmt = 0, notCollected = 0;
+    collectible.forEach((o: any) => {
+      const c = getCollection(o);
+      if (c.key === 'verified') verifiedAmt += c.amount || 0;
+      else if (c.key === 'pending') pendingAmt += c.amount || 0;
+      else notCollected++;
+    });
+    return { collectibleCount: collectible.length, verifiedAmt, pendingAmt, notCollected };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, collectionByOrder]);
 
   const summary = useMemo(() => {
     const active = filtered.filter((o: any) => o.status !== 'cancelled');
@@ -76,21 +152,41 @@ export default function DailySalesReportPage() {
     if (!filtered.length) { toast.error('No data to download'); return; }
     setDownloading(true);
     try {
-      const rows = filtered.map((o: any) => ({
-        'Order #':      o.order_number,
-        'Customer':     o.customer?.shop_name || '—',
-        'Area':         o.customer?.area || '—',
-        'Phone':        o.customer?.phone || '—',
-        'Hub':          o.hub?.name || '—',
-        'Amount (₹)':  o.net_amount,
-        'Payment':      (o.payment_mode || '—').toUpperCase(),
-        'Status':       o.status,
-        'Date':         o.order_date,
-      }));
+      const rows = filtered.map((o: any) => {
+        const c = getCollection(o);
+        return {
+          'Order #':      o.order_number,
+          'Customer':     o.customer?.shop_name || '—',
+          'Area':         o.customer?.area || '—',
+          'Phone':        o.customer?.phone || '—',
+          'Hub':          o.hub?.name || '—',
+          'Amount (₹)':  o.net_amount,
+          'Payment':      (o.payment_mode || '—').toUpperCase(),
+          'Collection':   c.key === 'na' ? '—' : c.label,
+          'Collected (₹)': c.amount ?? '—',
+          'Status':       o.status,
+          'Date':         o.order_date,
+        };
+      });
       const ws = XLSX.utils.json_to_sheet(rows);
-      ws['!cols'] = [12, 20, 14, 14, 12, 12, 10, 12, 12].map(w => ({ wch: w }));
+      ws['!cols'] = [12, 20, 14, 14, 12, 12, 10, 16, 14, 12, 12].map(w => ({ wch: w }));
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Sales');
+
+      if ((creditNotes as any[]).length > 0) {
+        const cnRows = (creditNotes as any[]).map(c => ({
+          'Credit Note #':    c.credit_note_number,
+          'Customer':         c.customer_name,
+          'Invoice Ref':      c.invoice_reference || '—',
+          'Amount (₹)':      c.amount,
+          'Status':           c.status,
+          'Issued Date':      c.issued_date,
+        }));
+        const cnWs = XLSX.utils.json_to_sheet(cnRows);
+        cnWs['!cols'] = [16, 20, 16, 12, 10, 12].map(w => ({ wch: w }));
+        XLSX.utils.book_append_sheet(wb, cnWs, 'Credit Notes');
+      }
+
       XLSX.writeFile(wb, `FF_Daily_Sales_${date}.xlsx`);
       toast.success('Sales report downloaded!');
     } catch (e: any) { toast.error(e.message); }
@@ -173,6 +269,67 @@ export default function DailySalesReportPage() {
         ))}
       </div>
 
+      {/* Collection & Credit Notes */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <p className="text-[11px] font-black uppercase tracking-wider text-gray-400 mb-3">Collection Status — COD / Credit Orders</p>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <p className="text-lg font-black text-green-700">₹{collectionSummary.verifiedAmt.toLocaleString()}</p>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Verified</p>
+            </div>
+            <div>
+              <p className="text-lg font-black text-amber-600">₹{collectionSummary.pendingAmt.toLocaleString()}</p>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Pending</p>
+            </div>
+            <div>
+              <p className="text-lg font-black text-slate-500">{collectionSummary.notCollected}</p>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Not Collected</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+          <p className="text-[11px] font-black uppercase tracking-wider text-gray-400 mb-3">Credit Notes Issued This Day</p>
+          {creditNoteSummary.count === 0 ? (
+            <p className="text-sm text-gray-400 py-2">None issued on this date</p>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-lg font-black text-gray-900">{creditNoteSummary.count}</p>
+                <p className="text-[10px] text-gray-400 font-semibold uppercase">Note{creditNoteSummary.count === 1 ? '' : 's'}</p>
+              </div>
+              <p className="text-lg font-black text-red-600">-₹{creditNoteSummary.total.toLocaleString()}</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Credit notes detail */}
+      {creditNoteSummary.count > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-100">
+            <p className="text-sm font-black text-gray-900">Credit Notes — {format(new Date(date + 'T00:00:00'), 'dd MMMM yyyy')}</p>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {(creditNotes as any[]).map(c => (
+              <div key={c.id} className="px-5 py-2.5 flex items-center justify-between text-sm">
+                <div>
+                  <span className="font-mono text-xs text-blue-600">{c.credit_note_number}</span>
+                  <span className="text-gray-800 font-semibold ml-2">{c.customer_name}</span>
+                  {c.invoice_reference && <span className="text-gray-400 text-xs ml-2">({c.invoice_reference})</span>}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                    c.status === 'applied' ? 'bg-emerald-100 text-emerald-700' : c.status === 'cancelled' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-700'
+                  }`}>{c.status}</span>
+                  <span className="font-black text-red-600">-₹{Number(c.amount).toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
@@ -192,7 +349,7 @@ export default function DailySalesReportPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {['Order #','Customer','Area','Phone','Hub','Amount (₹)','Payment','Status'].map(h => (
+                  {['Order #','Customer','Area','Phone','Hub','Amount (₹)','Payment','Collection','Status'].map(h => (
                     <th key={h} className="text-left py-3 px-4 text-[11px] font-black uppercase tracking-wider text-gray-400">{h}</th>
                   ))}
                 </tr>
@@ -210,6 +367,18 @@ export default function DailySalesReportPage() {
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${PAYMENT_COLORS[o.payment_mode] || 'bg-gray-100 text-gray-500'}`}>
                         {o.payment_mode || '—'}
                       </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      {(() => {
+                        const c = getCollection(o);
+                        return c.key === 'na' ? (
+                          <span className="text-gray-300 text-xs">—</span>
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${COLLECTION_STATUS_COLORS[c.key] || 'bg-gray-100 text-gray-500'}`}>
+                            {c.label}{c.amount != null ? ` · ₹${c.amount.toLocaleString()}` : ''}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="py-3 px-4">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${STATUS_COLORS[o.status] || 'bg-gray-100 text-gray-500'}`}>
