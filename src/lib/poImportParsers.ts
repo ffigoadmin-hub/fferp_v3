@@ -152,6 +152,22 @@ export function parseItemRows(lines: Line[]): ParsedPOItem[] {
   return items;
 }
 
+// Zoho prints the vendor name under a left-column label ("Vendor Address" on
+// PO templates, "Bill From" on Bill templates) but a right-column field
+// ("Terms : Due on Receipt") often lands between the label and the name in
+// y-sorted order, since it sits at roughly the same height. Scan forward
+// from the label for the first line back in the label's own column (x
+// within ~20pt) instead of blindly taking the very next line.
+function findVendorName(lines: Line[]): string | undefined {
+  const labelLine = lines.find(l => /vendor address|bill from/i.test(l.text));
+  const labelIdx  = labelLine ? lines.indexOf(labelLine) : -1;
+  if (labelIdx < 0) return undefined;
+  for (let i = labelIdx + 1; i < Math.min(lines.length, labelIdx + 5); i++) {
+    if (Math.abs(lines[i].x - labelLine!.x) < 20) return lines[i].text;
+  }
+  return undefined;
+}
+
 export async function parsePOsFromPDF(file: File): Promise<ParsedPO[]> {
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buf, isEvalSupported: false }).promise;
@@ -162,12 +178,13 @@ export async function parsePOsFromPDF(file: File): Promise<ParsedPO[]> {
     const lines = await extractPageLines(page);
     const fullText = lines.map(l => l.text).join('\n');
 
-    const poMatch     = fullText.match(/#\s*(PO-?\S+)/i);
+    // A "#" precedes the PO code on PO templates ("PO# PO-04791"), but Bill
+    // templates print it as "Order Number : PO-04791" with no "#" at all --
+    // fall back to a bare PO-<digits> search anywhere on the page.
+    const poMatch      = fullText.match(/#\s*(PO-?\S+)/i) ?? fullText.match(/(PO-?\d+)/i);
     const dateMatch    = fullText.match(/Date\s*:\s*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i);
     const hubMatch     = fullText.match(/(FF\s*-\s*[A-Z][A-Za-z]+)/);
-    const vendorLine   = lines.find(l => /vendor address/i.test(l.text));
-    const vendorIdx    = vendorLine ? lines.indexOf(vendorLine) : -1;
-    const vendorMatch  = vendorIdx >= 0 ? lines[vendorIdx + 1]?.text : undefined;
+    const vendorMatch  = findVendorName(lines);
     const subTotalMatch = fullText.match(/Sub\s*Total\s*([\d,]+\.\d{2})/i);
     const totalMatch    = fullText.match(/(?<!Sub )Total\s*₹?\s*([\d,]+\.\d{2})/i);
 
