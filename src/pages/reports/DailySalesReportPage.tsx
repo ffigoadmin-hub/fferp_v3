@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { ArrowLeft, Download, Search, RefreshCw, TrendingUp, IndianRupee, CheckCircle2, ShoppingBag } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { resolveOrderCustomer } from '@/lib/resolveOrderCustomer';
 
 const STATUS_COLORS: Record<string, string> = {
   draft:      'bg-slate-100 text-slate-600',
@@ -48,6 +49,7 @@ export default function DailySalesReportPage() {
         .from('sales_orders')
         .select(`
           id, order_number, status, net_amount, payment_mode, order_date, created_at,
+          customer_name, customer_phone, delivery_address,
           customer:customers(shop_name, area, phone),
           hub:hubs(name)
         `)
@@ -154,11 +156,12 @@ export default function DailySalesReportPage() {
     try {
       const rows = filtered.map((o: any) => {
         const c = getCollection(o);
+        const fallback = !o.customer?.shop_name ? resolveOrderCustomer(o) : null;
         return {
           'Order #':      o.order_number,
-          'Customer':     o.customer?.shop_name || '—',
+          'Customer':     o.customer?.shop_name || fallback?.name || '—',
           'Area':         o.customer?.area || '—',
-          'Phone':        o.customer?.phone || '—',
+          'Phone':        o.customer?.phone || fallback?.phone || '—',
           'Hub':          o.hub?.name || '—',
           'Amount (₹)':  o.net_amount,
           'Payment':      (o.payment_mode || '—').toUpperCase(),
@@ -355,12 +358,14 @@ export default function DailySalesReportPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filtered.map((o: any) => (
+                {filtered.map((o: any) => {
+                  const fallback = !o.customer?.shop_name ? resolveOrderCustomer(o) : null;
+                  return (
                   <tr key={o.id} className="hover:bg-gray-50 transition-colors">
                     <td className="py-3 px-4 font-mono font-bold text-gray-900 text-xs">{o.order_number}</td>
-                    <td className="py-3 px-4 font-semibold text-gray-900">{o.customer?.shop_name || '—'}</td>
+                    <td className="py-3 px-4 font-semibold text-gray-900">{o.customer?.shop_name || fallback?.name || '—'}</td>
                     <td className="py-3 px-4 text-gray-500 text-xs">{o.customer?.area || '—'}</td>
-                    <td className="py-3 px-4 text-gray-500 text-xs">{o.customer?.phone || '—'}</td>
+                    <td className="py-3 px-4 text-gray-500 text-xs">{o.customer?.phone || fallback?.phone || '—'}</td>
                     <td className="py-3 px-4 text-gray-500 text-xs">{o.hub?.name || '—'}</td>
                     <td className="py-3 px-4 font-black text-gray-900">₹{Number(o.net_amount).toLocaleString()}</td>
                     <td className="py-3 px-4">
@@ -386,7 +391,8 @@ export default function DailySalesReportPage() {
                       </span>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
