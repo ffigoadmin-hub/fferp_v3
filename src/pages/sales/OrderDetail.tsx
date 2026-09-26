@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { resolveOrderCustomer } from '@/lib/resolveOrderCustomer';
 
 const STATUS_CONFIG: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
   draft:      { label: 'Draft',      className: 'bg-slate-100 text-slate-600',    icon: <Clock className="h-3 w-3" /> },
@@ -93,6 +94,9 @@ export default function OrderDetail() {
   const status = order.status || 'pending';
   const items = order.sales_order_items || [];
   const customer = order.customers;
+  // No linked customers row (website/app orders) -- recover name/phone/address
+  // from the order's own columns instead of showing blanks.
+  const fallback = !customer?.shop_name ? resolveOrderCustomer(order) : null;
   const GRADE_LABEL: Record<string, string> = { A: 'Grade A', B: 'Grade B', C: 'Grade C' };
   const nextStatusMap: Record<string, string> = { pending: 'confirmed', confirmed: 'dispatched', dispatched: 'delivered' };
   const nextStatus = nextStatusMap[status];
@@ -198,15 +202,17 @@ export default function OrderDetail() {
           <div className="bg-white rounded-xl border border-gray-200 p-6">
             <div className="flex items-center gap-2 mb-6"><User className="h-5 w-5 text-blue-600" /><h2 className="font-bold text-slate-800">Customer Details</h2></div>
             <div className="space-y-5">
-              <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Shop Name</p><p className="text-sm font-bold text-slate-800">{customer?.shop_name || 'N/A'}</p></div>
-              <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Contact</p><p className="text-sm font-medium text-slate-700">{customer?.name}</p></div>
+              <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Shop Name</p><p className="text-sm font-bold text-slate-800">{customer?.shop_name || fallback?.name || 'N/A'}</p></div>
+              <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Contact</p><p className="text-sm font-medium text-slate-700">{customer?.name || fallback?.name || '—'}</p></div>
               <div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Phone</p>
-                <a href={`tel:${customer?.phone}`} className="flex items-center gap-2 text-sm font-bold text-blue-600 hover:underline"><Phone className="h-3.5 w-3.5" />{customer?.phone}</a>
+                {(customer?.phone || fallback?.phone) ? (
+                  <a href={`tel:${customer?.phone || fallback?.phone}`} className="flex items-center gap-2 text-sm font-bold text-blue-600 hover:underline"><Phone className="h-3.5 w-3.5" />{customer?.phone || fallback?.phone}</a>
+                ) : <p className="text-sm text-slate-400">—</p>}
               </div>
               <div className="pt-4 border-t">
                 <p className="text-[10px] font-bold text-slate-400 uppercase mb-2"><MapPin className="h-3 w-3 inline mr-1" />Delivery Address</p>
-                <p className="text-xs text-slate-500 bg-slate-50 p-3 rounded-lg border border-slate-100">{customer?.address || 'No address provided'}</p>
+                <p className="text-xs text-slate-500 bg-slate-50 p-3 rounded-lg border border-slate-100">{customer?.address || fallback?.address || order.delivery_address || 'No address provided'}</p>
               </div>
             </div>
           </div>

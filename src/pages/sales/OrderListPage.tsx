@@ -11,6 +11,7 @@ import {
   Phone, MapPin, Repeat, Package, FileText, ShoppingCart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { resolveOrderCustomer } from '@/lib/resolveOrderCustomer';
 
 /* ─── Status config ───────────────────────────────────────────────────────── */
 const STATUS_CONFIG: Record<string, { label: string; className: string; icon: React.ReactNode }> = {
@@ -79,6 +80,10 @@ function ExpandedOrderDetail({ orderId, onRepeat, hideActions }: { orderId: stri
   const customer = (data as any).customer;
   const items    = (data as any).items ?? [];
   const subtotal = items.reduce((s: number, i: any) => s + Number(i.total_price || 0), 0);
+  const customerName = customer?.shop_name || `${customer?.first_name ?? ''} ${customer?.last_name ?? ''}`.trim();
+  // No linked customers row (website/app orders) -- recover name/phone/address
+  // from the order's own columns instead of showing a blank card.
+  const fallback = !customerName ? resolveOrderCustomer(data as any) : null;
 
   return (
     <tr>
@@ -89,21 +94,26 @@ function ExpandedOrderDetail({ orderId, onRepeat, hideActions }: { orderId: stri
           <div className="px-5 py-4 space-y-2">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">Customer Details</p>
             <p className="text-sm font-bold text-slate-800">
-              {customer?.shop_name || `${customer?.first_name ?? ''} ${customer?.last_name ?? ''}`.trim() || '—'}
+              {customerName || fallback?.name || '—'}
             </p>
             {customer?.owner_name && <p className="text-xs text-slate-500">{customer.owner_name}</p>}
-            {(customer?.phone || customer?.mobile) && (
+            {(customer?.phone || customer?.mobile || fallback?.phone) && (
               <div className="flex items-center gap-1.5 text-xs text-slate-600">
                 <Phone className="h-3 w-3 text-slate-400" />
-                <a href={`tel:${customer.mobile || customer.phone}`} className="hover:underline text-blue-600">
-                  {customer.mobile || customer.phone}
+                <a href={`tel:${customer?.mobile || customer?.phone || fallback?.phone}`} className="hover:underline text-blue-600">
+                  {customer?.mobile || customer?.phone || fallback?.phone}
                 </a>
               </div>
             )}
-            {(customer?.area || customer?.city) && (
+            {(customer?.area || customer?.city) ? (
               <div className="flex items-center gap-1.5 text-xs text-slate-600">
                 <MapPin className="h-3 w-3 text-slate-400" />
                 {[customer.area, customer.city].filter(Boolean).join(', ')}
+              </div>
+            ) : fallback?.address && (
+              <div className="flex items-start gap-1.5 text-xs text-slate-600">
+                <MapPin className="h-3 w-3 text-slate-400 mt-0.5 shrink-0" />
+                {fallback.address}
               </div>
             )}
             {customer?.gst_number && (
@@ -227,7 +237,7 @@ export default function OrderListPage() {
         .select(`
           id, order_number, status, net_amount, total_amount,
           payment_mode, payment_status, order_date, created_at, source,
-          customer_name, customer_phone,
+          customer_name, customer_phone, delivery_address,
           customer:customers(shop_name, name, first_name, last_name, phone, mobile, area)
         `)
         .order('created_at', { ascending: false })
@@ -495,6 +505,10 @@ export default function OrderListPage() {
                 const createdAt = order.created_at ? new Date(order.created_at) : null;
                 const creatorName = 'FF Operations';
                 const isExpanded = expandedId === order.id;
+                const rowCustomerName = order.customer?.shop_name ||
+                  `${order.customer?.first_name ?? ''} ${order.customer?.last_name ?? ''}`.trim() ||
+                  order.customer?.name;
+                const rowFallback = !rowCustomerName ? resolveOrderCustomer(order) : null;
 
                 return (
                   <>
@@ -513,15 +527,11 @@ export default function OrderListPage() {
                       {/* Customer */}
                       <td>
                         <div className="font-semibold text-slate-800 text-sm">
-                          {order.customer?.shop_name ||
-                           `${order.customer?.first_name ?? ''} ${order.customer?.last_name ?? ''}`.trim() ||
-                           order.customer?.name ||
-                           (order as any).customer_name ||
-                           'Walk-in'}
+                          {rowCustomerName || rowFallback?.name || 'Walk-in'}
                         </div>
                         {order.customer?.area && <div className="text-[11px] text-slate-400">{order.customer.area}</div>}
-                        {(order.customer?.mobile || order.customer?.phone || (order as any).customer_phone) && (
-                          <div className="text-[10px] text-slate-400">{order.customer?.mobile || order.customer?.phone || (order as any).customer_phone}</div>
+                        {(order.customer?.mobile || order.customer?.phone || (order as any).customer_phone || rowFallback?.phone) && (
+                          <div className="text-[10px] text-slate-400">{order.customer?.mobile || order.customer?.phone || (order as any).customer_phone || rowFallback?.phone}</div>
                         )}
                       </td>
 
